@@ -8,7 +8,6 @@ import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import ProjectHistory, { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoBoard from "@/components/dashboard/MemoBoard";
-import WikiIngest from "@/components/dashboard/WikiIngest";
 import { AGENTS, AgentStatus } from "@/lib/agents";
 
 type PageTab = "dashboard" | "office";
@@ -22,7 +21,6 @@ const uid = () => crypto.randomUUID();
 
 export default function Home() {
   const [tab, setTab] = useState<PageTab>("dashboard");
-  const [bottomTab, setBottomTab] = useState<"memo" | "wiki">("memo");
   const [agentStatus, setAgentStatus] = useState<AgentStates>(initStatus());
   const [agentExpression, setAgentExpression] = useState<Record<string, string | null>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
@@ -204,22 +202,8 @@ export default function Home() {
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <ProjectHistory projects={history} />
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden flex flex-col">
-              <div className="flex gap-1 mb-3 shrink-0">
-                {(["memo", "wiki"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setBottomTab(t)}
-                    className="px-3 py-1 rounded-full text-[10px] font-medium tracking-wide transition-all"
-                    style={bottomTab === t ? { background: "#1e3a5f", color: "#93c5fd" } : { color: "#94a3b8" }}
-                  >
-                    {t === "memo" ? "메모" : "위키 저장"}
-                  </button>
-                ))}
-              </div>
-              <div className="flex-1 min-h-0">
-                {bottomTab === "memo" ? <MemoBoard /> : <WikiIngest />}
-              </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+              <MemoBoard />
             </div>
           </div>
         )}

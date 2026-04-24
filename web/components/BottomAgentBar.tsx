@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AGENTS, AgentStatus, DEPT_MAP, AgentDef } from "@/lib/agents";
-import AgentProfile from "./AgentProfile";
+import AgentChat from "./AgentChat";
 import AgentImage from "./AgentImage";
 
 type Props = {
@@ -121,7 +121,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
         </div>
       </div>
 
-      {selected && <AgentProfile agent={selected} onClose={() => setSelected(null)} />}
+      {selected && <AgentChat agent={selected} onClose={() => setSelected(null)} />}
     </>
   );
 }
