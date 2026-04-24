@@ -8,8 +8,8 @@ import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import ProjectHistory, { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoBoard from "@/components/dashboard/MemoBoard";
+import WikiIngest from "@/components/dashboard/WikiIngest";
 import { AGENTS, AgentStatus } from "@/lib/agents";
-import { DEMO_SEQUENCE } from "@/lib/demoSequence";
 
 type PageTab = "dashboard" | "office";
 
@@ -22,6 +22,7 @@ const uid = () => crypto.randomUUID();
 
 export default function Home() {
   const [tab, setTab] = useState<PageTab>("dashboard");
+  const [bottomTab, setBottomTab] = useState<"memo" | "wiki">("memo");
   const [agentStatus, setAgentStatus] = useState<AgentStates>(initStatus());
   const [agentExpression, setAgentExpression] = useState<Record<string, string | null>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
@@ -32,11 +33,16 @@ export default function Home() {
   const [history, setHistory] = useState<ProjectRecord[]>([]);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speakTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const speak = useCallback((agentId: string, message: string) => {
     setLastMessage((prev) => ({ ...prev, [agentId]: message }));
     setSpeaking((prev) => ({ ...prev, [agentId]: true }));
-    setTimeout(() => setSpeaking((prev) => ({ ...prev, [agentId]: false })), 2500);
+    // 이전 타이머 취소 후 새로 시작 (중복 타이머 방지)
+    if (speakTimers.current[agentId]) clearTimeout(speakTimers.current[agentId]);
+    speakTimers.current[agentId] = setTimeout(() => {
+      setSpeaking((prev) => ({ ...prev, [agentId]: false }));
+    }, 2500);
   }, []);
 
   // idle 랜덤 중얼거림
@@ -52,65 +58,90 @@ export default function Home() {
     return () => { if (idleTimerRef.current) clearInterval(idleTimerRef.current); };
   }, [phase, speak]);
 
-  const runDemo = async (inputTopic: string) => {
+  const handleSSE = useCallback(
+    (event: Record<string, unknown>, inputTopic: string) => {
+      switch (event.type) {
+        case "agent_start":
+          setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "active" }));
+          speak(event.agentId as string, event.message as string);
+          break;
+        case "agent_message":
+          speak(event.agentId as string, event.message as string);
+          break;
+        case "agent_done":
+          setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "done" }));
+          speak(event.agentId as string, event.message as string);
+          break;
+        case "agent_expression":
+          setAgentExpression((prev) => ({ ...prev, [event.agentId as string]: (event.expression as string | null) ?? null }));
+          break;
+        case "report":
+          setReports((prev) => [
+            {
+              id: uid(),
+              agentId: event.agentId as string,
+              topic: (event.topic as string) ?? inputTopic,
+              content: event.content as string,
+              createdAt: new Date(),
+            },
+            ...prev,
+          ]);
+          break;
+        case "complete":
+          setHistory((prev) => [
+            { id: uid(), topic: inputTopic, completedAt: new Date() },
+            ...prev,
+          ]);
+          setPhase("done");
+          speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
+          break;
+        case "error":
+          console.error("SSE error:", event.message);
+          setPhase("done");
+          break;
+      }
+    },
+    [speak],
+  );
+
+  const runResearch = async (inputTopic: string) => {
     if (idleTimerRef.current) clearInterval(idleTimerRef.current);
     setPhase("working");
     setTopic(inputTopic);
     setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"])));
 
-    speak("wiki", `"${inputTopic}" — 자료 꺼내는 중.`);
+    try {
+      const res = await fetch("/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: inputTopic }),
+      });
 
-    let cursor = 0;
-    while (cursor < DEMO_SEQUENCE.length) {
-      const step = DEMO_SEQUENCE[cursor];
-      await new Promise((r) => setTimeout(r, step.delay ?? 1000));
+      if (!res.ok || !res.body) throw new Error("API error");
 
-      const applyStep = (s: typeof step) => {
-        setAgentStatus((prev) => ({ ...prev, [s.agentId]: s.status }));
-        if ("expression" in s) {
-          setAgentExpression((prev) => ({ ...prev, [s.agentId]: s.expression ?? null }));
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            handleSSE(event, inputTopic);
+          } catch { /* ignore */ }
         }
-        speak(s.agentId, s.message);
-      };
-      applyStep(step);
-
-      while (cursor + 1 < DEMO_SEQUENCE.length && DEMO_SEQUENCE[cursor + 1].parallel) {
-        cursor++;
-        const ps = DEMO_SEQUENCE[cursor];
-        await new Promise((r) => setTimeout(r, ps.delay ?? 300));
-        applyStep(ps);
       }
-      cursor++;
+    } catch (err) {
+      console.error("Research failed:", err);
+      setPhase("done");
     }
-
-    await new Promise((r) => setTimeout(r, 800));
-
-    // 완료 보고서 저장
-    setReports((prev) => [
-      {
-        id: uid(),
-        agentId: "fact",
-        topic: inputTopic,
-        content: "팩트 검토 완료. 데이터 정합성 확인됨. 리포트 품질 기준 충족.",
-        createdAt: new Date(),
-      },
-      {
-        id: uid(),
-        agentId: "over",
-        topic: inputTopic,
-        content: "리포트 작성 완료. 감동적인 내러티브로 정리했습니다... 걸작이에요.",
-        createdAt: new Date(),
-      },
-      ...prev,
-    ]);
-
-    setHistory((prev) => [
-      { id: uid(), topic: inputTopic, completedAt: new Date() },
-      ...prev,
-    ]);
-
-    setPhase("done");
-    speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
   };
 
   const reset = () => {
@@ -148,7 +179,7 @@ export default function Home() {
         </div>
 
         <div className="ml-auto w-80">
-          <TopicInput onSubmit={runDemo} disabled={phase === "working"} />
+          <TopicInput onSubmit={runResearch} disabled={phase === "working"} />
         </div>
         {phase === "done" && (
           <button
@@ -173,8 +204,22 @@ export default function Home() {
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <ProjectHistory projects={history} />
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <MemoBoard />
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden flex flex-col">
+              <div className="flex gap-1 mb-3 shrink-0">
+                {(["memo", "wiki"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setBottomTab(t)}
+                    className="px-3 py-1 rounded-full text-[10px] font-medium tracking-wide transition-all"
+                    style={bottomTab === t ? { background: "#1e3a5f", color: "#93c5fd" } : { color: "#94a3b8" }}
+                  >
+                    {t === "memo" ? "메모" : "위키 저장"}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 min-h-0">
+                {bottomTab === "memo" ? <MemoBoard /> : <WikiIngest />}
+              </div>
             </div>
           </div>
         )}

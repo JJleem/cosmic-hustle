@@ -69,3 +69,18 @@ body {
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.report-body h1, .report-body h2, .report-body h3 {
+  color: #f1f5f9;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+.report-body h1 { font-size: 1rem; }
+.report-body h2 { font-size: 0.875rem; }
+.report-body h3 { font-size: 0.8rem; }
+.report-body p { margin: 0.5rem 0; }
+.report-body ul, .report-body ol { padding-left: 1.25rem; margin: 0.5rem 0; }
+.report-body li { margin: 0.2rem 0; }
+.report-body strong { color: #f1f5f9; font-weight: 600; }
+.report-body code { background: #1e293b; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.8rem; }

@@ -35,11 +35,11 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                 className="relative flex flex-col items-center gap-1 cursor-pointer group"
                 onClick={() => setSelected(agent)}
               >
-                {/* 말풍선 */}
-                {!hideBubbles && msg && (isActive || isSpeaking) && (
+                {/* 말풍선 — speaking 타이머 기준으로만 표시 */}
+                {!hideBubbles && msg && isSpeaking && (
                   <div
                     className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-20 animate-fadeIn"
-                    style={{ minWidth: 120, maxWidth: 180 }}
+                    style={{ minWidth: 100, maxWidth: 160 }}
                   >
                     <div
                       className="relative rounded-2xl rounded-b-sm px-3 py-2 text-[11px] text-slate-200 leading-snug"
