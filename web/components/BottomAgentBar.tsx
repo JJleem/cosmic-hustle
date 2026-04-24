@@ -1,22 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { AGENTS, AgentStatus, DEPT_MAP, AgentDef } from "@/lib/agents";
 import AgentProfile from "./AgentProfile";
+import AgentImage from "./AgentImage";
 
 type Props = {
   agentStatus: Record<string, AgentStatus>;
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
+  hideBubbles?: boolean;
 };
 
-export default function BottomAgentBar({ agentStatus, speaking, lastMessage }: Props) {
+export default function BottomAgentBar({ agentStatus, speaking, lastMessage, hideBubbles = false }: Props) {
   const [selected, setSelected] = useState<AgentDef | null>(null);
 
   return (
     <>
-      <div className="shrink-0 border-t border-slate-800/60 bg-[#080c18]/95 backdrop-blur px-6 py-3">
+      <div className="shrink-0 border-t border-slate-700 bg-[#0d1120] px-6 py-3">
         <div className="flex items-end justify-center gap-6">
           {AGENTS.map((agent) => {
             const status = agentStatus[agent.id] ?? "idle";
@@ -34,7 +35,7 @@ export default function BottomAgentBar({ agentStatus, speaking, lastMessage }: P
                 onClick={() => setSelected(agent)}
               >
                 {/* 말풍선 */}
-                {msg && (isActive || isSpeaking) && (
+                {!hideBubbles && msg && (isActive || isSpeaking) && (
                   <div
                     className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-20 animate-fadeIn"
                     style={{ minWidth: 120, maxWidth: 180 }}
@@ -84,7 +85,7 @@ export default function BottomAgentBar({ agentStatus, speaking, lastMessage }: P
                       opacity: isWaiting ? 0.2 : 1,
                     }}
                   >
-                    <Image src={agent.image} alt={agent.name} fill className="object-cover" sizes="52px" />
+                    <AgentImage defaultSrc={agent.image} size={52} cycle={status === "idle"} />
                     {isDone && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                         <span className="text-xs">✓</span>
@@ -96,13 +97,13 @@ export default function BottomAgentBar({ agentStatus, speaking, lastMessage }: P
                 {/* 이름 */}
                 <p
                   className="text-[9px] font-semibold tracking-wide transition-colors"
-                  style={{ color: isActive ? agent.color : "#475569" }}
+                  style={{ color: isActive ? agent.color : "#94a3b8" }}
                 >
                   {agent.name}
                 </p>
 
                 {/* 직급 · 직군 */}
-                <p className="text-[8px] text-slate-700 tracking-wide">
+                <p className="text-[8px] text-slate-400 tracking-wide">
                   {agent.title} · {agent.role}
                 </p>
 

@@ -3,12 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import BottomAgentBar from "@/components/BottomAgentBar";
 import TopicInput from "@/components/TopicInput";
+import OfficePage from "@/components/OfficePage";
 import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import ProjectHistory, { ProjectRecord } from "@/components/dashboard/ProjectHistory";
-import WorkLog, { LogEntry } from "@/components/dashboard/WorkLog";
+import MemoBoard from "@/components/dashboard/MemoBoard";
 import { AGENTS, AgentStatus } from "@/lib/agents";
 import { DEMO_SEQUENCE } from "@/lib/demoSequence";
+
+type PageTab = "dashboard" | "office";
 
 type AgentStates = Record<string, AgentStatus>;
 
@@ -18,24 +21,20 @@ const initStatus = (): AgentStates =>
 const uid = () => crypto.randomUUID();
 
 export default function Home() {
+  const [tab, setTab] = useState<PageTab>("dashboard");
   const [agentStatus, setAgentStatus] = useState<AgentStates>(initStatus());
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
   const [lastMessage, setLastMessage] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<"idle" | "working" | "done">("idle");
   const [topic, setTopic] = useState("");
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [history, setHistory] = useState<ProjectRecord[]>([]);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const speak = useCallback((agentId: string, message: string, type: LogEntry["type"] = "idle") => {
+  const speak = useCallback((agentId: string, message: string) => {
     setLastMessage((prev) => ({ ...prev, [agentId]: message }));
     setSpeaking((prev) => ({ ...prev, [agentId]: true }));
-    setLogs((prev) => [
-      ...prev,
-      { id: uid(), agentId, message, type, time: new Date() },
-    ]);
     setTimeout(() => setSpeaking((prev) => ({ ...prev, [agentId]: false })), 2500);
   }, []);
 
@@ -45,7 +44,7 @@ export default function Home() {
     const tick = () => {
       const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)];
       const msg = agent.idleMessages[Math.floor(Math.random() * agent.idleMessages.length)];
-      speak(agent.id, msg, "idle");
+      speak(agent.id, msg);
     };
     tick();
     idleTimerRef.current = setInterval(tick, 3000);
@@ -58,7 +57,7 @@ export default function Home() {
     setTopic(inputTopic);
     setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"])));
 
-    speak("wiki", `"${inputTopic}" — 자료 꺼내는 중.`, "work");
+    speak("wiki", `"${inputTopic}" — 자료 꺼내는 중.`);
 
     let cursor = 0;
     while (cursor < DEMO_SEQUENCE.length) {
@@ -67,7 +66,7 @@ export default function Home() {
 
       const applyStep = (s: typeof step) => {
         setAgentStatus((prev) => ({ ...prev, [s.agentId]: s.status }));
-        speak(s.agentId, s.message, s.status === "done" ? "done" : "work");
+        speak(s.agentId, s.message);
       };
       applyStep(step);
 
@@ -107,7 +106,7 @@ export default function Home() {
     ]);
 
     setPhase("done");
-    speak("wiki", "리서치 완료. 보고서가 준비됐어요.", "done");
+    speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
   };
 
   const reset = () => {
@@ -119,53 +118,77 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen bg-[#080c18] text-white flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#0b0f1e] text-white flex flex-col overflow-hidden">
       {/* 헤더 */}
-      <header className="shrink-0 px-8 py-4 border-b border-slate-800/60 flex items-center gap-4">
+      <header className="shrink-0 px-8 py-4 border-b border-slate-700/60 flex items-center gap-4">
         <span className="text-base">🪐</span>
-        <h1 className="text-sm font-bold tracking-[0.25em] text-slate-200">COSMIC HUSTLE</h1>
-        <span className="text-slate-700 text-xs tracking-widest">SPACE RESEARCH AGENCY</span>
+        <h1 className="text-sm font-bold tracking-[0.25em] text-slate-100">COSMIC HUSTLE</h1>
+
+        {/* 탭 */}
+        <div className="flex items-center gap-1 ml-6 bg-slate-800 rounded-full p-1 border border-slate-700">
+          {(["dashboard", "office"] as PageTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="px-4 py-1.5 rounded-full text-xs font-medium tracking-wide transition-all"
+              style={
+                tab === t
+                  ? { background: "#1e3a5f", color: "#93c5fd" }
+                  : { color: "#94a3b8" }
+              }
+            >
+              {t === "dashboard" ? "대시보드" : "사무실"}
+            </button>
+          ))}
+        </div>
+
         <div className="ml-auto w-80">
           <TopicInput onSubmit={runDemo} disabled={phase === "working"} />
         </div>
         {phase === "done" && (
           <button
             onClick={reset}
-            className="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 hover:border-slate-500 rounded-full px-4 py-1.5 transition-all whitespace-nowrap"
+            className="text-xs text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded-full px-4 py-1.5 transition-all whitespace-nowrap"
           >
             새 주제
           </button>
         )}
       </header>
 
-      {/* 대시보드 */}
-      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-4 p-6 overflow-hidden">
-        {/* 진행중인 프로젝트 */}
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 overflow-hidden">
-          <OngoingProject topic={topic} phase={phase} />
-        </div>
+      {/* 컨텐츠 */}
+      <div className="flex-1 overflow-hidden">
+        {tab === "dashboard" && (
+          <div className="h-full grid grid-cols-2 grid-rows-2 gap-4 p-6">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+              <OngoingProject topic={topic} phase={phase} />
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+              <ReportBoard reports={reports} />
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+              <ProjectHistory projects={history} />
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+              <MemoBoard />
+            </div>
+          </div>
+        )}
 
-        {/* 보고 현황 */}
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 overflow-hidden">
-          <ReportBoard reports={reports} />
-        </div>
-
-        {/* 프로젝트 내역 */}
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 overflow-hidden">
-          <ProjectHistory projects={history} />
-        </div>
-
-        {/* 업무일지 */}
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 overflow-hidden">
-          <WorkLog logs={logs} />
-        </div>
+        {tab === "office" && (
+          <OfficePage
+            agentStatus={agentStatus}
+            speaking={speaking}
+            lastMessage={lastMessage}
+          />
+        )}
       </div>
 
-      {/* 하단 에이전트 바 */}
+      {/* 하단 에이전트 바 — 사무실에선 말풍선 숨김 */}
       <BottomAgentBar
         agentStatus={agentStatus}
         speaking={speaking}
         lastMessage={lastMessage}
+        hideBubbles={tab === "office"}
       />
     </div>
   );

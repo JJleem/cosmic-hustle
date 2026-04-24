@@ -68,7 +68,7 @@ export default function AgentAvatar({ agent, status, speaking, onClick }: Props)
         >
           {agent.name}
         </p>
-        <p className="text-[9px] text-slate-600">{agent.title}</p>
+        <p className="text-[9px] text-slate-400">{agent.title}</p>
       </div>
 
       {/* 부서 배지 */}
