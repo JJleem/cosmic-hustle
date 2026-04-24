@@ -31,6 +31,24 @@ export default function Home() {
   const [history, setHistory] = useState<ProjectRecord[]>([]);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // DB에서 초기 데이터 로드
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/reports").then((r) => r.json()),
+      fetch("/api/sessions").then((r) => r.json()),
+    ]).then(([dbReports, dbSessions]) => {
+      setReports(
+        (dbReports as Array<{ id: string; agentId: string; topic: string; content: string; createdAt: number }>)
+          .map((r) => ({ ...r, createdAt: new Date(r.createdAt * 1000) }))
+      );
+      setHistory(
+        (dbSessions as Array<{ id: string; topic: string; completedAt: number | null }>)
+          .filter((s) => s.completedAt)
+          .map((s) => ({ id: s.id, topic: s.topic, completedAt: new Date((s.completedAt as number) * 1000) }))
+      );
+    }).catch(() => { /* DB 로드 실패 시 빈 상태 유지 */ });
+  }, []);
   const speakTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const speak = useCallback((agentId: string, message: string) => {
@@ -76,7 +94,7 @@ export default function Home() {
         case "report":
           setReports((prev) => [
             {
-              id: uid(),
+              id: (event.reportId as string) ?? uid(),
               agentId: event.agentId as string,
               topic: (event.topic as string) ?? inputTopic,
               content: event.content as string,
@@ -86,10 +104,10 @@ export default function Home() {
           ]);
           break;
         case "complete":
-          setHistory((prev) => [
-            { id: uid(), topic: inputTopic, completedAt: new Date() },
-            ...prev,
-          ]);
+          setHistory((prev) => {
+            if (prev.some((h) => h.topic === inputTopic)) return prev;
+            return [{ id: uid(), topic: inputTopic, completedAt: new Date() }, ...prev];
+          });
           setPhase("done");
           speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
           break;

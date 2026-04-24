@@ -1,5 +1,8 @@
 import { spawn } from "child_process";
 import path from "path";
+import { db } from "@/db";
+import { sessions, reports } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export const maxDuration = 300;
 
@@ -13,7 +16,7 @@ type SSEEvent =
   | { type: "agent_message"; agentId: string; message: string }
   | { type: "agent_done"; agentId: string; message: string }
   | { type: "agent_expression"; agentId: string; expression: string | null }
-  | { type: "report"; agentId: string; topic: string; content: string }
+  | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
   | { type: "complete" }
   | { type: "error"; message: string };
 
@@ -103,7 +106,7 @@ export function parseJSON<T>(text: string, fallback: T): T {
   }
 }
 
-async function orchestrate(topic: string, send: (event: SSEEvent) => void) {
+async function orchestrate(topic: string, send: (event: SSEEvent) => void, sessionId: string) {
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   send({ type: "agent_start", agentId: "wiki", message: "관련 자료 조용히 꺼내는 중..." });
   let wikiContext = "";
@@ -251,7 +254,17 @@ async function orchestrate(topic: string, send: (event: SSEEvent) => void) {
     send({ type: "agent_done", agentId: "over", message: "...감사합니다." });
   }
 
-  send({ type: "report", agentId: "over", topic, content: overReport });
+  const reportId = crypto.randomUUID();
+  await db.insert(reports).values({
+    id: reportId,
+    sessionId,
+    agentId: "over",
+    topic,
+    content: overReport,
+    createdAt: new Date(),
+  });
+
+  send({ type: "report", agentId: "over", topic, content: overReport, reportId });
 
   // ── 6. Ping + Wiki 동시 ──────────────────────────────────────────────
   send({ type: "agent_start", agentId: "ping", message: "이거랑 저거 합치면?! ✨ 안테나 반짝!" });
@@ -296,14 +309,35 @@ export async function POST(request: Request) {
   const topic = body.topic?.trim();
   if (!topic) return Response.json({ error: "topic required" }, { status: 400 });
 
+  const sessionId = crypto.randomUUID();
+  const now = new Date();
+
+  await db.insert(sessions).values({
+    id: sessionId,
+    topic,
+    status: "working",
+    createdAt: now,
+  });
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
       const send = (event: SSEEvent) => {
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { /* closed */ }
       };
-      orchestrate(topic, send)
-        .catch((err: Error) => { try { send({ type: "error", message: err.message }); } catch { /* ignore */ } })
+
+      orchestrate(topic, send, sessionId)
+        .then(async () => {
+          await db.update(sessions)
+            .set({ status: "done", completedAt: new Date() })
+            .where(eq(sessions.id, sessionId));
+        })
+        .catch(async (err: Error) => {
+          try { send({ type: "error", message: err.message }); } catch { /* ignore */ }
+          await db.update(sessions)
+            .set({ status: "error" })
+            .where(eq(sessions.id, sessionId));
+        })
         .finally(() => { try { controller.close(); } catch { /* ignore */ } });
     },
   });
