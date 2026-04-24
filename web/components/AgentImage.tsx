@@ -2,60 +2,79 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { AgentStatus } from "@/lib/agents";
 
 type Props = {
-  defaultSrc: string;   // /characters/pocke/default.png
+  defaultSrc: string; // /characters/pocke/default.png
   size: number;
-  cycle: boolean;       // idle 상태일 때만 true
+  status: AgentStatus;
+  expression?: string | null; // 특수 상황 override (err, sad 등)
 };
 
-export default function AgentImage({ defaultSrc, size, cycle }: Props) {
-  const idleSrc = defaultSrc.replace("default.png", "idle.png");
-  const [showIdle, setShowIdle] = useState(false);
+function getImageSrc(defaultSrc: string, status: AgentStatus, expression: string | null, showIdle: boolean): string {
+  const base = defaultSrc.replace("default.png", "");
 
+  if (expression) return `${base}${expression}.png`;
+
+  switch (status) {
+    case "active":  return `${base}working.png`;
+    case "done":    return `${base}done.png`;
+    case "idle":    return showIdle ? `${base}idle.png` : defaultSrc;
+    default:        return defaultSrc; // waiting
+  }
+}
+
+export default function AgentImage({ defaultSrc, size, status, expression = null }: Props) {
+  const [showIdle, setShowIdle] = useState(false);
+  const [prev, setPrev] = useState(() => getImageSrc(defaultSrc, status, expression, false));
+  const [curr, setCurr] = useState(() => getImageSrc(defaultSrc, status, expression, false));
+  const [fading, setFading] = useState(false);
+
+  // idle 사이클 타이머
   useEffect(() => {
-    if (!cycle) {
+    if (status !== "idle" || expression) {
       setShowIdle(false);
       return;
     }
-
-    // 에이전트마다 엇갈리게 시작하도록 랜덤 초기 딜레이
     const initialDelay = Math.random() * 3000;
-    const intervalMs = 2500 + Math.random() * 2000; // 2.5~4.5초 사이 랜덤
-
+    const intervalMs = 2500 + Math.random() * 2000;
     let cycleInterval: ReturnType<typeof setInterval>;
-
     const startTimer = setTimeout(() => {
       setShowIdle(true);
-      cycleInterval = setInterval(() => {
-        setShowIdle((prev) => !prev);
-      }, intervalMs);
+      cycleInterval = setInterval(() => setShowIdle((p) => !p), intervalMs);
     }, initialDelay);
+    return () => { clearTimeout(startTimer); clearInterval(cycleInterval); };
+  }, [status, expression]);
 
-    return () => {
-      clearTimeout(startTimer);
-      clearInterval(cycleInterval);
-    };
-  }, [cycle]);
+  // 이미지 변경 시 크로스페이드
+  useEffect(() => {
+    const next = getImageSrc(defaultSrc, status, expression, showIdle);
+    if (next === curr) return;
+    setPrev(curr);
+    setCurr(next);
+    setFading(true);
+    const t = setTimeout(() => setFading(false), 600);
+    return () => clearTimeout(t);
+  }, [status, expression, showIdle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="relative w-full h-full">
-      {/* default */}
+      {/* 이전 이미지 (fade out) */}
       <Image
-        src={defaultSrc}
+        src={prev}
         alt=""
         fill
-        className="object-cover transition-opacity duration-700"
-        style={{ opacity: showIdle ? 0 : 1 }}
+        className="object-cover transition-opacity duration-500"
+        style={{ opacity: fading ? 0 : 1 }}
         sizes={`${size}px`}
       />
-      {/* idle */}
+      {/* 현재 이미지 (fade in) */}
       <Image
-        src={idleSrc}
+        src={curr}
         alt=""
         fill
-        className="object-cover transition-opacity duration-700 absolute inset-0"
-        style={{ opacity: showIdle ? 1 : 0 }}
+        className="object-cover transition-opacity duration-500 absolute inset-0"
+        style={{ opacity: fading ? 1 : 0 }}
         sizes={`${size}px`}
       />
     </div>

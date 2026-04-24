@@ -23,6 +23,7 @@ const uid = () => crypto.randomUUID();
 export default function Home() {
   const [tab, setTab] = useState<PageTab>("dashboard");
   const [agentStatus, setAgentStatus] = useState<AgentStates>(initStatus());
+  const [agentExpression, setAgentExpression] = useState<Record<string, string | null>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
   const [lastMessage, setLastMessage] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<"idle" | "working" | "done">("idle");
@@ -66,6 +67,9 @@ export default function Home() {
 
       const applyStep = (s: typeof step) => {
         setAgentStatus((prev) => ({ ...prev, [s.agentId]: s.status }));
+        if ("expression" in s) {
+          setAgentExpression((prev) => ({ ...prev, [s.agentId]: s.expression ?? null }));
+        }
         speak(s.agentId, s.message);
       };
       applyStep(step);
@@ -111,6 +115,7 @@ export default function Home() {
 
   const reset = () => {
     setAgentStatus(initStatus());
+    setAgentExpression({});
     setSpeaking({});
     setLastMessage({});
     setPhase("idle");
@@ -177,6 +182,7 @@ export default function Home() {
         {tab === "office" && (
           <OfficePage
             agentStatus={agentStatus}
+            agentExpression={agentExpression}
             speaking={speaking}
             lastMessage={lastMessage}
           />
@@ -186,6 +192,7 @@ export default function Home() {
       {/* 하단 에이전트 바 — 사무실에선 말풍선 숨김 */}
       <BottomAgentBar
         agentStatus={agentStatus}
+        agentExpression={agentExpression}
         speaking={speaking}
         lastMessage={lastMessage}
         hideBubbles={tab === "office"}

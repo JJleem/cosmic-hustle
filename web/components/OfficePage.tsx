@@ -7,11 +7,12 @@ import AgentImage from "./AgentImage";
 
 type Props = {
   agentStatus: Record<string, AgentStatus>;
+  agentExpression: Record<string, string | null>;
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
 };
 
-export default function OfficePage({ agentStatus, speaking, lastMessage }: Props) {
+export default function OfficePage({ agentStatus, agentExpression, speaking, lastMessage }: Props) {
   const [selected, setSelected] = useState<AgentDef | null>(null);
 
   return (
@@ -129,7 +130,7 @@ export default function OfficePage({ agentStatus, speaking, lastMessage }: Props
                                 opacity: isWaiting ? 0.2 : 1,
                               }}
                             >
-                              <AgentImage defaultSrc={agent.image} size={64} cycle={status === "idle"} />
+                              <AgentImage defaultSrc={agent.image} size={64} status={status} expression={agentExpression[agent.id] ?? null} />
                               {isDone && (
                                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                   <span className="text-sm">✓</span>

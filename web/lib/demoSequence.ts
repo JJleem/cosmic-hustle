@@ -2,8 +2,9 @@ export type DemoStep = {
   agentId: string;
   message: string;
   status: "active" | "done";
-  parallel?: boolean; // 이전 스텝과 동시 실행
-  delay?: number;     // ms, 기본 1000
+  expression?: string | null; // 특수 표정 override
+  parallel?: boolean;
+  delay?: number;
 };
 
 export const DEMO_SEQUENCE: DemoStep[] = [
@@ -23,10 +24,16 @@ export const DEMO_SEQUENCE: DemoStep[] = [
   { agentId: "over",  message: "리포트 완성. 걸작이에요. 팩트 부장님께.", status: "done", delay: 1400 },
 
   { agentId: "fact",  message: "...", status: "active", delay: 300 },
-  { agentId: "fact",  message: "오류 2건. 수정 후 재검토.", status: "active", delay: 1600 },
-  { agentId: "over",  message: "...수정했습니다. (상처받음)", status: "active", parallel: true, delay: 800 },
-  { agentId: "fact",  message: "통과.", status: "done", delay: 1200 },
-  { agentId: "over",  message: "통과라고 했다... 걸작 맞지.", status: "done", parallel: true, delay: 400 },
+  // 팩트: 오류 발견 → err 표정
+  { agentId: "fact",  message: "오류 2건. 수정 후 재검토.", status: "active", expression: "err", delay: 1600 },
+  // 오버: 퇴짜 → sad, 팩트는 계속 err 유지
+  { agentId: "over",  message: "...다시요? (상처받음)", status: "active", expression: "sad", parallel: true, delay: 800 },
+  // 오버: sad 잠깐 후 다시 working
+  { agentId: "over",  message: "...알겠습니다. 수정할게요.", status: "active", expression: null, delay: 1200 },
+  // 팩트: 재검토 → working으로 돌아옴
+  { agentId: "fact",  message: "재검토 중...", status: "active", expression: null, parallel: true, delay: 400 },
+  { agentId: "fact",  message: "통과.", status: "done", delay: 1400 },
+  { agentId: "over",  message: "통과라고 했다... 역시 걸작.", status: "done", parallel: true, delay: 400 },
 
   // 병렬 구간
   { agentId: "ping",  message: "이거랑 저거 합치면?! ✨ 안테나 반짝!", status: "active", delay: 0 },
