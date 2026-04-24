@@ -2,17 +2,26 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import BottomAgentBar from "@/components/BottomAgentBar";
-import TopicInput from "@/components/TopicInput";
 import OfficePage from "@/components/OfficePage";
+import { Idea } from "@/components/AgentWorkspace";
+import ProjectSetupModal, { ProjectConfig } from "@/components/ProjectSetupModal";
 import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import ProjectHistory, { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoBoard from "@/components/dashboard/MemoBoard";
-import { AGENTS, AgentStatus } from "@/lib/agents";
+import { AGENTS, PIPELINE, AgentStatus } from "@/lib/agents";
 
 type PageTab = "dashboard" | "office";
 
 type AgentStates = Record<string, AgentStatus>;
+
+export type Handoff = {
+  id: string;
+  fromId: string;
+  toId: string;
+  message: string;
+  at: Date;
+};
 
 const initStatus = (): AgentStates =>
   Object.fromEntries(AGENTS.map((a) => [a.id, "idle"]));
@@ -27,8 +36,11 @@ export default function Home() {
   const [lastMessage, setLastMessage] = useState<Record<string, string>>({});
   const [phase, setPhase] = useState<"idle" | "working" | "done">("idle");
   const [topic, setTopic] = useState("");
+  const [showSetup, setShowSetup] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [history, setHistory] = useState<ProjectRecord[]>([]);
+  const [handoffs, setHandoffs] = useState<Handoff[]>([]);
+  const [pingIdeas, setPingIdeas] = useState<Idea[]>([]);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -84,10 +96,27 @@ export default function Home() {
         case "agent_message":
           speak(event.agentId as string, event.message as string);
           break;
-        case "agent_done":
-          setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "done" }));
-          speak(event.agentId as string, event.message as string);
+        case "agent_done": {
+          const doneId = event.agentId as string;
+          setAgentStatus((prev) => ({ ...prev, [doneId]: "done" }));
+          speak(doneId, event.message as string);
+          // 파이프라인에서 다음 스테이지 찾아 핸드오프 기록
+          const stageIdx = PIPELINE.findIndex((s) => s.ids.includes(doneId));
+          const nextStage = stageIdx !== -1 ? PIPELINE[stageIdx + 1] : null;
+          if (nextStage) {
+            setHandoffs((prev) => [
+              {
+                id: uid(),
+                fromId: doneId,
+                toId: nextStage.ids[0],
+                message: (event.message as string) ?? "",
+                at: new Date(),
+              },
+              ...prev,
+            ].slice(0, 20));
+          }
           break;
+        }
         case "agent_expression":
           setAgentExpression((prev) => ({ ...prev, [event.agentId as string]: (event.expression as string | null) ?? null }));
           break;
@@ -102,6 +131,9 @@ export default function Home() {
             },
             ...prev,
           ]);
+          break;
+        case "ping_ideas":
+          setPingIdeas((event.ideas as Idea[]) ?? []);
           break;
         case "complete":
           setHistory((prev) => {
@@ -120,17 +152,20 @@ export default function Home() {
     [speak],
   );
 
-  const runResearch = async (inputTopic: string) => {
+  const runResearch = async (config: ProjectConfig) => {
     if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+    setShowSetup(false);
     setPhase("working");
-    setTopic(inputTopic);
-    setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"])));
+    setTopic(config.topic);
+    // 활성화된 에이전트만 waiting, 나머지는 idle 유지
+    const enabledIds = new Set(config.agentConfigs.filter((c) => c.enabled).map((c) => c.agentId));
+    setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "idle"])));
 
     try {
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: inputTopic }),
+        body: JSON.stringify({ topic: config.topic, agentConfigs: config.agentConfigs }),
       });
 
       if (!res.ok || !res.body) throw new Error("API error");
@@ -150,7 +185,7 @@ export default function Home() {
           if (!line.startsWith("data: ")) continue;
           try {
             const event = JSON.parse(line.slice(6));
-            handleSSE(event, inputTopic);
+            handleSSE(event, config.topic);
           } catch { /* ignore */ }
         }
       }
@@ -167,6 +202,7 @@ export default function Home() {
     setLastMessage({});
     setPhase("idle");
     setTopic("");
+    setHandoffs([]);
   };
 
   return (
@@ -194,17 +230,34 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="ml-auto w-80">
-          <TopicInput onSubmit={runResearch} disabled={phase === "working"} />
-        </div>
-        {phase === "done" && (
+        <div className="ml-auto flex items-center gap-2">
+          {phase === "working" && topic && (
+            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs" style={{ background: "#0d1222", border: "1px solid #1e2a40" }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-slate-300 max-w-48 truncate">{topic}</span>
+            </div>
+          )}
+          {phase === "done" && (
+            <button
+              onClick={reset}
+              className="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-500 rounded-full px-4 py-1.5 transition-all"
+            >
+              초기화
+            </button>
+          )}
           <button
-            onClick={reset}
-            className="text-xs text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded-full px-4 py-1.5 transition-all whitespace-nowrap"
+            onClick={() => { if (phase !== "working") setShowSetup(true); }}
+            disabled={phase === "working"}
+            className="text-xs font-bold px-5 py-1.5 rounded-full transition-all"
+            style={{
+              background: phase !== "working" ? "linear-gradient(135deg, #1e3a5f, #2a4f7c)" : "#1a2235",
+              color: phase !== "working" ? "#93c5fd" : "#334155",
+              border: `1px solid ${phase !== "working" ? "#2a5a9c" : "#1e2535"}`,
+            }}
           >
-            새 주제
+            새 프로젝트 +
           </button>
-        )}
+        </div>
       </header>
 
       {/* 컨텐츠 */}
@@ -212,7 +265,7 @@ export default function Home() {
         {tab === "dashboard" && (
           <div className="h-full grid grid-cols-2 grid-rows-2 gap-4 p-6">
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <OngoingProject topic={topic} phase={phase} />
+              <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <ReportBoard reports={reports} />
@@ -232,6 +285,8 @@ export default function Home() {
             agentExpression={agentExpression}
             speaking={speaking}
             lastMessage={lastMessage}
+            pingIdeas={pingIdeas}
+            lastTopic={topic}
           />
         )}
       </div>
@@ -244,6 +299,13 @@ export default function Home() {
         lastMessage={lastMessage}
         hideBubbles={tab === "office"}
       />
+
+      {showSetup && (
+        <ProjectSetupModal
+          onStart={runResearch}
+          onClose={() => setShowSetup(false)}
+        />
+      )}
     </div>
   );
 }

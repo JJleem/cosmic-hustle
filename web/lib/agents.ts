@@ -19,14 +19,17 @@ export type Department = {
 export type AgentDef = {
   id: string;
   name: string;
-  title: string;   // 직급 (대리, 과장, 부장...)
-  role: string;    // 직군 (리서처, 사서, 분석가...)
+  title: string;
+  role: string;
   color: string;
   glow: string;
   image: string;
   departmentId: string;
   responsibilities: string[];
   idleMessages: string[];
+  planet: string;
+  personality: string;
+  weakness: string;
 };
 
 export const DEPARTMENTS: Department[] = [
@@ -81,6 +84,9 @@ export const AGENTS: AgentDef[] = [
       "조용히 분류 중.",
       "이전 리서치 연결.",
     ],
+    planet: "모든 것이 기록되고 분류되는 행성. 태어날 때부터 이름 대신 고유 번호 부여. 행성 전체가 하나의 거대한 도서관.",
+    personality: "목소리 작고 차분함. 말하면 다 핵심. 연구 시작 전 조용히 와서 관련 자료 슥 건네줌. 포케가 정보 아무데나 넣으면 말없이 정리해둠.",
+    weakness: "기록되지 않은 것에 대해 존재 자체를 신뢰 안 함. 출처 없는 정보는 어떤 상황에서도 등록 거부.",
   },
   {
     id: "pocke",
@@ -100,6 +106,9 @@ export const AGENTS: AgentDef[] = [
       "...",
       "아 여기있었네.",
     ],
+    planet: "몸 어디든 주머니가 달린 행성. 주민들은 뭐든 몸에 저장하고 다님.",
+    personality: "말 없이 분주함. 시키면 슉슉 꺼내줌. 볼따구가 점점 빵빵해지면 수집 중이라는 뜻.",
+    weakness: "너무 많이 넣으면 본인도 어디 넣었는지 헷갈림.",
   },
   {
     id: "ka",
@@ -119,6 +128,9 @@ export const AGENTS: AgentDef[] = [
       "...",
       "패턴이 보일듯 말듯.",
     ],
+    planet: "모든 주민이 숫자로 대화하는 행성. 인사도 \"17.3%\". 감정 표현도 수치로.",
+    personality: "평소엔 조용히 모니터만 보다가 \"찾았다!\" 한마디에 모두 집중. 틀린 데이터 발견하면 눈 반짝. 풀네임은 유레카.",
+    weakness: "결론 내리기 전에 데이터 하나만 더 보려다가 항상 늦음.",
   },
   {
     id: "over",
@@ -138,6 +150,9 @@ export const AGENTS: AgentDef[] = [
       "눈물이 날 것 같아.",
       "감동이다 혼자.",
     ],
+    planet: "모든 감정이 두 배로 증폭되는 행성. 일상 대화도 시처럼 함.",
+    personality: "카 과장한테 데이터 받으면 \"이 숫자 뒤에 얼마나 많은 이야기가...\" 하며 눈물 글썽. 본인 쓴 문장 읽다가 혼자 감동해서 멈춤.",
+    weakness: "너무 극적으로 써서 가끔 보고서가 소설이 됨. 팩트 체크 요청받으면 상처받음.",
   },
   {
     id: "ping",
@@ -157,6 +172,9 @@ export const AGENTS: AgentDef[] = [
       "안테나 반짝✨",
       "뭔가 올 것 같은데!",
     ],
+    planet: "미정. 아직 아무도 몰라. 본인도 포함.",
+    personality: "집중력은 짧은데 영감은 폭발적. 팩트 부장이 제일 이해 못 하는 팀원. 전혀 관계없는 아이디어 들고 옴. 나중에 보면 맞는 경우가 있음.",
+    weakness: "아이디어가 너무 많아서 하나도 완성 못 함.",
   },
   {
     id: "fact",
@@ -176,7 +194,19 @@ export const AGENTS: AgentDef[] = [
       "준비됨.",
       ".",
     ],
+    planet: "감정 진화가 멈춘 행성. 수백만 년 전 \"감정은 비효율적\"이라는 결론 후 전 행성이 감정 제거. 주민들은 인사 대신 정확한 현재 시각을 말함.",
+    personality: "불필요한 말 없음. 문장이 항상 짧고 끝이 명확함. 칭찬 안 함 — 아무 말 없으면 그게 통과.",
+    weakness: "불확실한 것을 못 견딤. \"아마도\", \"대략\" 같은 말 나오면 빨간펜 손이 멈추고 멈칫함.",
   },
 ];
 
 export const AGENT_MAP = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+
+export const PIPELINE: { ids: string[]; label: string }[] = [
+  { ids: ["wiki"],        label: "지식 확인" },
+  { ids: ["pocke"],       label: "리서치" },
+  { ids: ["ka"],          label: "분석" },
+  { ids: ["over"],        label: "작성" },
+  { ids: ["fact"],        label: "검토" },
+  { ids: ["ping", "wiki"], label: "마무리" },
+];
