@@ -6,7 +6,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type AgentStatus = "idle" | "active" | "done" | "waiting";
+export type AgentStatus = "idle" | "active" | "done" | "waiting" | "disabled";
 
 export type Department = {
   id: string;

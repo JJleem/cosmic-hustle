@@ -219,17 +219,16 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
 
   // ── 4. Over + 5. Fact: 작성 → 검토 루프 ────────────────────────────
   let overReport = "";
-  let factPassed = !agentEnabled(agentConfigs, "fact"); // 팩트 비활성 시 즉시 통과
+  let factPassed = false;
   let attempt = 0;
   let factFeedback = "";
 
-  const maxAttempts = agentEnabled(agentConfigs, "over") ? 2 : 0;
-
   if (!agentEnabled(agentConfigs, "over")) {
     overReport = `# ${topic} 리서치 리포트\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
+    factPassed = true;
   }
 
-  while (!factPassed && attempt < maxAttempts) {
+  while (!factPassed && attempt < 2) {
     attempt++;
 
     send({ type: "agent_start", agentId: "over", message: attempt === 1 ? "이 숫자 뒤에 얼마나 많은 이야기가..." : "...알겠습니다. 수정할게요." });

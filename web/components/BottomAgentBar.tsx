@@ -25,6 +25,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
             const isActive = status === "active";
             const isDone = status === "done";
             const isWaiting = status === "waiting";
+            const isDisabled = status === "disabled";
             const isSpeaking = speaking[agent.id];
             const msg = lastMessage[agent.id];
             const dept = DEPT_MAP[agent.departmentId];
@@ -83,7 +84,8 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                         : `1.5px solid #1e2535`,
                       outlineOffset: 2,
                       boxShadow: isActive ? `0 0 18px 4px ${agent.glow}` : "none",
-                      opacity: isWaiting ? 0.2 : 1,
+                      opacity: isDisabled ? 0.15 : isWaiting ? 0.2 : 1,
+                      filter: isDisabled ? "grayscale(1)" : "none",
                     }}
                   >
                     <AgentImage defaultSrc={agent.image} size={52} status={status} expression={agentExpression[agent.id] ?? null} />
@@ -98,7 +100,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                 {/* 이름 */}
                 <p
                   className="text-[9px] font-semibold tracking-wide transition-colors"
-                  style={{ color: isActive ? agent.color : "#94a3b8" }}
+                  style={{ color: isDisabled ? "#1e2535" : isActive ? agent.color : "#94a3b8" }}
                 >
                   {agent.name}
                 </p>

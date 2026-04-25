@@ -144,6 +144,7 @@ export default function OfficePage({ agentStatus, agentExpression, speaking, las
                     const isActive = status === "active";
                     const isDone = status === "done";
                     const isWaiting = status === "waiting";
+                    const isDisabled = status === "disabled";
                     const isSpeaking = speaking[agent.id];
                     const msg = lastMessage[agent.id];
                     const bars = MONITOR_BARS[agent.id] ?? [8, 12, 8, 10, 8];
@@ -239,7 +240,8 @@ export default function OfficePage({ agentStatus, agentExpression, speaking, las
                                   : `1.5px solid #1a2030`,
                                 outlineOffset: 3,
                                 boxShadow: isActive ? `0 0 20px 4px ${agent.glow}` : "none",
-                                opacity: isWaiting ? 0.15 : 1,
+                                opacity: isDisabled ? 0.2 : isWaiting ? 0.15 : 1,
+                                filter: isDisabled ? "grayscale(1)" : "none",
                               }}
                             >
                               <AgentImage
@@ -261,7 +263,9 @@ export default function OfficePage({ agentStatus, agentExpression, speaking, las
                             <p
                               className="text-xs font-semibold transition-colors duration-300"
                               style={{
-                                color: isActive
+                                color: isDisabled
+                                  ? "#1e2535"
+                                  : isActive
                                   ? agent.color
                                   : isDone
                                   ? `${agent.color}50`
