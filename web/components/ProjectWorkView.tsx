@@ -26,7 +26,10 @@ export default function ProjectWorkView({
   const logRef = useRef<HTMLDivElement>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   // 에이전트 전환 중 null 순간에도 마지막 에이전트 유지 (깜박임 방지)
-  const lastAgentRef = useRef(AGENTS[0]);
+  // 마운트 시점의 agentStatus 기준으로 첫 번째 활성(비disabled) 에이전트로 초기화
+  const lastAgentRef = useRef(
+    AGENTS.find((a) => agentStatus[a.id] !== "disabled") ?? AGENTS[0]
+  );
 
   const activeAgentId =
     AGENTS.find((a) => agentStatus[a.id] === "active")?.id ?? null;

@@ -83,6 +83,9 @@ export async function runAgent(
                 const newText = (block.text as string).slice(lastText.length);
                 if (newText && onProgress) onProgress(newText);
                 lastText = block.text as string;
+              } else if (block.type === "tool_use" && onProgress) {
+                const toolLine = formatToolUse(block.name as string, block.input as Record<string, unknown>);
+                if (toolLine) onProgress(toolLine);
               }
             }
           }
@@ -101,6 +104,19 @@ export async function runAgent(
     });
     proc.on("error", reject);
   });
+}
+
+function formatToolUse(name: string, input: Record<string, unknown>): string {
+  switch (name) {
+    case "WebSearch": return `\n🔍 검색: "${input.query ?? ""}"\n`;
+    case "WebFetch":  return `\n🌐 페이지 읽는 중: ${input.url ?? ""}\n`;
+    case "Read":      return `\n📖 파일 읽는 중: ${input.file_path ?? ""}\n`;
+    case "Write":     return `\n✏️ 파일 작성: ${input.file_path ?? ""}\n`;
+    case "Edit":      return `\n✂️ 파일 수정: ${input.file_path ?? ""}\n`;
+    case "Grep":      return `\n🔎 검색: "${input.pattern ?? ""}"\n`;
+    case "Glob":      return `\n📂 파일 탐색: ${input.pattern ?? ""}\n`;
+    default:          return `\n⚙️ ${name}\n`;
+  }
 }
 
 export function parseJSON<T>(text: string, fallback: T): T {
