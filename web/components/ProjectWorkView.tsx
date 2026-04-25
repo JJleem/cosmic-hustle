@@ -22,18 +22,27 @@ export default function ProjectWorkView({
   streamLog,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
+  // 에이전트 전환 중 null 순간에도 마지막 에이전트 유지 (깜박임 방지)
+  const lastAgentRef = useRef(AGENTS[0]);
 
   const activeAgentId =
     AGENTS.find((a) => agentStatus[a.id] === "active")?.id ?? null;
   const activeAgent = activeAgentId ? AGENT_MAP[activeAgentId] : null;
+  if (activeAgent) lastAgentRef.current = activeAgent;
+  const displayAgent = activeAgent ?? lastAgentRef.current;
 
-  const activeStageIdx = PIPELINE.findIndex((s) =>
+  // disabled 상태가 아닌 스테이지만 파이프라인에 표시
+  const visiblePipeline = PIPELINE.filter((stage) =>
+    stage.ids.some((id) => agentStatus[id] !== "disabled")
+  );
+
+  const activeStageIdx = visiblePipeline.findIndex((s) =>
     s.ids.some((id) => agentStatus[id] === "active")
   );
 
   const currentLog = activeAgentId ? streamLog[activeAgentId] ?? "" : "";
-  const isSpeaking = activeAgentId ? speaking[activeAgentId] : false;
-  const msg = activeAgentId ? lastMessage[activeAgentId] : "";
+  const isSpeaking = speaking[displayAgent.id];
+  const msg = lastMessage[displayAgent.id] ?? "";
 
   // 로그 자동 스크롤
   useEffect(() => {
@@ -41,8 +50,6 @@ export default function ProjectWorkView({
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [currentLog]);
-
-  if (!activeAgent) return null;
 
   return (
     <div
@@ -52,13 +59,13 @@ export default function ProjectWorkView({
       {/* 왼쪽 — 에이전트 패널 */}
       <div
         className="w-80 shrink-0 flex flex-col items-center justify-center gap-6 px-8 py-10 relative border-r"
-        style={{ borderColor: `${activeAgent.color}15`, background: `${activeAgent.color}04` }}
+        style={{ borderColor: `${displayAgent.color}15`, background: `${displayAgent.color}04` }}
       >
         {/* 배경 글로우 */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: `radial-gradient(ellipse at 50% 40%, ${activeAgent.glow} 0%, transparent 65%)`,
+            background: `radial-gradient(ellipse at 50% 40%, ${displayAgent.glow} 0%, transparent 65%)`,
             opacity: 0.12,
           }}
         />
@@ -72,8 +79,8 @@ export default function ProjectWorkView({
               className="rounded-2xl rounded-b-sm px-4 py-2.5 text-xs text-slate-200 leading-relaxed text-center"
               style={{
                 background: "#0f1521",
-                border: `1px solid ${activeAgent.color}40`,
-                boxShadow: `0 4px 24px ${activeAgent.glow}`,
+                border: `1px solid ${displayAgent.color}40`,
+                boxShadow: `0 4px 24px ${displayAgent.glow}`,
               }}
             >
               {msg}
@@ -81,8 +88,8 @@ export default function ProjectWorkView({
                 className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45"
                 style={{
                   background: "#0f1521",
-                  borderRight: `1px solid ${activeAgent.color}40`,
-                  borderBottom: `1px solid ${activeAgent.color}40`,
+                  borderRight: `1px solid ${displayAgent.color}40`,
+                  borderBottom: `1px solid ${displayAgent.color}40`,
                 }}
               />
             </div>
@@ -94,7 +101,7 @@ export default function ProjectWorkView({
           <div
             className="absolute inset-0 rounded-full animate-ping"
             style={{
-              background: activeAgent.glow,
+              background: displayAgent.glow,
               transform: "scale(1.5)",
               opacity: 0.15,
               animationDuration: "2s",
@@ -105,27 +112,27 @@ export default function ProjectWorkView({
             style={{
               width: 140,
               height: 140,
-              outline: `2px solid ${activeAgent.color}`,
+              outline: `2px solid ${displayAgent.color}`,
               outlineOffset: 4,
-              boxShadow: `0 0 40px 8px ${activeAgent.glow}`,
+              boxShadow: `0 0 40px 8px ${displayAgent.glow}`,
             }}
           >
             <AgentImage
-              defaultSrc={activeAgent.image}
+              defaultSrc={displayAgent.image}
               size={140}
               status="active"
-              expression={agentExpression[activeAgent.id] ?? null}
+              expression={agentExpression[displayAgent.id] ?? null}
             />
           </div>
         </div>
 
         {/* 이름 & 직책 */}
         <div className="relative text-center">
-          <p className="text-2xl font-bold" style={{ color: activeAgent.color }}>
-            {activeAgent.name}
+          <p className="text-2xl font-bold" style={{ color: displayAgent.color }}>
+            {displayAgent.name}
           </p>
           <p className="text-sm text-slate-400 mt-0.5">
-            {activeAgent.title} · {activeAgent.role}
+            {displayAgent.title} · {displayAgent.role}
           </p>
         </div>
 
@@ -134,7 +141,7 @@ export default function ProjectWorkView({
           className="relative w-full rounded-xl px-4 py-3"
           style={{
             background: "#0c1020",
-            border: `1px solid ${activeAgent.color}20`,
+            border: `1px solid ${displayAgent.color}20`,
           }}
         >
           <p className="text-[10px] text-slate-500 tracking-widest uppercase mb-1">Project</p>
@@ -145,25 +152,25 @@ export default function ProjectWorkView({
         <div className="relative w-full">
           <p className="text-[10px] text-slate-600 tracking-widest uppercase mb-2">담당 업무</p>
           <ul className="flex flex-col gap-1.5">
-            {activeAgent.responsibilities.map((r, i) => (
+            {displayAgent.responsibilities.map((r, i) => (
               <li key={i} className="flex items-center gap-2 text-xs text-slate-400">
-                <span style={{ color: `${activeAgent.color}80` }}>▸</span>
+                <span style={{ color: `${displayAgent.color}80` }}>▸</span>
                 {r}
               </li>
             ))}
           </ul>
         </div>
 
-        {/* 파이프라인 진행 */}
+        {/* 파이프라인 진행 — 활성 에이전트만 표시 */}
         <div className="relative w-full mt-auto">
           <p className="text-[10px] text-slate-600 tracking-widest uppercase mb-2">Pipeline</p>
           <div className="flex items-center gap-1 flex-wrap">
-            {PIPELINE.map((stage, i) => {
+            {visiblePipeline.map((stage, i) => {
               const stageAgent = AGENT_MAP[stage.ids[0]];
               const isActive = i === activeStageIdx;
               const isDone = activeStageIdx !== -1 && i < activeStageIdx;
               return (
-                <div key={i} className="flex items-center gap-1">
+                <div key={stage.ids.join("+")} className="flex items-center gap-1">
                   {i > 0 && (
                     <div
                       className="w-3 h-px"
@@ -214,12 +221,12 @@ export default function ProjectWorkView({
         >
           <div
             className="w-2 h-2 rounded-full animate-pulse"
-            style={{ background: activeAgent.color }}
+            style={{ background: displayAgent.color }}
           />
-          <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: activeAgent.color }}>
+          <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: displayAgent.color }}>
             Live Output
           </span>
-          <span className="text-xs text-slate-600 ml-2">{activeAgent.name} 대리가 작업 중...</span>
+          <span className="text-xs text-slate-600 ml-2">{displayAgent.name} 작업 중...</span>
         </div>
 
         {/* 로그 영역 */}
@@ -229,7 +236,7 @@ export default function ProjectWorkView({
           style={{ color: "#8899aa" }}
         >
           {currentLog ? (
-            <pre className="whitespace-pre-wrap break-words">{currentLog}<span className="animate-pulse" style={{ color: activeAgent.color }}>▋</span></pre>
+            <pre className="whitespace-pre-wrap break-words">{currentLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
           ) : (
             <div className="flex items-center gap-2 text-slate-700 mt-4">
               <div className="flex gap-1">
@@ -238,7 +245,7 @@ export default function ProjectWorkView({
                     key={i}
                     className="w-1.5 h-1.5 rounded-full animate-bounce"
                     style={{
-                      background: activeAgent.color,
+                      background: displayAgent.color,
                       opacity: 0.4,
                       animationDelay: `${i * 150}ms`,
                     }}
