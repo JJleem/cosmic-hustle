@@ -64,7 +64,7 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
     }, 500);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, expression, showIdle]);
+  }, [defaultSrc, status, expression, showIdle]);
 
   return (
     <div className="relative w-full h-full">

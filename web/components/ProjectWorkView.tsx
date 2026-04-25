@@ -46,16 +46,47 @@ export default function ProjectWorkView({
     s.ids.some((id) => agentStatus[id] === "active")
   );
 
-  const currentLog = activeAgentId ? streamLog[activeAgentId] ?? "" : "";
+  const targetLog = activeAgentId ? streamLog[activeAgentId] ?? "" : "";
   const isSpeaking = speaking[displayAgent.id];
   const msg = lastMessage[displayAgent.id] ?? "";
+
+  // 타이핑 애니메이션: streamLog → displayedLog를 글자 단위로 따라감
+  const [displayedLog, setDisplayedLog] = useState("");
+  const typeStateRef = useRef({ target: "", pos: 0, agentId: "" });
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const aid = activeAgentId ?? "";
+    // 에이전트 전환 시 초기화
+    if (typeStateRef.current.agentId !== aid) {
+      typeStateRef.current = { target: "", pos: 0, agentId: aid };
+      setDisplayedLog("");
+    }
+    typeStateRef.current.target = targetLog;
+
+    const tick = () => {
+      const s = typeStateRef.current;
+      if (s.pos < s.target.length) {
+        // 한 프레임에 8자씩 → 약 480자/초 (60fps 기준), GPT 스타일
+        const next = Math.min(s.pos + 8, s.target.length);
+        s.pos = next;
+        setDisplayedLog(s.target.slice(0, next));
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [targetLog, activeAgentId]);
 
   // 로그 자동 스크롤
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [currentLog]);
+  }, [displayedLog]);
 
   return (
     <div
@@ -248,8 +279,8 @@ export default function ProjectWorkView({
           className="flex-1 overflow-y-auto px-6 py-5 font-mono text-xs leading-relaxed"
           style={{ color: "#8899aa" }}
         >
-          {currentLog ? (
-            <pre className="whitespace-pre-wrap break-words">{currentLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
+          {displayedLog ? (
+            <pre className="whitespace-pre-wrap break-words">{displayedLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
           ) : (
             <div className="flex items-center gap-2 text-slate-700 mt-4">
               <div className="flex gap-1">
