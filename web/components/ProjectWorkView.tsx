@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AGENTS, AGENT_MAP, PIPELINE, AgentStatus } from "@/lib/agents";
 import AgentImage from "./AgentImage";
 
@@ -11,6 +11,7 @@ type Props = {
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
   streamLog: Record<string, string>;
+  onStop: () => void;
 };
 
 export default function ProjectWorkView({
@@ -20,8 +21,10 @@ export default function ProjectWorkView({
   speaking,
   lastMessage,
   streamLog,
+  onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
+  const [confirmStop, setConfirmStop] = useState(false);
   // 에이전트 전환 중 null 순간에도 마지막 에이전트 유지 (깜박임 방지)
   const lastAgentRef = useRef(AGENTS[0]);
 
@@ -227,6 +230,13 @@ export default function ProjectWorkView({
             Live Output
           </span>
           <span className="text-xs text-slate-600 ml-2">{displayAgent.name} 작업 중...</span>
+          <button
+            onClick={() => setConfirmStop(true)}
+            className="ml-auto text-[11px] px-3 py-1.5 rounded-full border transition-all hover:bg-red-950/40"
+            style={{ borderColor: "#3a1a1a", color: "#7a3535" }}
+          >
+            작업 중단
+          </button>
         </div>
 
         {/* 로그 영역 */}
@@ -281,6 +291,40 @@ export default function ProjectWorkView({
           )}
         </div>
       </div>
+
+      {/* 중단 확인 다이얼로그 */}
+      {confirmStop && (
+        <div className="absolute inset-0 z-60 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.7)" }}>
+          <div
+            className="rounded-2xl px-8 py-7 flex flex-col gap-5 w-80"
+            style={{ background: "#0d1120", border: "1px solid #3a1a1a" }}
+          >
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold text-red-400">작업을 중단할까요?</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                지금까지 진행한 데이터가 모두 사라집니다.
+                저장된 리포트가 없다면 복구할 수 없어요.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmStop(false)}
+                className="flex-1 text-xs py-2 rounded-xl border transition-all hover:bg-slate-800"
+                style={{ borderColor: "#1e2535", color: "#94a3b8" }}
+              >
+                계속 진행
+              </button>
+              <button
+                onClick={onStop}
+                className="flex-1 text-xs py-2 rounded-xl font-semibold transition-all"
+                style={{ background: "#3a1010", border: "1px solid #6b2020", color: "#f87171" }}
+              >
+                중단
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

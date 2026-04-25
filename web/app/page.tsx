@@ -46,6 +46,7 @@ export default function Home() {
   const [streamLog, setStreamLog] = useState<Record<string, string>>({});
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // DB에서 초기 데이터 로드
   useEffect(() => {
@@ -171,11 +172,15 @@ export default function Home() {
     const enabledIds = new Set(config.agentConfigs.filter((c) => c.enabled).map((c) => c.agentId));
     setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "disabled"])));
 
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: config.topic, agentConfigs: config.agentConfigs }),
+        signal: abort.signal,
       });
 
       if (!res.ok || !res.body) throw new Error("API error");
@@ -200,9 +205,19 @@ export default function Home() {
         }
       }
     } catch (err) {
-      console.error("Research failed:", err);
+      if ((err as Error).name !== "AbortError") {
+        console.error("Research failed:", err);
+      }
       setPhase("done");
+    } finally {
+      abortRef.current = null;
     }
+  };
+
+  const stopResearch = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    reset();
   };
 
   const reset = () => {
@@ -326,6 +341,7 @@ export default function Home() {
           speaking={speaking}
           lastMessage={lastMessage}
           streamLog={streamLog}
+          onStop={stopResearch}
         />
       )}
     </div>
