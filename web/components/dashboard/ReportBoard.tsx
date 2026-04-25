@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Download, Copy, Check } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2 } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -26,6 +26,57 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
+function mdToHtml(md: string): string {
+  return md
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    .replace(/^\- (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
+    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/^(?!<[hul]|<\/[hul]|<li|<\/ul)(.+)$/gm, "$1")
+    .replace(/^(.+)$/gm, (line) =>
+      /^<(h[123]|ul|li|\/ul|\/li|p)/.test(line) ? line : `<p>${line}</p>`)
+    .replace(/<p><\/p>/g, "");
+}
+
+function printReport(report: Report) {
+  const agent = AGENT_MAP[report.agentId];
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html lang="ko"><head>
+  <meta charset="utf-8"/>
+  <title>${report.topic}</title>
+  <style>
+    body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; max-width: 720px; margin: 48px auto; padding: 0 24px; color: #1e293b; line-height: 1.8; }
+    h1 { font-size: 1.5rem; margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.4rem; }
+    h2 { font-size: 1.2rem; margin-top: 1.5rem; margin-bottom: 0.4rem; }
+    h3 { font-size: 1rem; margin-top: 1.2rem; margin-bottom: 0.3rem; }
+    p { margin: 0.6rem 0; }
+    ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+    li { margin: 0.25rem 0; }
+    strong { font-weight: 700; }
+    code { background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
+    .meta { display: flex; align-items: center; gap: 12px; margin-bottom: 2rem; padding: 12px 16px; background: #f8fafc; border-radius: 8px; font-size: 0.8rem; color: #64748b; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: #e0f2fe; color: #0369a1; }
+    @media print { body { margin: 0; } }
+  </style>
+</head><body>
+  <div class="meta">
+    <span class="badge">${agent?.name ?? report.agentId} · ${agent?.role ?? ""}</span>
+    <span>${report.topic}</span>
+    <span style="margin-left:auto">${new Date(report.createdAt).toLocaleDateString("ko-KR")}</span>
+  </div>
+  ${mdToHtml(report.content)}
+  <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
+</body></html>`);
+  win.document.close();
+}
+
 function downloadMarkdown(report: Report) {
   const filename = `${report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_")}_${report.agentId}.md`;
   const header = `# ${report.topic}\n\n> 작성: ${AGENT_MAP[report.agentId]?.name ?? report.agentId} · ${new Date(report.createdAt).toLocaleDateString("ko-KR")}\n\n---\n\n`;
@@ -43,12 +94,56 @@ type Props = { reports: Report[] };
 export default function ReportBoard({ reports }: Props) {
   const [selected, setSelected] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [showTranslated, setShowTranslated] = useState(false);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelected(null); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  const handleTranslate = async () => {
+    if (!selected || translating) return;
+    if (translated) { setShowTranslated((v) => !v); return; }
+    setTranslating(true);
+    try {
+      const res = await fetch("/api/agent/over", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: `Translate the following Korean research report into fluent English. Preserve all markdown formatting, headings, and structure exactly.\n\n${selected.content}`,
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let result = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6)) as { type: string; result?: { result?: string } };
+            if (ev.type === "complete" && ev.result?.result) result = ev.result.result;
+          } catch { /* ignore */ }
+        }
+      }
+      setTranslated(result || "Translation failed.");
+      setShowTranslated(true);
+    } catch {
+      setTranslated("Translation failed.");
+      setShowTranslated(true);
+    } finally {
+      setTranslating(false);
+    }
+  };
 
   const handleCopy = async () => {
     if (!selected) return;
@@ -75,7 +170,7 @@ export default function ReportBoard({ reports }: Props) {
               return (
                 <div
                   key={r.id}
-                  onClick={() => { setSelected(r); setCopied(false); }}
+                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); }}
                   className="rounded-xl border border-slate-500 bg-slate-700/50 p-3 hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1.5">
@@ -150,6 +245,21 @@ export default function ReportBoard({ reports }: Props) {
               {/* 액션 버튼 */}
               <div className="flex items-center gap-1 shrink-0 ml-1">
                 <button
+                  onClick={handleTranslate}
+                  title={translated ? (showTranslated ? "원문 보기" : "영문 보기") : "영어로 번역"}
+                  disabled={translating}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
+                  style={
+                    showTranslated
+                      ? { background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" }
+                      : { color: "#94a3b8" }
+                  }
+                >
+                  {translating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
+                  <span>{translating ? "번역중..." : showTranslated ? "한국어" : "EN"}</span>
+                </button>
+                <div className="w-px h-4 bg-slate-700" />
+                <button
                   onClick={handleCopy}
                   title="클립보드 복사"
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
@@ -163,7 +273,15 @@ export default function ReportBoard({ reports }: Props) {
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
                 >
                   <Download size={12} />
-                  <span>저장</span>
+                  <span>MD</span>
+                </button>
+                <button
+                  onClick={() => printReport(selected)}
+                  title="PDF로 인쇄/저장"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
+                >
+                  <Printer size={12} />
+                  <span>PDF</span>
                 </button>
                 <div className="w-px h-4 bg-slate-700" />
                 <button
@@ -177,9 +295,21 @@ export default function ReportBoard({ reports }: Props) {
 
             {/* 본문 */}
             <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
-              <div className="report-body text-sm text-slate-300 leading-relaxed">
-                <ReactMarkdown>{selected.content}</ReactMarkdown>
-              </div>
+              {showTranslated && translated ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
+                    <Languages size={11} className="text-blue-400" />
+                    <span className="text-[10px] text-blue-400 font-medium">English Translation (by Over)</span>
+                  </div>
+                  <div className="report-body text-sm text-slate-300 leading-relaxed">
+                    <ReactMarkdown>{translated}</ReactMarkdown>
+                  </div>
+                </div>
+              ) : (
+                <div className="report-body text-sm text-slate-300 leading-relaxed">
+                  <ReactMarkdown>{selected.content}</ReactMarkdown>
+                </div>
+              )}
             </div>
 
             {/* 푸터 */}

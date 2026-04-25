@@ -16,3 +16,9 @@ export const reports = sqliteTable("reports", {
   content: text("content").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
+
+export const memos = sqliteTable("memos", {
+  id: text("id").primaryKey(),
+  text: text("text").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});

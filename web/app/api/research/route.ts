@@ -26,6 +26,7 @@ export type RunAgentOptions = {
   noTools?: boolean;
   addDirs?: string[];
   cwd?: string;
+  maxTurns?: number;
 };
 
 export async function runAgent(
@@ -41,6 +42,9 @@ export async function runAgent(
       "--include-partial-messages",
       "--dangerously-skip-permissions",
     ];
+    if (options.maxTurns != null) {
+      args.push("--max-turns", String(options.maxTurns));
+    }
     if (options.noTools) {
       args.push("--tools", "");
     } else if (options.allowedTools?.length) {
@@ -107,7 +111,7 @@ export function parseJSON<T>(text: string, fallback: T): T {
   }
 }
 
-type AgentConfig = { agentId: string; enabled: boolean; instruction: string };
+type AgentConfig = { agentId: string; enabled: boolean; instruction: string; maxTurns?: number };
 
 function agentEnabled(configs: AgentConfig[], id: string): boolean {
   const cfg = configs.find((c) => c.agentId === id);
@@ -116,6 +120,10 @@ function agentEnabled(configs: AgentConfig[], id: string): boolean {
 
 function agentInstruction(configs: AgentConfig[], id: string): string {
   return configs.find((c) => c.agentId === id)?.instruction?.trim() ?? "";
+}
+
+function agentMaxTurns(configs: AgentConfig[], id: string): number | undefined {
+  return configs.find((c) => c.agentId === id)?.maxTurns;
 }
 
 function withInstruction(basePrompt: string, instruction: string): string {
@@ -140,7 +148,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `{"context": "배경 요약 (3~5문장)", "keywords": ["키워드1", "키워드2", "키워드3"], "wiki_pages_found": ["페이지명"] }`,
           agentInstruction(agentConfigs, "wiki"),
         ),
-        { allowedTools: ["Read", "Glob"], addDirs: [WIKI_DIR], cwd: WIKI_DIR },
+        { allowedTools: ["Read", "Glob"], addDirs: [WIKI_DIR], cwd: WIKI_DIR, maxTurns: agentMaxTurns(agentConfigs, "wiki") },
       );
       send({ type: "agent_done", agentId: "wiki", message: "이전 리서치 연결됐어요. 포케한테 넘길게요." });
     } catch {
@@ -167,7 +175,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `JSON으로만 응답: {"sources": [{"title": "...", "summary": "...", "url": "..."}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"]}`,
           agentInstruction(agentConfigs, "pocke"),
         ),
-        { allowedTools: ["WebSearch"] },
+        { allowedTools: ["WebSearch"], maxTurns: agentMaxTurns(agentConfigs, "pocke") },
         (chunk) => {
           if (chunk.trim()) send({ type: "agent_message", agentId: "pocke", message: "출처 수집 중..." });
         },

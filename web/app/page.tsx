@@ -7,7 +7,8 @@ import { Idea } from "@/components/AgentWorkspace";
 import ProjectSetupModal, { ProjectConfig } from "@/components/ProjectSetupModal";
 import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
-import ProjectHistory, { ProjectRecord } from "@/components/dashboard/ProjectHistory";
+import HistoryIdeaPanel from "@/components/dashboard/HistoryIdeaPanel";
+import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
 import { AGENTS, PIPELINE, AgentStatus } from "@/lib/agents";
 
@@ -271,7 +272,7 @@ export default function Home() {
               <ReportBoard reports={reports} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <ProjectHistory projects={history} />
+              <HistoryIdeaPanel projects={history} ideas={pingIdeas} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <MemoWikiPanel />
