@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import BottomAgentBar from "@/components/BottomAgentBar";
 import OfficePage from "@/components/OfficePage";
+import ProjectWorkView from "@/components/ProjectWorkView";
 import { Idea } from "@/components/AgentWorkspace";
 import ProjectSetupModal, { ProjectConfig } from "@/components/ProjectSetupModal";
 import OngoingProject from "@/components/dashboard/OngoingProject";
@@ -42,6 +43,7 @@ export default function Home() {
   const [history, setHistory] = useState<ProjectRecord[]>([]);
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
   const [pingIdeas, setPingIdeas] = useState<Idea[]>([]);
+  const [streamLog, setStreamLog] = useState<Record<string, string>>({});
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -92,10 +94,17 @@ export default function Home() {
       switch (event.type) {
         case "agent_start":
           setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "active" }));
+          setStreamLog((prev) => ({ ...prev, [event.agentId as string]: "" }));
           speak(event.agentId as string, event.message as string);
           break;
         case "agent_message":
           speak(event.agentId as string, event.message as string);
+          break;
+        case "agent_stream":
+          setStreamLog((prev) => ({
+            ...prev,
+            [event.agentId as string]: (prev[event.agentId as string] ?? "") + (event.chunk as string),
+          }));
           break;
         case "agent_done": {
           const doneId = event.agentId as string;
@@ -204,6 +213,7 @@ export default function Home() {
     setPhase("idle");
     setTopic("");
     setHandoffs([]);
+    setStreamLog({});
   };
 
   return (
@@ -305,6 +315,17 @@ export default function Home() {
         <ProjectSetupModal
           onStart={runResearch}
           onClose={() => setShowSetup(false)}
+        />
+      )}
+
+      {phase === "working" && (
+        <ProjectWorkView
+          topic={topic}
+          agentStatus={agentStatus}
+          agentExpression={agentExpression}
+          speaking={speaking}
+          lastMessage={lastMessage}
+          streamLog={streamLog}
         />
       )}
     </div>

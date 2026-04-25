@@ -14,6 +14,7 @@ export const WIKI_DIR = path.resolve(
 type SSEEvent =
   | { type: "agent_start"; agentId: string; message: string }
   | { type: "agent_message"; agentId: string; message: string }
+  | { type: "agent_stream"; agentId: string; chunk: string }
   | { type: "agent_done"; agentId: string; message: string }
   | { type: "agent_expression"; agentId: string; expression: string | null }
   | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
@@ -177,7 +178,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         ),
         { allowedTools: ["WebSearch"], maxTurns: agentMaxTurns(agentConfigs, "pocke") },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_message", agentId: "pocke", message: "출처 수집 중..." });
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "pocke", chunk });
         },
       );
       send({ type: "agent_done", agentId: "pocke", message: "볼따구 터질것같아! 카 과장한테 넘길게요." });
@@ -206,6 +207,9 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           agentInstruction(agentConfigs, "ka"),
         ),
         { noTools: true },
+        (chunk) => {
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "ka", chunk });
+        },
       );
       send({ type: "agent_done", agentId: "ka", message: "찾았다!!! 핵심 인사이트 잡음. 오버한테 넘길게." });
     } catch {
@@ -249,7 +253,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         ),
         { noTools: true },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_message", agentId: "over", message: "쓰다 보니 눈물이... 😭" });
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "over", chunk });
         },
       );
       send({ type: "agent_done", agentId: "over", message: "리포트 완성. 걸작이에요. 팩트 부장님께." });
@@ -274,6 +278,9 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           agentInstruction(agentConfigs, "fact"),
         ),
         { noTools: true },
+        (chunk) => {
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "fact", chunk });
+        },
       );
 
       const fact = parseJSON<{ passed: boolean; issues: string[]; feedback: string }>(
