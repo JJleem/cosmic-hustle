@@ -8,7 +8,7 @@ import ProjectSetupModal, { ProjectConfig } from "@/components/ProjectSetupModal
 import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import ProjectHistory, { ProjectRecord } from "@/components/dashboard/ProjectHistory";
-import MemoBoard from "@/components/dashboard/MemoBoard";
+import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
 import { AGENTS, PIPELINE, AgentStatus } from "@/lib/agents";
 
 type PageTab = "dashboard" | "office";
@@ -274,7 +274,7 @@ export default function Home() {
               <ProjectHistory projects={history} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <MemoBoard />
+              <MemoWikiPanel />
             </div>
           </div>
         )}
