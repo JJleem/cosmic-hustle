@@ -44,6 +44,7 @@ export default function Home() {
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
   const [pingIdeas, setPingIdeas] = useState<Idea[]>([]);
   const [streamLog, setStreamLog] = useState<Record<string, string>>({});
+  const [chatFeed, setChatFeed] = useState<Array<{ id: string; agentId: string; text: string; at: Date }>>([]);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -90,6 +91,10 @@ export default function Home() {
     return () => { if (idleTimerRef.current) clearInterval(idleTimerRef.current); };
   }, [phase, speak]);
 
+  const addChat = useCallback((agentId: string, text: string) => {
+    setChatFeed((prev) => [...prev, { id: crypto.randomUUID(), agentId, text, at: new Date() }].slice(-60));
+  }, []);
+
   const handleSSE = useCallback(
     (event: Record<string, unknown>, inputTopic: string) => {
       switch (event.type) {
@@ -97,9 +102,11 @@ export default function Home() {
           setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "active" }));
           setStreamLog((prev) => ({ ...prev, [event.agentId as string]: "" }));
           speak(event.agentId as string, event.message as string);
+          addChat(event.agentId as string, `[시작] ${event.message as string}`);
           break;
         case "agent_message":
           speak(event.agentId as string, event.message as string);
+          addChat(event.agentId as string, event.message as string);
           break;
         case "agent_stream":
           setStreamLog((prev) => ({
@@ -111,6 +118,7 @@ export default function Home() {
           const doneId = event.agentId as string;
           setAgentStatus((prev) => ({ ...prev, [doneId]: "done" }));
           speak(doneId, event.message as string);
+          addChat(doneId, `[완료] ${event.message as string}`);
           // 파이프라인에서 다음 스테이지 찾아 핸드오프 기록
           const stageIdx = PIPELINE.findIndex((s) => s.ids.includes(doneId));
           const nextStage = stageIdx !== -1 ? PIPELINE[stageIdx + 1] : null;
@@ -160,7 +168,7 @@ export default function Home() {
           break;
       }
     },
-    [speak],
+    [speak, addChat],
   );
 
   const runResearch = async (config: ProjectConfig) => {
@@ -229,6 +237,7 @@ export default function Home() {
     setTopic("");
     setHandoffs([]);
     setStreamLog({});
+    setChatFeed([]);
   };
 
   return (
@@ -341,6 +350,7 @@ export default function Home() {
           speaking={speaking}
           lastMessage={lastMessage}
           streamLog={streamLog}
+          chatFeed={chatFeed}
           onStop={stopResearch}
         />
       )}

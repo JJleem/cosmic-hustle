@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { AGENTS, AGENT_MAP, PIPELINE, AgentStatus } from "@/lib/agents";
 import AgentImage from "./AgentImage";
 
+type ChatEntry = { id: string; agentId: string; text: string; at: Date };
+
 type Props = {
   topic: string;
   agentStatus: Record<string, AgentStatus>;
@@ -11,6 +13,7 @@ type Props = {
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
   streamLog: Record<string, string>;
+  chatFeed: ChatEntry[];
   onStop: () => void;
 };
 
@@ -21,9 +24,11 @@ export default function ProjectWorkView({
   speaking,
   lastMessage,
   streamLog,
+  chatFeed,
   onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   // 에이전트 전환 중 null 순간에도 마지막 에이전트 유지 (깜박임 방지)
   // 마운트 시점의 agentStatus 기준으로 첫 번째 활성(비disabled) 에이전트로 초기화
@@ -87,6 +92,13 @@ export default function ProjectWorkView({
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [displayedLog]);
+
+  // 채팅 피드 자동 스크롤
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [chatFeed]);
 
   return (
     <div
@@ -249,80 +261,135 @@ export default function ProjectWorkView({
         </div>
       </div>
 
-      {/* 오른쪽 — 스트리밍 로그 */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* 헤더 */}
-        <div
-          className="shrink-0 px-6 py-4 flex items-center gap-3 border-b"
-          style={{ borderColor: "#0f1520" }}
-        >
+      {/* 오른쪽 — 스트리밍 로그 + 채팅 피드 */}
+      <div className="flex-1 flex overflow-hidden">
+
+        {/* 스트리밍 로그 */}
+        <div className="flex-1 flex flex-col overflow-hidden border-r" style={{ borderColor: "#0f1520" }}>
+          {/* 헤더 */}
           <div
-            className="w-2 h-2 rounded-full animate-pulse"
-            style={{ background: displayAgent.color }}
-          />
-          <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: displayAgent.color }}>
-            Live Output
-          </span>
-          <span className="text-xs text-slate-600 ml-2">{displayAgent.name} 작업 중...</span>
-          <button
-            onClick={() => setConfirmStop(true)}
-            className="ml-auto text-[11px] px-3 py-1.5 rounded-full border transition-all hover:bg-red-950/40"
-            style={{ borderColor: "#3a1a1a", color: "#7a3535" }}
+            className="shrink-0 px-6 py-4 flex items-center gap-3 border-b"
+            style={{ borderColor: "#0f1520" }}
           >
-            작업 중단
-          </button>
-        </div>
-
-        {/* 로그 영역 */}
-        <div
-          ref={logRef}
-          className="flex-1 overflow-y-auto px-6 py-5 font-mono text-xs leading-relaxed"
-          style={{ color: "#8899aa" }}
-        >
-          {displayedLog ? (
-            <pre className="whitespace-pre-wrap break-words">{displayedLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
-          ) : (
-            <div className="flex items-center gap-2 text-slate-700 mt-4">
-              <div className="flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full animate-bounce"
-                    style={{
-                      background: displayAgent.color,
-                      opacity: 0.4,
-                      animationDelay: `${i * 150}ms`,
-                    }}
-                  />
-                ))}
-              </div>
-              <span>작업 준비 중...</span>
-            </div>
-          )}
-        </div>
-
-        {/* 완료된 에이전트 요약 */}
-        <div
-          className="shrink-0 border-t px-6 py-3 flex items-center gap-3 overflow-x-auto"
-          style={{ borderColor: "#0f1520" }}
-        >
-          <span className="text-[10px] text-slate-700 tracking-widest uppercase shrink-0">완료</span>
-          {AGENTS.filter((a) => agentStatus[a.id] === "done").map((a) => (
             <div
-              key={a.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0"
-              style={{
-                background: `${a.color}10`,
-                border: `1px solid ${a.color}25`,
-              }}
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{ background: displayAgent.color }}
+            />
+            <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: displayAgent.color }}>
+              Live Output
+            </span>
+            <span className="text-xs text-slate-600 ml-2">{displayAgent.name} 작업 중...</span>
+            <button
+              onClick={() => setConfirmStop(true)}
+              className="ml-auto text-[11px] px-3 py-1.5 rounded-full border transition-all hover:bg-red-950/40"
+              style={{ borderColor: "#3a1a1a", color: "#7a3535" }}
             >
-              <span className="text-[10px]" style={{ color: `${a.color}80` }}>✓</span>
-              <span className="text-[10px]" style={{ color: `${a.color}70` }}>{a.name}</span>
-            </div>
-          ))}
-          {AGENTS.filter((a) => agentStatus[a.id] === "done").length === 0 && (
-            <span className="text-[10px] text-slate-800">아직 없음</span>
-          )}
+              작업 중단
+            </button>
+          </div>
+
+          {/* 로그 영역 */}
+          <div
+            ref={logRef}
+            className="flex-1 overflow-y-auto px-6 py-5 font-mono text-xs leading-relaxed"
+            style={{ color: "#8899aa" }}
+          >
+            {displayedLog ? (
+              <pre className="whitespace-pre-wrap break-words">{displayedLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
+            ) : (
+              <div className="flex items-center gap-2 text-slate-700 mt-4">
+                <div className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full animate-bounce"
+                      style={{
+                        background: displayAgent.color,
+                        opacity: 0.4,
+                        animationDelay: `${i * 150}ms`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <span>작업 준비 중...</span>
+              </div>
+            )}
+          </div>
+
+          {/* 완료된 에이전트 요약 */}
+          <div
+            className="shrink-0 border-t px-6 py-3 flex items-center gap-3 overflow-x-auto"
+            style={{ borderColor: "#0f1520" }}
+          >
+            <span className="text-[10px] text-slate-700 tracking-widest uppercase shrink-0">완료</span>
+            {AGENTS.filter((a) => agentStatus[a.id] === "done").map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0"
+                style={{
+                  background: `${a.color}10`,
+                  border: `1px solid ${a.color}25`,
+                }}
+              >
+                <span className="text-[10px]" style={{ color: `${a.color}80` }}>✓</span>
+                <span className="text-[10px]" style={{ color: `${a.color}70` }}>{a.name}</span>
+              </div>
+            ))}
+            {AGENTS.filter((a) => agentStatus[a.id] === "done").length === 0 && (
+              <span className="text-[10px] text-slate-800">아직 없음</span>
+            )}
+          </div>
+        </div>
+
+        {/* 채팅 피드 — 직원 간 대화 */}
+        <div className="w-64 shrink-0 flex flex-col overflow-hidden">
+          <div
+            className="shrink-0 px-4 py-4 border-b flex items-center gap-2"
+            style={{ borderColor: "#0f1520" }}
+          >
+            <span className="text-[10px] text-slate-600 tracking-widest uppercase font-bold">팀 커뮤니케이션</span>
+          </div>
+          <div
+            ref={chatRef}
+            className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2"
+          >
+            {chatFeed.length === 0 ? (
+              <p className="text-[10px] text-slate-800 text-center mt-4">대기 중...</p>
+            ) : (
+              chatFeed.map((entry) => {
+                const agent = AGENT_MAP[entry.agentId];
+                if (!agent) return null;
+                const isStart = entry.text.startsWith("[시작]");
+                const isDone = entry.text.startsWith("[완료]");
+                const displayText = isStart
+                  ? entry.text.slice(4).trim()
+                  : isDone
+                  ? entry.text.slice(4).trim()
+                  : entry.text;
+                return (
+                  <div key={entry.id} className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0 flex items-center justify-center text-[6px] font-bold"
+                        style={{ background: `${agent.color}20`, border: `1px solid ${agent.color}40`, color: agent.color }}
+                      >
+                        {isStart ? "▶" : isDone ? "✓" : "·"}
+                      </div>
+                      <span className="text-[9px] font-bold" style={{ color: `${agent.color}90` }}>
+                        {agent.name}
+                      </span>
+                    </div>
+                    <p
+                      className="text-[10px] leading-snug pl-4.5 ml-[18px]"
+                      style={{ color: isDone ? `${agent.color}60` : "#64748b" }}
+                    >
+                      {displayText}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 

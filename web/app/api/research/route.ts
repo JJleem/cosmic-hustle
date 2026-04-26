@@ -148,6 +148,8 @@ function withInstruction(basePrompt: string, instruction: string): string {
   return basePrompt + `\n\n[CEO 특별 지시: ${instruction}]`;
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string) {
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;
@@ -161,11 +163,19 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `먼저 wiki/index.md를 읽어서 관련 페이지가 있는지 확인하세요.\n` +
           `관련 개념 페이지(wiki/concepts/)가 있으면 읽어서 내용을 파악하세요.\n` +
           `없으면 일반 배경 지식을 사용하세요.\n\n` +
-          `반드시 JSON으로만 응답하세요:\n` +
-          `{"context": "배경 요약 (3~5문장)", "keywords": ["키워드1", "키워드2", "키워드3"], "wiki_pages_found": ["페이지명"] }`,
+          `응답 형식: 파일을 확인한 결과를 한 줄로 요약한 다음, 반드시 아래 JSON 코드블록으로 마무리하세요:\n` +
+          `\`\`\`json\n{"context": "배경 요약 (2~3문장)", "keywords": ["키워드1", "키워드2", "키워드3"], "wiki_pages_found": ["페이지명"]}\n\`\`\``,
           agentInstruction(agentConfigs, "wiki"),
         ),
-        { allowedTools: ["Read", "Glob"], addDirs: [WIKI_DIR], cwd: WIKI_DIR, maxTurns: agentMaxTurns(agentConfigs, "wiki") },
+        {
+          allowedTools: ["Read", "Glob"],
+          addDirs: [WIKI_DIR],
+          cwd: WIKI_DIR,
+          maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 3,
+        },
+        (chunk) => {
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "wiki", chunk });
+        },
       );
       send({ type: "agent_done", agentId: "wiki", message: "이전 리서치 연결됐어요. 포케한테 넘길게요." });
     } catch {
@@ -179,6 +189,13 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     wiki_pages_found: [],
   });
 
+  // 위키→포케 커뮤니케이션
+  if (agentEnabled(agentConfigs, "pocke")) {
+    await delay(400);
+    send({ type: "agent_message", agentId: "pocke", message: "위키야 고마워! 바로 달려갈게 🐹" });
+    await delay(600);
+  }
+
   // ── 2. Pocke: 웹 리서치 ─────────────────────────────────────────────
   let pockeOutput = `{"sources": [], "key_facts": ["${topic} 관련 기본 정보"]}`;
   if (agentEnabled(agentConfigs, "pocke")) {
@@ -188,11 +205,15 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         withInstruction(
           `당신은 포케 대리입니다. 열정 넘치는 햄스터형 리서처예요.\n` +
           `주제: "${topic}". 배경: ${wiki.context}. 키워드: ${wiki.keywords.join(", ")}.\n` +
-          `웹 검색으로 최신 정보, 통계, 사례를 수집하세요.\n` +
-          `JSON으로만 응답: {"sources": [{"title": "...", "summary": "...", "url": "..."}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"]}`,
+          `웹 검색으로 최신 정보, 통계, 사례를 수집하세요. 검색은 최대 3회.\n` +
+          `수집한 핵심 팩트 5개를 JSON 코드블록으로 정리하세요:\n` +
+          `\`\`\`json\n{"sources": [{"title": "...", "summary": "...", "url": "..."}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"]}\n\`\`\``,
           agentInstruction(agentConfigs, "pocke"),
         ),
-        { allowedTools: ["WebSearch"], maxTurns: agentMaxTurns(agentConfigs, "pocke") },
+        {
+          allowedTools: ["WebSearch"],
+          maxTurns: agentMaxTurns(agentConfigs, "pocke") ?? 3,
+        },
         (chunk) => {
           if (chunk.trim()) send({ type: "agent_stream", agentId: "pocke", chunk });
         },
@@ -207,6 +228,13 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     pockeOutput, { sources: [], key_facts: [] },
   );
 
+  // 포케→카 커뮤니케이션
+  if (agentEnabled(agentConfigs, "ka")) {
+    await delay(400);
+    send({ type: "agent_message", agentId: "ka", message: `포케가 팩트 ${pocke.key_facts.length}개 넘겼어. ...흥미롭네.` });
+    await delay(600);
+  }
+
   // ── 3. Ka: 분석 ─────────────────────────────────────────────────────
   let kaOutput = `{"insights": [{"title": "주요 동향", "description": "${topic}의 핵심 흐름"}], "conclusion": "${topic}에 대한 분석 결과입니다.", "data_quality": "medium"}`;
   if (agentEnabled(agentConfigs, "ka")) {
@@ -215,14 +243,16 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
       kaOutput = await runAgent(
         withInstruction(
           `당신은 카(유레카) 과장입니다. 다크서클 가득한 분석가예요.\n` +
-          `주제: "${topic}".\n` +
-          `수집된 팩트: ${pocke.key_facts.join(" / ")}.\n` +
-          `출처 수: ${pocke.sources.length}개.\n` +
-          `패턴을 찾고, 인사이트를 도출하고, 핵심 결론을 정리하세요.\n` +
-          `JSON으로만 응답: {"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "핵심 결론 2~3문장", "data_quality": "high|medium|low"}`,
+          `주제: "${topic}". 팩트: ${pocke.key_facts.join(" / ")}.\n\n` +
+          `먼저 발견한 패턴과 인사이트를 자연스럽게 혼잣말로 설명하세요 (3~4문장, 한국어).\n` +
+          `그 다음 아래 JSON 코드블록으로 결론을 정리하세요:\n` +
+          `\`\`\`json\n{"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "핵심 결론 2문장", "data_quality": "high|medium|low"}\n\`\`\``,
           agentInstruction(agentConfigs, "ka"),
         ),
-        { noTools: true },
+        {
+          noTools: true,
+          maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1,
+        },
         (chunk) => {
           if (chunk.trim()) send({ type: "agent_stream", agentId: "ka", chunk });
         },
@@ -236,6 +266,13 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   const ka = parseJSON<{ insights: Array<{ title: string; description: string }>; conclusion: string; data_quality: string }>(
     kaOutput, { insights: [], conclusion: "", data_quality: "medium" },
   );
+
+  // 카→오버 커뮤니케이션
+  if (agentEnabled(agentConfigs, "over")) {
+    await delay(400);
+    send({ type: "agent_message", agentId: "over", message: "카 과장님 인사이트 받았어요... 이거 좋은 이야기가 될 것 같은데요?" });
+    await delay(600);
+  }
 
   // ── 4. Over + 5. Fact: 작성 → 검토 루프 ────────────────────────────
   let overReport = "";
@@ -262,12 +299,14 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `인사이트: ${ka.insights.map((i) => `${i.title}: ${i.description}`).join("; ")}.\n` +
           `결론: ${ka.conclusion}.\n` +
           `팩트: ${pocke.key_facts.slice(0, 5).join("; ")}.\n` +
-          (attempt > 1 && factFeedback ? `이전 검토 피드백: ${factFeedback}. 이 부분을 수정해주세요.\n` : "") +
-          `한국어로 감동적이고 명확한 리서치 리포트를 작성하세요.\n` +
-          `마크다운 형식으로 작성하며, ## 제목 구조를 사용하세요. 800~1200자 분량.`,
+          (attempt > 1 && factFeedback ? `피드백 반영: ${factFeedback}\n` : "") +
+          `한국어 마크다운 리서치 리포트를 작성하세요. ## 제목 구조 사용. 600~900자.`,
           agentInstruction(agentConfigs, "over"),
         ),
-        { noTools: true },
+        {
+          noTools: true,
+          maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1,
+        },
         (chunk) => {
           if (chunk.trim()) send({ type: "agent_stream", agentId: "over", chunk });
         },
@@ -283,17 +322,26 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
       break;
     }
 
+    // 오버→팩트 커뮤니케이션
+    await delay(400);
+    send({ type: "agent_message", agentId: "fact", message: "...검토 시작." });
+    await delay(500);
+
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
       const factRaw = await runAgent(
         withInstruction(
           `당신은 팩트 부장입니다. 무표정, 빨간펜, 감정 제거 행성 출신.\n` +
-          `아래 리포트를 엄격하게 검토하세요. 사실 오류, 논리 비약, 근거 부족을 찾아내세요.\n` +
-          `리포트:\n${overReport}\n\n` +
-          `JSON으로만 응답: {"passed": true/false, "issues": ["문제1", "문제2"], "feedback": "수정 지시사항"}`,
+          `리포트를 검토하고, 발견한 문제점을 한 줄씩 지적하세요 (없으면 "이상 없음").\n` +
+          `리포트:\n${overReport.slice(0, 1500)}\n\n` +
+          `검토 후 아래 JSON 코드블록으로 결론:\n` +
+          `\`\`\`json\n{"passed": true/false, "issues": ["문제1", "문제2"], "feedback": "수정 지시사항"}\n\`\`\``,
           agentInstruction(agentConfigs, "fact"),
         ),
-        { noTools: true },
+        {
+          noTools: true,
+          maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1,
+        },
         (chunk) => {
           if (chunk.trim()) send({ type: "agent_stream", agentId: "fact", chunk });
         },
@@ -310,12 +358,14 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         send({ type: "agent_message", agentId: "fact", message: `오류 ${fact.issues.length}건. 수정 후 재검토.` });
         send({ type: "agent_expression", agentId: "fact", expression: "err" });
         send({ type: "agent_expression", agentId: "over", expression: "sad" });
+        await delay(400);
         send({ type: "agent_message", agentId: "over", message: "...다시요? (상처받음)" });
-        await new Promise((r) => setTimeout(r, 800));
+        await delay(800);
         send({ type: "agent_expression", agentId: "fact", expression: null });
       } else {
         send({ type: "agent_expression", agentId: "fact", expression: null });
         send({ type: "agent_done", agentId: "fact", message: "통과." });
+        await delay(300);
         send({ type: "agent_done", agentId: "over", message: "통과라고 했다... 역시 걸작." });
       }
     } catch {
@@ -343,6 +393,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   send({ type: "report", agentId: "over", topic, content: overReport, reportId });
 
   // ── 6. Ping + Wiki 동시 ──────────────────────────────────────────────
+  await delay(300);
   const finalTasks: Promise<void>[] = [];
 
   if (agentEnabled(agentConfigs, "ping")) {
@@ -351,13 +402,18 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
       runAgent(
         withInstruction(
           `당신은 핑 인턴입니다. 번개 후디, 안테나에서 스파크.\n` +
-          `주제: "${topic}". 리포트 요약: ${ka.conclusion}.\n` +
-          `이 리서치에서 파생될 수 있는 새로운 아이디어, 연결 가능한 주제를 찾아보세요.\n` +
-          `JSON으로만 응답: {"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}`,
+          `주제: "${topic}". 결론: ${ka.conclusion}.\n\n` +
+          `흥분하며 파생 아이디어를 2~3문장으로 외치고, 아래 JSON 코드블록으로 정리:\n` +
+          `\`\`\`json\n{"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}\n\`\`\``,
           agentInstruction(agentConfigs, "ping"),
         ),
-        { noTools: true },
-        () => { send({ type: "agent_message", agentId: "ping", message: "아이디어 캡처 중..." }); },
+        {
+          noTools: true,
+          maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1,
+        },
+        (chunk) => {
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "ping", chunk });
+        },
       ).then((result) => {
         const parsed = parseJSON<{ ideas: Array<{ title: string; spark: string }> }>(result, { ideas: [] });
         if (parsed.ideas?.length) {
@@ -376,16 +432,21 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
       runAgent(
         withInstruction(
           `당신은 위키 대리입니다. 조용하고 꼼꼼한 사서예요.\n` +
-          `"${topic}" 리서치가 방금 완료됐습니다.\n\n` +
-          `리서치 결과:\n` +
-          `- 결론: ${ka.conclusion}\n` +
-          `- 키워드: ${wiki.keywords.join(", ")}\n` +
-          `- 주요 인사이트: ${ka.insights.map((i) => i.title).join(", ")}\n\n` +
-          `wiki-llm CLAUDE.md의 Ingest 워크플로우에 따라 이 리서치 결과를 wiki에 저장하세요.\n` +
-          `sources/ 에 요약 파일을 만들고, concepts/ 에 관련 개념을 추가하거나 보강하고, index.md와 log.md를 업데이트하세요.`,
+          `"${topic}" 리서치 완료. 결론: ${ka.conclusion.slice(0, 200)}.\n` +
+          `인사이트: ${ka.insights.map((i) => i.title).join(", ")}.\n\n` +
+          `wiki-llm CLAUDE.md의 Ingest 워크플로우에 따라 이 결과를 저장하세요.\n` +
+          `sources/ 요약 파일 생성, concepts/ 보강, index.md와 log.md 업데이트.`,
           agentInstruction(agentConfigs, "wiki"),
         ),
-        { allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"], addDirs: [WIKI_DIR], cwd: WIKI_DIR },
+        {
+          allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
+          addDirs: [WIKI_DIR],
+          cwd: WIKI_DIR,
+          maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 5,
+        },
+        (chunk) => {
+          if (chunk.trim()) send({ type: "agent_stream", agentId: "wiki", chunk });
+        },
       ).then(() => {
         send({ type: "agent_done", agentId: "wiki", message: "위키 업데이트 완료. 다음에 쓸 수 있어요." });
       }).catch(() => {
