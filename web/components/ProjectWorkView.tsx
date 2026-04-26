@@ -51,7 +51,8 @@ export default function ProjectWorkView({
     s.ids.some((id) => agentStatus[id] === "active")
   );
 
-  const targetLog = activeAgentId ? streamLog[activeAgentId] ?? "" : "";
+  // agent_done 이후에도 마지막 에이전트 로그를 유지 (activeAgentId가 null이 돼도 내용 사라지지 않음)
+  const targetLog = streamLog[displayAgent.id] ?? "";
   const isSpeaking = speaking[displayAgent.id];
   const msg = lastMessage[displayAgent.id] ?? "";
 
@@ -59,12 +60,12 @@ export default function ProjectWorkView({
   const [displayedLog, setDisplayedLog] = useState("");
   const typeStateRef = useRef({ target: "", pos: 0, agentId: "" });
   const rafRef = useRef<number | null>(null);
+  const displayAgentId = displayAgent.id;
 
   useEffect(() => {
-    const aid = activeAgentId ?? "";
-    // 에이전트 전환 시 초기화
-    if (typeStateRef.current.agentId !== aid) {
-      typeStateRef.current = { target: "", pos: 0, agentId: aid };
+    // displayAgent가 바뀔 때만 초기화 (activeAgentId 기반 X → done 후에도 안 리셋)
+    if (typeStateRef.current.agentId !== displayAgentId) {
+      typeStateRef.current = { target: "", pos: 0, agentId: displayAgentId };
       setDisplayedLog("");
     }
     typeStateRef.current.target = targetLog;
@@ -84,7 +85,7 @@ export default function ProjectWorkView({
     rafRef.current = requestAnimationFrame(tick);
 
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [targetLog, activeAgentId]);
+  }, [targetLog, displayAgentId]);
 
   // 로그 자동 스크롤
   useEffect(() => {

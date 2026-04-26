@@ -66,6 +66,7 @@ export async function runAgent(
     let buffer = "";
     let finalResult = "";
     let lastText = "";
+    let sentAnyText = false; // onProgress에 텍스트를 보낸 적 있는지 추적
 
     proc.stdout.on("data", (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -81,7 +82,10 @@ export async function runAgent(
             for (const block of event.message.content) {
               if (block.type === "text" && block.text) {
                 const newText = (block.text as string).slice(lastText.length);
-                if (newText && onProgress) onProgress(newText);
+                if (newText && onProgress) {
+                  onProgress(newText);
+                  sentAnyText = true;
+                }
                 lastText = block.text as string;
               } else if (block.type === "tool_use" && onProgress) {
                 const toolLine = formatToolUse(block.name as string, block.input as Record<string, unknown>);
@@ -99,6 +103,11 @@ export async function runAgent(
 
     proc.on("close", (code) => {
       const result = finalResult || lastText;
+      // assistant 이벤트로 텍스트가 한 번도 안 왔으면 result를 직접 onProgress로 전달
+      // (--include-partial-messages가 동작 안 하거나 result 이벤트만 오는 경우 대비)
+      if (!sentAnyText && result && onProgress) {
+        onProgress(result);
+      }
       if (code === 0 || result) resolve(result);
       else reject(new Error(`Agent process exited with code ${code}`));
     });
