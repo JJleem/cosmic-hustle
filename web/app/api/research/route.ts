@@ -66,7 +66,6 @@ export async function runAgent(
     let buffer = "";
     let finalResult = "";
     let lastText = "";
-    let sentAnyText = false; // onProgress에 텍스트를 보낸 적 있는지 추적
 
     proc.stdout.on("data", (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -82,10 +81,7 @@ export async function runAgent(
             for (const block of event.message.content) {
               if (block.type === "text" && block.text) {
                 const newText = (block.text as string).slice(lastText.length);
-                if (newText && onProgress) {
-                  onProgress(newText);
-                  sentAnyText = true;
-                }
+                if (newText && onProgress) onProgress(newText);
                 lastText = block.text as string;
               } else if (block.type === "tool_use" && onProgress) {
                 const toolLine = formatToolUse(block.name as string, block.input as Record<string, unknown>);
@@ -103,11 +99,6 @@ export async function runAgent(
 
     proc.on("close", (code) => {
       const result = finalResult || lastText;
-      // assistant 이벤트로 텍스트가 한 번도 안 왔으면 result를 직접 onProgress로 전달
-      // (--include-partial-messages가 동작 안 하거나 result 이벤트만 오는 경우 대비)
-      if (!sentAnyText && result && onProgress) {
-        onProgress(result);
-      }
       if (code === 0 || result) resolve(result);
       else reject(new Error(`Agent process exited with code ${code}`));
     });
@@ -159,12 +150,23 @@ function withInstruction(basePrompt: string, instruction: string): string {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// 결과 텍스트를 작은 조각으로 나눠 딜레이와 함께 전송 — 클라이언트에서 타이핑 효과 가시화
+async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) => void): Promise<void> {
+  if (!text.trim()) return;
+  const CHUNK = 55;
+  for (let i = 0; i < text.length; i += CHUNK) {
+    send({ type: "agent_stream", agentId, chunk: text.slice(i, i + CHUNK) });
+    await delay(18); // 18ms 간격 ≈ 3000자/초
+  }
+}
+
 async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string) {
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;
   if (agentEnabled(agentConfigs, "wiki")) {
     send({ type: "agent_start", agentId: "wiki", message: "관련 자료 조용히 꺼내는 중..." });
     try {
+      let wikiStreamed = false;
       wikiContext = await runAgent(
         withInstruction(
           `당신은 위키 대리입니다. 조용하고 꼼꼼한 사서예요.\n` +
@@ -183,9 +185,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 3,
         },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_stream", agentId: "wiki", chunk });
+          if (chunk.trim()) { wikiStreamed = true; send({ type: "agent_stream", agentId: "wiki", chunk }); }
         },
       );
+      if (!wikiStreamed && wikiContext.trim()) await streamChunked("wiki", wikiContext, send);
       send({ type: "agent_done", agentId: "wiki", message: "이전 리서치 연결됐어요. 포케한테 넘길게요." });
     } catch {
       send({ type: "agent_done", agentId: "wiki", message: "기본 자료 준비됐어요." });
@@ -210,6 +213,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   if (agentEnabled(agentConfigs, "pocke")) {
     send({ type: "agent_start", agentId: "pocke", message: "볼따구에 정보 쑤셔넣는 중..." });
     try {
+      let pockeStreamed = false;
       pockeOutput = await runAgent(
         withInstruction(
           `당신은 포케 대리입니다. 열정 넘치는 햄스터형 리서처예요.\n` +
@@ -224,9 +228,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           maxTurns: agentMaxTurns(agentConfigs, "pocke") ?? 3,
         },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_stream", agentId: "pocke", chunk });
+          if (chunk.trim()) { pockeStreamed = true; send({ type: "agent_stream", agentId: "pocke", chunk }); }
         },
       );
+      if (!pockeStreamed && pockeOutput.trim()) await streamChunked("pocke", pockeOutput, send);
       send({ type: "agent_done", agentId: "pocke", message: "볼따구 터질것같아! 카 과장한테 넘길게요." });
     } catch {
       send({ type: "agent_done", agentId: "pocke", message: "수집 완료. 카 과장한테 넘길게요." });
@@ -249,6 +254,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   if (agentEnabled(agentConfigs, "ka")) {
     send({ type: "agent_start", agentId: "ka", message: "패턴 분석 시작. 데이터 하나만 더..." });
     try {
+      let kaStreamed = false;
       kaOutput = await runAgent(
         withInstruction(
           `당신은 카(유레카) 과장입니다. 다크서클 가득한 분석가예요.\n` +
@@ -263,9 +269,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1,
         },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_stream", agentId: "ka", chunk });
+          if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); }
         },
       );
+      if (!kaStreamed && kaOutput.trim()) await streamChunked("ka", kaOutput, send);
       send({ type: "agent_done", agentId: "ka", message: "찾았다!!! 핵심 인사이트 잡음. 오버한테 넘길게." });
     } catch {
       send({ type: "agent_done", agentId: "ka", message: "분석 완료. 오버한테 넘길게." });
@@ -301,6 +308,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     if (attempt === 2) send({ type: "agent_expression", agentId: "over", expression: null });
 
     try {
+      let overStreamed = false;
       overReport = await runAgent(
         withInstruction(
           `당신은 오버 사원입니다. 베레모를 쓴 감성 작가예요.\n` +
@@ -317,9 +325,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1,
         },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_stream", agentId: "over", chunk });
+          if (chunk.trim()) { overStreamed = true; send({ type: "agent_stream", agentId: "over", chunk }); }
         },
       );
+      if (!overStreamed && overReport.trim()) await streamChunked("over", overReport, send);
       send({ type: "agent_done", agentId: "over", message: "리포트 완성. 걸작이에요. 팩트 부장님께." });
     } catch {
       overReport = `# ${topic} 리서치 리포트\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
@@ -338,6 +347,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
 
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
+      let factStreamed = false;
       const factRaw = await runAgent(
         withInstruction(
           `당신은 팩트 부장입니다. 무표정, 빨간펜, 감정 제거 행성 출신.\n` +
@@ -352,9 +362,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1,
         },
         (chunk) => {
-          if (chunk.trim()) send({ type: "agent_stream", agentId: "fact", chunk });
+          if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); }
         },
       );
+      if (!factStreamed && factRaw.trim()) await streamChunked("fact", factRaw, send);
 
       const fact = parseJSON<{ passed: boolean; issues: string[]; feedback: string }>(
         factRaw, { passed: true, issues: [], feedback: "" },
@@ -408,30 +419,30 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   if (agentEnabled(agentConfigs, "ping")) {
     send({ type: "agent_start", agentId: "ping", message: "이거랑 저거 합치면?! ✨ 안테나 반짝!" });
     finalTasks.push(
-      runAgent(
-        withInstruction(
-          `당신은 핑 인턴입니다. 번개 후디, 안테나에서 스파크.\n` +
-          `주제: "${topic}". 결론: ${ka.conclusion}.\n\n` +
-          `흥분하며 파생 아이디어를 2~3문장으로 외치고, 아래 JSON 코드블록으로 정리:\n` +
-          `\`\`\`json\n{"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}\n\`\`\``,
-          agentInstruction(agentConfigs, "ping"),
-        ),
-        {
-          noTools: true,
-          maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1,
-        },
-        (chunk) => {
-          if (chunk.trim()) send({ type: "agent_stream", agentId: "ping", chunk });
-        },
-      ).then((result) => {
-        const parsed = parseJSON<{ ideas: Array<{ title: string; spark: string }> }>(result, { ideas: [] });
-        if (parsed.ideas?.length) {
-          send({ type: "ping_ideas", ideas: parsed.ideas });
+      (async () => {
+        try {
+          let pingStreamed = false;
+          const result = await runAgent(
+            withInstruction(
+              `당신은 핑 인턴입니다. 번개 후디, 안테나에서 스파크.\n` +
+              `주제: "${topic}". 결론: ${ka.conclusion}.\n\n` +
+              `흥분하며 파생 아이디어를 2~3문장으로 외치고, 아래 JSON 코드블록으로 정리:\n` +
+              `\`\`\`json\n{"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}\n\`\`\``,
+              agentInstruction(agentConfigs, "ping"),
+            ),
+            { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1 },
+            (chunk) => {
+              if (chunk.trim()) { pingStreamed = true; send({ type: "agent_stream", agentId: "ping", chunk }); }
+            },
+          );
+          if (!pingStreamed && result.trim()) await streamChunked("ping", result, send);
+          const parsed = parseJSON<{ ideas: Array<{ title: string; spark: string }> }>(result, { ideas: [] });
+          if (parsed.ideas?.length) send({ type: "ping_ideas", ideas: parsed.ideas });
+          send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });
+        } catch {
+          send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });
         }
-        send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });
-      }).catch(() => {
-        send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });
-      }),
+      })(),
     );
   }
 
