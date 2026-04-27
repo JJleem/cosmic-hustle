@@ -4,7 +4,7 @@ import fs from "fs";
 import { db } from "@/db";
 import { sessions, reports } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { DEFAULT_PROMPTS, fillPrompt } from "@/lib/agentPrompts";
+import { DEFAULT_PROMPTS, fillPrompt, type PromptVars } from "@/lib/agentPrompts";
 
 export const maxDuration = 300;
 
@@ -49,8 +49,27 @@ type SSEEvent =
   | { type: "agent_expression"; agentId: string; expression: string | null }
   | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
   | { type: "ping_ideas"; ideas: Array<{ title: string; spark: string }> }
+  | { type: "clarify_request"; sessionId: string; questions: string[] }
+  | { type: "ceo_checkin"; sessionId: string; summary: string; keyFacts: string[] }
   | { type: "complete" }
   | { type: "error"; message: string };
+
+// CEO 응답 대기 — 세션별 Promise resolver 저장
+export const pendingResponses = new Map<string, (r: string) => void>();
+
+function waitForCEO(sessionId: string, timeoutMs = 90_000): Promise<string> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingResponses.delete(sessionId);
+      resolve(""); // 타임아웃 → 자동 승인
+    }, timeoutMs);
+    pendingResponses.set(sessionId, (r) => {
+      clearTimeout(timer);
+      pendingResponses.delete(sessionId);
+      resolve(r);
+    });
+  });
+}
 
 export type RunAgentOptions = {
   allowedTools?: string[];
@@ -207,7 +226,31 @@ async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) 
   }
 }
 
-async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string) {
+async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string) {
+  // ── 0. 의도 확인 — 모호한 고유명사/지명/브랜드 체크 ────────────────────
+  let topic = topicInput;
+  try {
+    const intentRaw = await runAgent(
+      fillPrompt(DEFAULT_PROMPTS.intent, { topic }),
+      { noTools: true, maxTurns: 1 },
+    );
+    const intent = parseJSON<{ needs_clarification: boolean; questions: string[]; clarified_topic: string }>(
+      intentRaw,
+      { needs_clarification: false, questions: [], clarified_topic: topic },
+    );
+    if (intent.needs_clarification && intent.questions.length > 0) {
+      send({ type: "clarify_request", sessionId, questions: intent.questions });
+      const ceoAnswer = await waitForCEO(sessionId);
+      if (ceoAnswer.trim()) {
+        topic = `${topic} (CEO 보충: ${ceoAnswer})`;
+      } else {
+        topic = intent.clarified_topic || topic;
+      }
+    } else {
+      topic = intent.clarified_topic || topic;
+    }
+  } catch { /* 의도 분석 실패 시 원본 topic 유지 */ }
+
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;
   if (agentEnabled(agentConfigs, "wiki")) {
@@ -277,6 +320,20 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     pockeOutput, { sources: [], key_facts: [] },
   );
 
+  // ── CEO 체크인 — 포케 결과 확인 후 방향 승인 ──────────────────────────
+  let ceoNotes = "";
+  if (agentEnabled(agentConfigs, "ka")) {
+    const unverified = pocke.sources.filter((s) => s.url === "검증불가" || !s.url).length;
+    const summary = pocke.sources.length > 0
+      ? `소스 ${pocke.sources.length}개 수집${unverified > 0 ? ` (검증불가 ${unverified}개 포함)` : ""}`
+      : `팩트 ${pocke.key_facts.length}개 수집`;
+    send({ type: "ceo_checkin", sessionId, summary, keyFacts: pocke.key_facts.slice(0, 4) });
+    const ceoResponse = await waitForCEO(sessionId);
+    if (ceoResponse.trim()) {
+      ceoNotes = `[CEO 추가 지시: ${ceoResponse}]\n`;
+    }
+  }
+
   // 포케→카 커뮤니케이션
   if (agentEnabled(agentConfigs, "ka")) {
     await delay(400);
@@ -294,6 +351,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         buildPrompt(agentConfigs, "ka", {
           topic,
           facts: pocke.key_facts.join(" / "),
+          ceo_notes: ceoNotes,
         }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1 },
         (chunk) => { if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); } },
@@ -370,8 +428,9 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
       let factStreamed = false;
+      const sourcesJson = JSON.stringify(pocke.sources.slice(0, 5));
       const factRaw = await runAgent(
-        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800) }),
+        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800), sources: sourcesJson }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
         (chunk) => { if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "fact", chunk: thinking }); },

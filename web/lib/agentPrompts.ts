@@ -7,10 +7,20 @@ export type PromptVars = {
   conclusion: string;
   report: string;
   feedback: string;
+  sources: string;
+  ceo_notes: string;
 };
 
 // {변수명} 형태로 런타임에 대입됨
 export const DEFAULT_PROMPTS: Record<string, string> = {
+  intent: `입력: "{topic}"
+
+고유명사·지명·인명·브랜드명·동음이의어 체크. 검색 방향이 명확한가?
+모호한 경우만 질문(최대 2개). 명확하면 needs_clarification: false.
+\`\`\`json
+{"needs_clarification": false, "questions": [], "clarified_topic": "{topic}"}
+\`\`\``,
+
   wiki: `위키 대리. 사서.
 주제: "{topic}"
 wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지식 사용.
@@ -21,14 +31,14 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 
   pocke: `포케 대리. 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-웹 검색 최대 3회로 최신 정보·통계·사례 수집.
+웹 검색 최대 3회. 각 소스 URL 필수 — 찾을 수 없으면 "검증불가" 표기.
 \`\`\`json
-{"sources": [{"title": "...", "summary": "...", "url": "..."}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"]}
+{"sources": [{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}
 \`\`\``,
 
   ka: `카 과장. 분석가.
 주제: "{topic}". 팩트: {facts}.
-패턴·인사이트 혼잣말 3~4문장 후 JSON:
+{ceo_notes}패턴·인사이트 혼잣말 3~4문장 후 JSON:
 \`\`\`json
 {"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "핵심 결론 2문장", "data_quality": "high|medium|low"}
 \`\`\``,
@@ -44,9 +54,12 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 리포트:
 {report}
 
-문제점 지적 후 JSON:
+출처:
+{sources}
+
+체크: ① 출처 없는 주장 ② 검증불가 항목 ③ 논리 오류.
 \`\`\`json
-{"passed": true/false, "issues": ["문제1"], "feedback": "수정 지시사항"}
+{"passed": true/false, "issues": ["문제1"], "feedback": "수정 지시사항", "unverified_claims": ["검증 안 된 항목"]}
 \`\`\``,
 
   ping: `핑 인턴. 아이디어 수집가.
@@ -61,9 +74,9 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 export const PROMPT_VARS_HINT: Record<string, string[]> = {
   wiki:  ["{topic}"],
   pocke: ["{topic}", "{context}", "{keywords}"],
-  ka:    ["{topic}", "{facts}"],
+  ka:    ["{topic}", "{facts}", "{ceo_notes}"],
   over:  ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
-  fact:  ["{report}"],
+  fact:  ["{report}", "{sources}"],
   ping:  ["{topic}", "{conclusion}"],
 };
 

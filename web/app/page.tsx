@@ -12,6 +12,7 @@ import HistoryIdeaPanel from "@/components/dashboard/HistoryIdeaPanel";
 import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
 import AgentSettingsPage from "@/components/AgentSettingsPage";
+import CeoCheckin, { type CeoCheckinState } from "@/components/CeoCheckin";
 import { AGENTS, PIPELINE, AgentStatus } from "@/lib/agents";
 import { AllAgentSettings, loadAgentSettings } from "@/lib/agentSettings";
 
@@ -52,6 +53,7 @@ export default function Home() {
   const [pingIdeas, setPingIdeas] = useState<Idea[]>([]);
   const [streamLog, setStreamLog] = useState<Record<string, string>>({});
   const [chatFeed, setChatFeed] = useState<Array<{ id: string; agentId: string; text: string; at: Date }>>([]);
+  const [ceoCheckin, setCeoCheckin] = useState<CeoCheckinState | null>(null);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -164,6 +166,21 @@ export default function Home() {
         case "ping_ideas":
           setPingIdeas((event.ideas as Idea[]) ?? []);
           break;
+        case "clarify_request":
+          setCeoCheckin({
+            type: "clarify_request",
+            sessionId: event.sessionId as string,
+            questions: event.questions as string[],
+          });
+          break;
+        case "ceo_checkin":
+          setCeoCheckin({
+            type: "ceo_checkin",
+            sessionId: event.sessionId as string,
+            summary: event.summary as string,
+            keyFacts: event.keyFacts as string[],
+          });
+          break;
         case "complete":
           setHistory((prev) => {
             if (prev.some((h) => h.topic === inputTopic)) return prev;
@@ -232,6 +249,15 @@ export default function Home() {
     }
   };
 
+  const handleCeoResponse = async (sessionId: string, response: string) => {
+    setCeoCheckin(null);
+    await fetch(`/api/research/${sessionId}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ response }),
+    });
+  };
+
   const stopResearch = () => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -248,6 +274,7 @@ export default function Home() {
     setHandoffs([]);
     setStreamLog({});
     setChatFeed([]);
+    setCeoCheckin(null);
   };
 
   return (
@@ -358,6 +385,10 @@ export default function Home() {
           onClose={() => setShowSetup(false)}
           defaultSettings={agentSettings}
         />
+      )}
+
+      {ceoCheckin && (
+        <CeoCheckin state={ceoCheckin} onRespond={handleCeoResponse} />
       )}
 
       {phase === "working" && (
