@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { sessions, reports } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { DEFAULT_PROMPTS, fillPrompt, type PromptVars } from "@/lib/agentPrompts";
+import { TASK_TYPE_MAP, DEFAULT_TASK_TYPE } from "@/lib/taskTypes";
 
 export const maxDuration = 300;
 
@@ -206,9 +207,15 @@ function agentMaxTurns(configs: AgentConfig[], id: string): number | undefined {
   return configs.find((c) => c.agentId === id)?.maxTurns;
 }
 
-function buildPrompt(configs: AgentConfig[], id: string, vars: Record<string, string>): string {
+function buildPrompt(
+  configs: AgentConfig[],
+  id: string,
+  vars: Record<string, string>,
+  promptVariants: Record<string, string> = {},
+): string {
   const cfg = configs.find((c) => c.agentId === id);
-  const template = cfg?.basePrompt?.trim() || DEFAULT_PROMPTS[id] || "";
+  const variantKey = promptVariants[id];
+  const template = cfg?.basePrompt?.trim() || DEFAULT_PROMPTS[variantKey ?? id] || "";
   const base = fillPrompt(template, vars as Parameters<typeof fillPrompt>[1]);
   const instruction = cfg?.instruction?.trim() ?? "";
   return instruction ? `${base}\n\n[CEO 특별 지시: ${instruction}]` : base;
@@ -226,7 +233,9 @@ async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) 
   }
 }
 
-async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string) {
+async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research") {
+  const taskType = TASK_TYPE_MAP[taskTypeId] ?? DEFAULT_TASK_TYPE;
+  const { promptVariants } = taskType;
   // ── 0. 의도 확인 — 모호한 고유명사/지명/브랜드 체크 ────────────────────
   let topic = topicInput;
   try {
@@ -258,7 +267,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     try {
       let wikiStreamed = false;
       wikiContext = await runAgent(
-        buildPrompt(agentConfigs, "wiki", { topic }),
+        buildPrompt(agentConfigs, "wiki", { topic }, promptVariants),
         {
           allowedTools: ["Read", "Glob"],
           addDirs: [WIKI_DIR],
@@ -300,7 +309,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           topic,
           context: wiki.context,
           keywords: wiki.keywords.join(", "),
-        }),
+        }, promptVariants),
         {
           allowedTools: ["WebSearch"],
           maxTurns: agentMaxTurns(agentConfigs, "pocke") ?? 3,
@@ -352,7 +361,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           topic,
           facts: pocke.key_facts.join(" / "),
           ceo_notes: ceoNotes,
-        }),
+        }, promptVariants),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1 },
         (chunk) => { if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "ka", chunk: thinking }); },
@@ -402,7 +411,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           conclusion: ka.conclusion,
           facts: pocke.key_facts.slice(0, 4).join("; "),
           feedback: attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : "",
-        }),
+        }, promptVariants),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1 },
         (chunk) => { if (chunk.trim()) { overStreamed = true; send({ type: "agent_stream", agentId: "over", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "over", chunk: thinking }); },
@@ -430,7 +439,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       let factStreamed = false;
       const sourcesJson = JSON.stringify(pocke.sources.slice(0, 5));
       const factRaw = await runAgent(
-        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800), sources: sourcesJson }),
+        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800), sources: sourcesJson }, promptVariants),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
         (chunk) => { if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "fact", chunk: thinking }); },
@@ -496,7 +505,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
             buildPrompt(agentConfigs, "ping", {
               topic,
               conclusion: ka.conclusion.slice(0, 150),
-            }),
+            }, promptVariants),
             { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1 },
           );
           await streamChunked("ping", result, send);
@@ -519,7 +528,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           topic,
           conclusion: ka.conclusion.slice(0, 150),
           insights: ka.insights.map((i) => i.title).join(", "),
-        }) + `\nsources/ 요약 파일 생성, concepts/ 보강, index.md와 log.md 업데이트.`,
+        }, promptVariants) + `\nsources/ 요약 파일 생성, concepts/ 보강, index.md와 log.md 업데이트.`,
         {
           allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
           addDirs: [WIKI_DIR],
@@ -543,9 +552,10 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { topic?: string; agentConfigs?: AgentConfig[] };
+  const body = await request.json() as { topic?: string; taskTypeId?: string; agentConfigs?: AgentConfig[] };
   const topic = body.topic?.trim();
   if (!topic) return Response.json({ error: "topic required" }, { status: 400 });
+  const taskTypeId = body.taskTypeId ?? "research";
   const agentConfigs: AgentConfig[] = body.agentConfigs ?? [];
 
   const sessionId = crypto.randomUUID();
@@ -565,7 +575,7 @@ export async function POST(request: Request) {
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { /* closed */ }
       };
 
-      orchestrate(topic, agentConfigs, send, sessionId)
+      orchestrate(topic, agentConfigs, send, sessionId, taskTypeId)
         .then(async () => {
           await db.update(sessions)
             .set({ status: "done", completedAt: new Date() })

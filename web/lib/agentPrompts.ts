@@ -68,6 +68,50 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 \`\`\`json
 {"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}
 \`\`\``,
+
+  // ── 마케팅 분석 변형 ──────────────────────────────────────────────────
+  pocke_marketing: `포케 대리. 시장 조사 리서처.
+주제: "{topic}". 배경: {context}. 키워드: {keywords}.
+시장 규모·경쟁사·최신 트렌드·소비자 반응 중심으로 웹 검색 최대 3회. 각 소스 URL 필수 — 없으면 "검증불가".
+\`\`\`json
+{"sources": [{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}
+\`\`\``,
+
+  ka_marketing: `카 과장. 마케팅 분석가.
+주제: "{topic}". 팩트: {facts}.
+{ceo_notes}시장 기회·경쟁 우위·타겟 고객 관점에서 혼잣말 3~4문장 후 JSON:
+\`\`\`json
+{"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "마케팅 전략 방향 2문장", "data_quality": "high|medium|low"}
+\`\`\``,
+
+  over_marketing: `오버 사원. 마케팅 카피라이터.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}실행 가능한 마케팅 전략 리포트. ## 구조. 액션 아이템 포함. 600~800자.`,
+
+  // ── 기술 리서치 변형 ──────────────────────────────────────────────────
+  pocke_tech: `포케 대리. 기술 리서처.
+주제: "{topic}". 배경: {context}. 키워드: {keywords}.
+공식 문서·GitHub·기술 블로그 중심으로 웹 검색 최대 3회. 각 소스 URL 필수 — 없으면 "검증불가".
+\`\`\`json
+{"sources": [{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}
+\`\`\``,
+
+  ka_tech: `카 과장. 기술 분석가.
+주제: "{topic}". 팩트: {facts}.
+{ceo_notes}아키텍처 패턴·장단점·도입 고려사항 관점에서 혼잣말 3~4문장 후 JSON:
+\`\`\`json
+{"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "기술 채택 결론 2문장", "data_quality": "high|medium|low"}
+\`\`\``,
+
+  over_tech: `오버 사원. 기술 문서 작가.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}기술 분석 리포트. ## 구조. 장단점 비교 포함. 600~800자.`,
 };
 
 // 에이전트별 사용 가능한 변수 힌트

@@ -214,7 +214,7 @@ export default function Home() {
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: config.topic, agentConfigs: config.agentConfigs }),
+        body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs }),
         signal: abort.signal,
       });
 
