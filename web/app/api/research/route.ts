@@ -234,31 +234,60 @@ async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) 
 }
 
 async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research") {
-  const taskType = TASK_TYPE_MAP[taskTypeId] ?? DEFAULT_TASK_TYPE;
-  const { promptVariants } = taskType;
-  // ── 0. 의도 확인 — 모호한 고유명사/지명/브랜드 체크 ────────────────────
   let topic = topicInput;
-  try {
-    const intentRaw = await runAgent(
-      fillPrompt(DEFAULT_PROMPTS.intent, { topic }),
-      { noTools: true, maxTurns: 1 },
-    );
-    const intent = parseJSON<{ needs_clarification: boolean; questions: string[]; clarified_topic: string }>(
-      intentRaw,
-      { needs_clarification: false, questions: [], clarified_topic: topic },
-    );
-    if (intent.needs_clarification && intent.questions.length > 0) {
-      send({ type: "clarify_request", sessionId, questions: intent.questions });
-      const ceoAnswer = await waitForCEO(sessionId);
-      if (ceoAnswer.trim()) {
-        topic = `${topic} (CEO 보충: ${ceoAnswer})`;
-      } else {
-        topic = intent.clarified_topic || topic;
+  let promptVariants: Record<string, string> = TASK_TYPE_MAP[taskTypeId]?.promptVariants ?? {};
+
+  // ── 0. 플랜 차장 — 의도 파악 + 태스크 정의 + 팀 구성 ────────────────────
+  if (agentEnabled(agentConfigs, "plan")) {
+    send({ type: "agent_start", agentId: "plan", message: "요구사항 파악 중. 티켓 열게요." });
+    try {
+      let planStreamed = false;
+      const planRaw = await runAgent(
+        buildPrompt(agentConfigs, "plan", { topic }, {}),
+        { noTools: true, maxTurns: 1 },
+        (chunk) => { if (chunk.trim()) { planStreamed = true; send({ type: "agent_stream", agentId: "plan", chunk }); } },
+      );
+      if (!planStreamed && planRaw.trim()) await streamChunked("plan", planRaw, send);
+
+      const plan = parseJSON<{
+        task_type: string;
+        objective: string;
+        scope: string;
+        output_format: string;
+        needs_clarification: boolean;
+        clarify_questions: string[];
+        plan_note: string;
+      }>(planRaw, {
+        task_type: taskTypeId,
+        objective: topic,
+        scope: "",
+        output_format: "리포트",
+        needs_clarification: false,
+        clarify_questions: [],
+        plan_note: "",
+      });
+
+      // 플랜이 결정한 task_type으로 promptVariants 교체
+      promptVariants = TASK_TYPE_MAP[plan.task_type]?.promptVariants ?? promptVariants;
+
+      // topic을 플랜의 명확화된 objective로 보강
+      if (plan.objective && plan.objective !== topic) {
+        topic = `${topic} (목표: ${plan.objective}${plan.scope ? ` / 범위: ${plan.scope}` : ""})`;
       }
-    } else {
-      topic = intent.clarified_topic || topic;
+
+      // 모호한 경우 CEO에게 확인 요청
+      if (plan.needs_clarification && plan.clarify_questions.length > 0) {
+        send({ type: "clarify_request", sessionId, questions: plan.clarify_questions });
+        const ceoAnswer = await waitForCEO(sessionId);
+        if (ceoAnswer.trim()) topic += ` (CEO 보충: ${ceoAnswer})`;
+      }
+
+      send({ type: "agent_done", agentId: "plan", message: plan.plan_note || "기획 완료. 팀 투입할게요." });
+    } catch {
+      send({ type: "agent_done", agentId: "plan", message: "기획 완료." });
     }
-  } catch { /* 의도 분석 실패 시 원본 topic 유지 */ }
+    await delay(400);
+  }
 
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;

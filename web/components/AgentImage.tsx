@@ -24,6 +24,10 @@ function getImageSrc(defaultSrc: string, status: AgentStatus, expression: string
 
 export default function AgentImage({ defaultSrc, size, status, expression = null }: Props) {
   const [showIdle, setShowIdle] = useState(false);
+  const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set());
+
+  const resolvedSrc = (src: string) => failedSrcs.has(src) ? defaultSrc : src;
+  const handleError = (src: string) => setFailedSrcs((prev) => new Set([...prev, src]));
 
   // 실제로 화면에 보이는 src
   const [visibleSrc, setVisibleSrc] = useState(() => getImageSrc(defaultSrc, status, expression, false));
@@ -70,21 +74,23 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
     <div className="relative w-full h-full">
       {/* 아래 레이어: 이전 이미지 — 페이드 아웃 */}
       <Image
-        src={underSrc}
+        src={resolvedSrc(underSrc)}
         alt=""
         fill
         className="object-cover transition-opacity duration-500"
         style={{ opacity: fading ? 0 : 1 }}
         sizes={`${size}px`}
+        onError={() => handleError(underSrc)}
       />
       {/* 위 레이어: 새 이미지 — 페이드 인 */}
       <Image
-        src={visibleSrc}
+        src={resolvedSrc(visibleSrc)}
         alt=""
         fill
         className="object-cover transition-opacity duration-500 absolute inset-0"
         style={{ opacity: fading ? 1 : 0 }}
         sizes={`${size}px`}
+        onError={() => handleError(visibleSrc)}
       />
     </div>
   );

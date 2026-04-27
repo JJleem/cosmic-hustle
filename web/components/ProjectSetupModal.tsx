@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { AGENTS, AGENT_MAP, PIPELINE } from "@/lib/agents";
 import { AllAgentSettings } from "@/lib/agentSettings";
-import { TASK_TYPES, DEFAULT_TASK_TYPE } from "@/lib/taskTypes";
 import AgentImage from "./AgentImage";
 
 export type AgentConfig = {
@@ -28,6 +27,7 @@ type Props = {
 };
 
 const DEFAULT_ROLES: Record<string, string> = {
+  plan:  "의도 파악 + 태스크 정의 + 팀 구성",
   wiki:  "배경 지식 연결 + 위키 업데이트",
   pocke: "웹 리서치 + 정보 수집",
   ka:    "데이터 분석 + 인사이트 도출",
@@ -36,8 +36,8 @@ const DEFAULT_ROLES: Record<string, string> = {
   ping:  "아이디어 캡처",
 };
 
-// 파이프라인 순서대로 (ping은 마지막 스테이지, wiki 중복 제거)
-const ORDERED_AGENTS = ["wiki", "pocke", "ka", "over", "fact", "ping"];
+// 파이프라인 순서대로
+const ORDERED_AGENTS = ["plan", "wiki", "pocke", "ka", "over", "fact", "ping"];
 
 function initConfigs(defaultSettings?: AllAgentSettings): AgentConfig[] {
   return ORDERED_AGENTS.map((id) => ({
@@ -51,7 +51,6 @@ function initConfigs(defaultSettings?: AllAgentSettings): AgentConfig[] {
 
 export default function ProjectSetupModal({ onStart, onClose, defaultSettings }: Props) {
   const [topic, setTopic] = useState("");
-  const [taskTypeId, setTaskTypeId] = useState(DEFAULT_TASK_TYPE.id);
   const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs(defaultSettings));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -83,7 +82,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
   const handleStart = () => {
     const trimmed = topic.trim();
     if (!trimmed) { topicRef.current?.focus(); return; }
-    onStart({ topic: trimmed, taskTypeId, agentConfigs: configs });
+    onStart({ topic: trimmed, taskTypeId: "auto", agentConfigs: configs });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -167,42 +166,6 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-2" style={{ scrollbarWidth: "none" }}>
-
-          {/* 태스크 타입 선택 */}
-          <div className="mb-5">
-            <label className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold block mb-2">
-              태스크 타입
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {TASK_TYPES.map((t) => {
-                const selected = taskTypeId === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setTaskTypeId(t.id)}
-                    className="flex flex-col items-start gap-1.5 rounded-xl px-3 py-3 text-left transition-all"
-                    style={{
-                      background: selected ? `${t.color}10` : "#0d1222",
-                      border: `1px solid ${selected ? `${t.color}50` : "#1e2a40"}`,
-                      boxShadow: selected ? `0 0 16px ${t.color}15` : "none",
-                    }}
-                  >
-                    <span className="text-lg">{t.emoji}</span>
-                    <span
-                      className="text-[11px] font-bold"
-                      style={{ color: selected ? t.color : "#64748b" }}
-                    >
-                      {t.name}
-                    </span>
-                    <span className="text-[9px] leading-snug" style={{ color: selected ? `${t.color}80` : "#334155" }}>
-                      {t.description}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           {/* 주제 입력 */}
           <div className="mb-5">

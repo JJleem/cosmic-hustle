@@ -67,6 +67,28 @@ export const DEPT_MAP = Object.fromEntries(DEPARTMENTS.map((d) => [d.id, d]));
 
 export const AGENTS: AgentDef[] = [
   {
+    id: "plan",
+    name: "플랜",
+    title: "차장",
+    role: "프로덕트 매니저",
+    color: "#FCD34D",
+    glow: "rgba(252,211,77,0.5)",
+    image: "/characters/plan/default.png",
+    departmentId: "research",
+    responsibilities: ["CEO 의도 파악", "팀 구성 결정", "태스크 정의", "산출물 형식 설정"],
+    idleMessages: [
+      "티켓 정리 중.",
+      "요구사항 확인.",
+      "...",
+      "범위 재검토.",
+      "포스트잇 붙이는 중.",
+      "그래서 원하시는 게 정확히 뭐예요?",
+    ],
+    planet: "모든 것이 티켓으로 존재하는 행성. 밥도 티켓 끊어야 먹을 수 있음. 태어나는 순간 생애 티켓 발급. 티켓 없으면 존재 없음.",
+    personality: "말이 빠르고 정확함. 5분 안에 전체 그림 그림. CEO가 '그냥 알아서 해줘' 해도 요구사항 10개 뽑아냄. 모호한 말을 못 견딤.",
+    weakness: "기획하다가 실행 타이밍 놓침. 회의가 또 다른 회의를 낳음.",
+  },
+  {
     id: "wiki",
     name: "위키",
     title: "대리",
@@ -203,6 +225,7 @@ export const AGENTS: AgentDef[] = [
 export const AGENT_MAP = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
 
 export const PIPELINE: { ids: string[]; label: string }[] = [
+  { ids: ["plan"],        label: "기획" },
   { ids: ["wiki"],        label: "지식 확인" },
   { ids: ["pocke"],       label: "리서치" },
   { ids: ["ka"],          label: "분석" },
