@@ -11,9 +11,11 @@ import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import HistoryIdeaPanel from "@/components/dashboard/HistoryIdeaPanel";
 import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
+import AgentSettingsPage from "@/components/AgentSettingsPage";
 import { AGENTS, PIPELINE, AgentStatus } from "@/lib/agents";
+import { AllAgentSettings, loadAgentSettings } from "@/lib/agentSettings";
 
-type PageTab = "dashboard" | "office";
+type PageTab = "dashboard" | "office" | "settings";
 
 type AgentStates = Record<string, AgentStatus>;
 
@@ -32,6 +34,11 @@ const uid = () => crypto.randomUUID();
 
 export default function Home() {
   const [tab, setTab] = useState<PageTab>("dashboard");
+  const [agentSettings, setAgentSettings] = useState<AllAgentSettings>({});
+
+  useEffect(() => {
+    setAgentSettings(loadAgentSettings());
+  }, []);
   const [agentStatus, setAgentStatus] = useState<AgentStates>(initStatus());
   const [agentExpression, setAgentExpression] = useState<Record<string, string | null>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
@@ -249,7 +256,7 @@ export default function Home() {
 
         {/* 탭 */}
         <div className="flex items-center gap-1 ml-6 bg-slate-800 rounded-full p-1 border border-slate-700">
-          {(["dashboard", "office"] as PageTab[]).map((t) => (
+          {(["dashboard", "office", "settings"] as PageTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -260,7 +267,7 @@ export default function Home() {
                   : { color: "#94a3b8" }
               }
             >
-              {t === "dashboard" ? "대시보드" : "사무실"}
+              {t === "dashboard" ? "대시보드" : t === "office" ? "사무실" : "설정"}
             </button>
           ))}
         </div>
@@ -324,6 +331,13 @@ export default function Home() {
             lastTopic={topic}
           />
         )}
+
+        {tab === "settings" && (
+          <AgentSettingsPage
+            settings={agentSettings}
+            onChange={setAgentSettings}
+          />
+        )}
       </div>
 
       {/* 하단 에이전트 바 — 사무실에선 말풍선 숨김 */}
@@ -339,6 +353,7 @@ export default function Home() {
         <ProjectSetupModal
           onStart={runResearch}
           onClose={() => setShowSetup(false)}
+          defaultSettings={agentSettings}
         />
       )}
 

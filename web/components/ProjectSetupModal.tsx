@@ -3,11 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { AGENTS, AGENT_MAP, PIPELINE } from "@/lib/agents";
+import { AllAgentSettings } from "@/lib/agentSettings";
 import AgentImage from "./AgentImage";
 
 export type AgentConfig = {
   agentId: string;
   enabled: boolean;
+  basePrompt?: string;
   instruction: string;
   maxTurns?: number;
 };
@@ -20,6 +22,7 @@ export type ProjectConfig = {
 type Props = {
   onStart: (config: ProjectConfig) => void;
   onClose: () => void;
+  defaultSettings?: AllAgentSettings;
 };
 
 const DEFAULT_ROLES: Record<string, string> = {
@@ -34,13 +37,19 @@ const DEFAULT_ROLES: Record<string, string> = {
 // 파이프라인 순서대로 (ping은 마지막 스테이지, wiki 중복 제거)
 const ORDERED_AGENTS = ["wiki", "pocke", "ka", "over", "fact", "ping"];
 
-function initConfigs(): AgentConfig[] {
-  return ORDERED_AGENTS.map((id) => ({ agentId: id, enabled: true, instruction: "" }));
+function initConfigs(defaultSettings?: AllAgentSettings): AgentConfig[] {
+  return ORDERED_AGENTS.map((id) => ({
+    agentId: id,
+    enabled: true,
+    basePrompt: defaultSettings?.[id]?.basePrompt,
+    instruction: defaultSettings?.[id]?.instruction ?? "",
+    maxTurns: defaultSettings?.[id]?.maxTurns,
+  }));
 }
 
-export default function ProjectSetupModal({ onStart, onClose }: Props) {
+export default function ProjectSetupModal({ onStart, onClose, defaultSettings }: Props) {
   const [topic, setTopic] = useState("");
-  const [configs, setConfigs] = useState<AgentConfig[]>(initConfigs);
+  const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs(defaultSettings));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);

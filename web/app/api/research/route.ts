@@ -3,6 +3,7 @@ import path from "path";
 import { db } from "@/db";
 import { sessions, reports } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { DEFAULT_PROMPTS, fillPrompt } from "@/lib/agentPrompts";
 
 export const maxDuration = 300;
 
@@ -39,7 +40,6 @@ export async function runAgent(
     const args = [
       "-p",
       "--output-format", "stream-json",
-      "--verbose",
       "--include-partial-messages",
       "--dangerously-skip-permissions",
     ];
@@ -128,7 +128,7 @@ export function parseJSON<T>(text: string, fallback: T): T {
   }
 }
 
-type AgentConfig = { agentId: string; enabled: boolean; instruction: string; maxTurns?: number };
+type AgentConfig = { agentId: string; enabled: boolean; basePrompt?: string; instruction: string; maxTurns?: number };
 
 function agentEnabled(configs: AgentConfig[], id: string): boolean {
   const cfg = configs.find((c) => c.agentId === id);
@@ -143,9 +143,12 @@ function agentMaxTurns(configs: AgentConfig[], id: string): number | undefined {
   return configs.find((c) => c.agentId === id)?.maxTurns;
 }
 
-function withInstruction(basePrompt: string, instruction: string): string {
-  if (!instruction) return basePrompt;
-  return basePrompt + `\n\n[CEO 특별 지시: ${instruction}]`;
+function buildPrompt(configs: AgentConfig[], id: string, vars: Record<string, string>): string {
+  const cfg = configs.find((c) => c.agentId === id);
+  const template = cfg?.basePrompt?.trim() || DEFAULT_PROMPTS[id] || "";
+  const base = fillPrompt(template, vars as Parameters<typeof fillPrompt>[1]);
+  const instruction = cfg?.instruction?.trim() ?? "";
+  return instruction ? `${base}\n\n[CEO 특별 지시: ${instruction}]` : base;
 }
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -168,21 +171,12 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     try {
       let wikiStreamed = false;
       wikiContext = await runAgent(
-        withInstruction(
-          `당신은 위키 대리입니다. 조용하고 꼼꼼한 사서예요.\n` +
-          `주제: "${topic}"\n\n` +
-          `먼저 wiki/index.md를 읽어서 관련 페이지가 있는지 확인하세요.\n` +
-          `관련 개념 페이지(wiki/concepts/)가 있으면 읽어서 내용을 파악하세요.\n` +
-          `없으면 일반 배경 지식을 사용하세요.\n\n` +
-          `응답 형식: 파일을 확인한 결과를 한 줄로 요약한 다음, 반드시 아래 JSON 코드블록으로 마무리하세요:\n` +
-          `\`\`\`json\n{"context": "배경 요약 (2~3문장)", "keywords": ["키워드1", "키워드2", "키워드3"], "wiki_pages_found": ["페이지명"]}\n\`\`\``,
-          agentInstruction(agentConfigs, "wiki"),
-        ),
+        buildPrompt(agentConfigs, "wiki", { topic }),
         {
           allowedTools: ["Read", "Glob"],
           addDirs: [WIKI_DIR],
           cwd: WIKI_DIR,
-          maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 3,
+          maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 2,
         },
         (chunk) => {
           if (chunk.trim()) { wikiStreamed = true; send({ type: "agent_stream", agentId: "wiki", chunk }); }
@@ -215,14 +209,11 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     try {
       let pockeStreamed = false;
       pockeOutput = await runAgent(
-        withInstruction(
-          `당신은 포케 대리입니다. 열정 넘치는 햄스터형 리서처예요.\n` +
-          `주제: "${topic}". 배경: ${wiki.context}. 키워드: ${wiki.keywords.join(", ")}.\n` +
-          `웹 검색으로 최신 정보, 통계, 사례를 수집하세요. 검색은 최대 3회.\n` +
-          `수집한 핵심 팩트 5개를 JSON 코드블록으로 정리하세요:\n` +
-          `\`\`\`json\n{"sources": [{"title": "...", "summary": "...", "url": "..."}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"]}\n\`\`\``,
-          agentInstruction(agentConfigs, "pocke"),
-        ),
+        buildPrompt(agentConfigs, "pocke", {
+          topic,
+          context: wiki.context,
+          keywords: wiki.keywords.join(", "),
+        }),
         {
           allowedTools: ["WebSearch"],
           maxTurns: agentMaxTurns(agentConfigs, "pocke") ?? 3,
@@ -256,14 +247,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     try {
       // noTools 에이전트는 onProgress 없이 실행 — 버퍼링 무관하게 항상 streamChunked로 표시
       kaOutput = await runAgent(
-        withInstruction(
-          `당신은 카(유레카) 과장입니다. 다크서클 가득한 분석가예요.\n` +
-          `주제: "${topic}". 팩트: ${pocke.key_facts.join(" / ")}.\n\n` +
-          `먼저 발견한 패턴과 인사이트를 자연스럽게 혼잣말로 설명하세요 (3~4문장, 한국어).\n` +
-          `그 다음 아래 JSON 코드블록으로 결론을 정리하세요:\n` +
-          `\`\`\`json\n{"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "핵심 결론 2문장", "data_quality": "high|medium|low"}\n\`\`\``,
-          agentInstruction(agentConfigs, "ka"),
-        ),
+        buildPrompt(agentConfigs, "ka", {
+          topic,
+          facts: pocke.key_facts.join(" / "),
+        }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1 },
       );
       await streamChunked("ka", kaOutput, send);
@@ -304,16 +291,13 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
 
     try {
       overReport = await runAgent(
-        withInstruction(
-          `당신은 오버 사원입니다. 베레모를 쓴 감성 작가예요.\n` +
-          `주제: "${topic}".\n` +
-          `인사이트: ${ka.insights.map((i) => `${i.title}: ${i.description}`).join("; ")}.\n` +
-          `결론: ${ka.conclusion}.\n` +
-          `팩트: ${pocke.key_facts.slice(0, 5).join("; ")}.\n` +
-          (attempt > 1 && factFeedback ? `피드백 반영: ${factFeedback}\n` : "") +
-          `한국어 마크다운 리서치 리포트를 작성하세요. ## 제목 구조 사용. 600~900자.`,
-          agentInstruction(agentConfigs, "over"),
-        ),
+        buildPrompt(agentConfigs, "over", {
+          topic,
+          insights: ka.insights.map((i) => `${i.title}: ${i.description}`).join("; "),
+          conclusion: ka.conclusion,
+          facts: pocke.key_facts.slice(0, 4).join("; "),
+          feedback: attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : "",
+        }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1 },
       );
       await streamChunked("over", overReport, send);
@@ -337,14 +321,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
       const factRaw = await runAgent(
-        withInstruction(
-          `당신은 팩트 부장입니다. 무표정, 빨간펜, 감정 제거 행성 출신.\n` +
-          `리포트를 검토하고, 발견한 문제점을 한 줄씩 지적하세요 (없으면 "이상 없음").\n` +
-          `리포트:\n${overReport.slice(0, 1500)}\n\n` +
-          `검토 후 아래 JSON 코드블록으로 결론:\n` +
-          `\`\`\`json\n{"passed": true/false, "issues": ["문제1", "문제2"], "feedback": "수정 지시사항"}\n\`\`\``,
-          agentInstruction(agentConfigs, "fact"),
-        ),
+        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800) }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
       );
       await streamChunked("fact", factRaw, send);
@@ -405,13 +382,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
       (async () => {
         try {
           const result = await runAgent(
-            withInstruction(
-              `당신은 핑 인턴입니다. 번개 후디, 안테나에서 스파크.\n` +
-              `주제: "${topic}". 결론: ${ka.conclusion}.\n\n` +
-              `흥분하며 파생 아이디어를 2~3문장으로 외치고, 아래 JSON 코드블록으로 정리:\n` +
-              `\`\`\`json\n{"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}\n\`\`\``,
-              agentInstruction(agentConfigs, "ping"),
-            ),
+            buildPrompt(agentConfigs, "ping", {
+              topic,
+              conclusion: ka.conclusion.slice(0, 150),
+            }),
             { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1 },
           );
           await streamChunked("ping", result, send);
@@ -430,19 +404,16 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     send({ type: "agent_start", agentId: "wiki", message: "리서치 기록 업데이트 중..." });
     finalTasks.push(
       runAgent(
-        withInstruction(
-          `당신은 위키 대리입니다. 조용하고 꼼꼼한 사서예요.\n` +
-          `"${topic}" 리서치 완료. 결론: ${ka.conclusion.slice(0, 200)}.\n` +
-          `인사이트: ${ka.insights.map((i) => i.title).join(", ")}.\n\n` +
-          `wiki-llm CLAUDE.md의 Ingest 워크플로우에 따라 이 결과를 저장하세요.\n` +
-          `sources/ 요약 파일 생성, concepts/ 보강, index.md와 log.md 업데이트.`,
-          agentInstruction(agentConfigs, "wiki"),
-        ),
+        buildPrompt(agentConfigs, "wiki", {
+          topic,
+          conclusion: ka.conclusion.slice(0, 150),
+          insights: ka.insights.map((i) => i.title).join(", "),
+        }) + `\nsources/ 요약 파일 생성, concepts/ 보강, index.md와 log.md 업데이트.`,
         {
           allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
           addDirs: [WIKI_DIR],
           cwd: WIKI_DIR,
-          maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 5,
+          maxTurns: agentMaxTurns(agentConfigs, "wiki") ?? 4,
         },
         (chunk) => {
           if (chunk.trim()) send({ type: "agent_stream", agentId: "wiki", chunk });
