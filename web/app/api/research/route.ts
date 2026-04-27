@@ -254,7 +254,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   if (agentEnabled(agentConfigs, "ka")) {
     send({ type: "agent_start", agentId: "ka", message: "패턴 분석 시작. 데이터 하나만 더..." });
     try {
-      let kaStreamed = false;
+      // noTools 에이전트는 onProgress 없이 실행 — 버퍼링 무관하게 항상 streamChunked로 표시
       kaOutput = await runAgent(
         withInstruction(
           `당신은 카(유레카) 과장입니다. 다크서클 가득한 분석가예요.\n` +
@@ -264,15 +264,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `\`\`\`json\n{"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "핵심 결론 2문장", "data_quality": "high|medium|low"}\n\`\`\``,
           agentInstruction(agentConfigs, "ka"),
         ),
-        {
-          noTools: true,
-          maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1,
-        },
-        (chunk) => {
-          if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); }
-        },
+        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1 },
       );
-      if (!kaStreamed && kaOutput.trim()) await streamChunked("ka", kaOutput, send);
+      await streamChunked("ka", kaOutput, send);
+      await delay(1200); // 애니메이션 완료 후 읽기 시간
       send({ type: "agent_done", agentId: "ka", message: "찾았다!!! 핵심 인사이트 잡음. 오버한테 넘길게." });
     } catch {
       send({ type: "agent_done", agentId: "ka", message: "분석 완료. 오버한테 넘길게." });
@@ -308,7 +303,6 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     if (attempt === 2) send({ type: "agent_expression", agentId: "over", expression: null });
 
     try {
-      let overStreamed = false;
       overReport = await runAgent(
         withInstruction(
           `당신은 오버 사원입니다. 베레모를 쓴 감성 작가예요.\n` +
@@ -320,15 +314,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `한국어 마크다운 리서치 리포트를 작성하세요. ## 제목 구조 사용. 600~900자.`,
           agentInstruction(agentConfigs, "over"),
         ),
-        {
-          noTools: true,
-          maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1,
-        },
-        (chunk) => {
-          if (chunk.trim()) { overStreamed = true; send({ type: "agent_stream", agentId: "over", chunk }); }
-        },
+        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1 },
       );
-      if (!overStreamed && overReport.trim()) await streamChunked("over", overReport, send);
+      await streamChunked("over", overReport, send);
+      await delay(1800); // 리포트는 길어서 더 긴 읽기 시간
       send({ type: "agent_done", agentId: "over", message: "리포트 완성. 걸작이에요. 팩트 부장님께." });
     } catch {
       overReport = `# ${topic} 리서치 리포트\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
@@ -347,7 +336,6 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
 
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
-      let factStreamed = false;
       const factRaw = await runAgent(
         withInstruction(
           `당신은 팩트 부장입니다. 무표정, 빨간펜, 감정 제거 행성 출신.\n` +
@@ -357,15 +345,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           `\`\`\`json\n{"passed": true/false, "issues": ["문제1", "문제2"], "feedback": "수정 지시사항"}\n\`\`\``,
           agentInstruction(agentConfigs, "fact"),
         ),
-        {
-          noTools: true,
-          maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1,
-        },
-        (chunk) => {
-          if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); }
-        },
+        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
       );
-      if (!factStreamed && factRaw.trim()) await streamChunked("fact", factRaw, send);
+      await streamChunked("fact", factRaw, send);
+      await delay(800);
 
       const fact = parseJSON<{ passed: boolean; issues: string[]; feedback: string }>(
         factRaw, { passed: true, issues: [], feedback: "" },
@@ -421,7 +404,6 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     finalTasks.push(
       (async () => {
         try {
-          let pingStreamed = false;
           const result = await runAgent(
             withInstruction(
               `당신은 핑 인턴입니다. 번개 후디, 안테나에서 스파크.\n` +
@@ -431,11 +413,9 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
               agentInstruction(agentConfigs, "ping"),
             ),
             { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1 },
-            (chunk) => {
-              if (chunk.trim()) { pingStreamed = true; send({ type: "agent_stream", agentId: "ping", chunk }); }
-            },
           );
-          if (!pingStreamed && result.trim()) await streamChunked("ping", result, send);
+          await streamChunked("ping", result, send);
+          await delay(600);
           const parsed = parseJSON<{ ideas: Array<{ title: string; spark: string }> }>(result, { ideas: [] });
           if (parsed.ideas?.length) send({ type: "ping_ideas", ideas: parsed.ideas });
           send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });

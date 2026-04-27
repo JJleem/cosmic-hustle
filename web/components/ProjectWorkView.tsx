@@ -73,8 +73,8 @@ export default function ProjectWorkView({
     const tick = () => {
       const s = typeStateRef.current;
       if (s.pos < s.target.length) {
-        // 한 프레임에 8자씩 → 약 480자/초 (60fps 기준), GPT 스타일
-        const next = Math.min(s.pos + 8, s.target.length);
+        // 한 프레임에 3자씩 → 약 180자/초 (60fps 기준) — 읽을 수 있는 속도
+        const next = Math.min(s.pos + 3, s.target.length);
         s.pos = next;
         setDisplayedLog(s.target.slice(0, next));
         rafRef.current = requestAnimationFrame(tick);
@@ -298,21 +298,30 @@ export default function ProjectWorkView({
             {displayedLog ? (
               <pre className="whitespace-pre-wrap break-words">{displayedLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
             ) : (
-              <div className="flex items-center gap-2 text-slate-700 mt-4">
-                <div className="flex gap-1">
-                  {[0, 1, 2].map((i) => (
-                    <div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full animate-bounce"
-                      style={{
-                        background: displayAgent.color,
-                        opacity: 0.4,
-                        animationDelay: `${i * 150}ms`,
-                      }}
-                    />
-                  ))}
+              <div className="flex flex-col gap-3 mt-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full animate-bounce"
+                        style={{
+                          background: displayAgent.color,
+                          opacity: 0.5,
+                          animationDelay: `${i * 200}ms`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs" style={{ color: `${displayAgent.color}80` }}>
+                    {displayAgent.name} 처리 중...
+                  </span>
                 </div>
-                <span>작업 준비 중...</span>
+                {msg && (
+                  <p className="text-xs leading-relaxed italic" style={{ color: `${displayAgent.color}55` }}>
+                    &ldquo;{msg}&rdquo;
+                  </p>
+                )}
               </div>
             )}
           </div>
