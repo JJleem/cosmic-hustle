@@ -1,11 +1,39 @@
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import path from "path";
+import fs from "fs";
 import { db } from "@/db";
 import { sessions, reports } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { DEFAULT_PROMPTS, fillPrompt } from "@/lib/agentPrompts";
 
 export const maxDuration = 300;
+
+function findClaude(): string {
+  const isWindows = process.platform === "win32";
+  const localBin = path.join(process.cwd(), "node_modules", ".bin", isWindows ? "claude.exe" : "claude");
+  const pkgBin = path.join(
+    process.cwd(), "node_modules", "@anthropic-ai", "claude-code", "bin",
+    isWindows ? "claude.exe" : "claude",
+  );
+  const platformPkg = path.join(
+    process.cwd(), "node_modules", "@anthropic-ai",
+    `claude-code-${process.platform}-${process.arch}`,
+    isWindows ? "claude.exe" : "claude",
+  );
+  for (const p of [pkgBin, platformPkg, localBin]) {
+    if (fs.existsSync(p)) return p;
+  }
+  try {
+    const lines = execSync(isWindows ? "where claude" : "which claude", { encoding: "utf8" })
+      .trim().split("\n");
+    const exe = isWindows ? lines.find((l) => l.trim().toLowerCase().endsWith(".exe")) : undefined;
+    return (exe ?? lines[0]).trim();
+  } catch {
+    return isWindows ? "claude.exe" : "claude";
+  }
+}
+const CLAUDE_BIN = findClaude();
+console.log("[findClaude]", CLAUDE_BIN, "| exists:", fs.existsSync(CLAUDE_BIN));
 
 export const WIKI_DIR = path.resolve(
   process.cwd(),
@@ -39,6 +67,7 @@ export async function runAgent(
   return new Promise((resolve, reject) => {
     const args = [
       "-p",
+      "--verbose",
       "--output-format", "stream-json",
       "--include-partial-messages",
       "--dangerously-skip-permissions",
@@ -52,12 +81,12 @@ export async function runAgent(
       args.push("--allowedTools", options.allowedTools.join(","));
     }
     for (const dir of options.addDirs ?? []) {
-      args.push("--add-dir", dir);
+      if (fs.existsSync(dir)) args.push("--add-dir", dir);
     }
 
-    const proc = spawn("/usr/local/bin/claude", args, {
+    const proc = spawn(CLAUDE_BIN, args, {
       cwd: options.cwd ?? process.cwd(),
-      env: { ...process.env, PATH: `/usr/local/bin:${process.env.PATH ?? ""}` },
+      env: process.env,
     });
 
     proc.stdin.write(prompt);
@@ -74,14 +103,20 @@ export async function runAgent(
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
-          const event = JSON.parse(line);
+          const event = JSON.parse(line.trim());
           if (event.type === "result" && event.subtype === "success") {
             finalResult = event.result ?? "";
+          } else if (event.type === "stream_event") {
+            const se = event.event;
+            if (se?.type === "content_block_delta") {
+              const delta = se.delta;
+              if (delta?.type === "text_delta" && delta.text && onProgress) {
+                onProgress(delta.text as string);
+              }
+            }
           } else if (event.type === "assistant" && event.message?.content) {
             for (const block of event.message.content) {
               if (block.type === "text" && block.text) {
-                const newText = (block.text as string).slice(lastText.length);
-                if (newText && onProgress) onProgress(newText);
                 lastText = block.text as string;
               } else if (block.type === "tool_use" && onProgress) {
                 const toolLine = formatToolUse(block.name as string, block.input as Record<string, unknown>);
@@ -95,6 +130,11 @@ export async function runAgent(
 
     proc.stderr.on("data", (chunk: Buffer) => {
       console.error("[claude stderr]", chunk.toString());
+    });
+
+    proc.on("error", (err) => {
+      console.error("[claude spawn error]", err.message, "| bin:", CLAUDE_BIN);
+      reject(err);
     });
 
     proc.on("close", (code) => {
@@ -245,16 +285,17 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
   if (agentEnabled(agentConfigs, "ka")) {
     send({ type: "agent_start", agentId: "ka", message: "패턴 분석 시작. 데이터 하나만 더..." });
     try {
-      // noTools 에이전트는 onProgress 없이 실행 — 버퍼링 무관하게 항상 streamChunked로 표시
+      let kaStreamed = false;
       kaOutput = await runAgent(
         buildPrompt(agentConfigs, "ka", {
           topic,
           facts: pocke.key_facts.join(" / "),
         }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1 },
+        (chunk) => { if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); } },
       );
-      await streamChunked("ka", kaOutput, send);
-      await delay(1200); // 애니메이션 완료 후 읽기 시간
+      if (!kaStreamed && kaOutput.trim()) await streamChunked("ka", kaOutput, send);
+      await delay(1200);
       send({ type: "agent_done", agentId: "ka", message: "찾았다!!! 핵심 인사이트 잡음. 오버한테 넘길게." });
     } catch {
       send({ type: "agent_done", agentId: "ka", message: "분석 완료. 오버한테 넘길게." });
@@ -290,6 +331,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
     if (attempt === 2) send({ type: "agent_expression", agentId: "over", expression: null });
 
     try {
+      let overStreamed = false;
       overReport = await runAgent(
         buildPrompt(agentConfigs, "over", {
           topic,
@@ -299,9 +341,10 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
           feedback: attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : "",
         }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1 },
+        (chunk) => { if (chunk.trim()) { overStreamed = true; send({ type: "agent_stream", agentId: "over", chunk }); } },
       );
-      await streamChunked("over", overReport, send);
-      await delay(1800); // 리포트는 길어서 더 긴 읽기 시간
+      if (!overStreamed && overReport.trim()) await streamChunked("over", overReport, send);
+      await delay(1800);
       send({ type: "agent_done", agentId: "over", message: "리포트 완성. 걸작이에요. 팩트 부장님께." });
     } catch {
       overReport = `# ${topic} 리서치 리포트\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
@@ -320,11 +363,13 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
 
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
+      let factStreamed = false;
       const factRaw = await runAgent(
         buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800) }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
+        (chunk) => { if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); } },
       );
-      await streamChunked("fact", factRaw, send);
+      if (!factStreamed && factRaw.trim()) await streamChunked("fact", factRaw, send);
       await delay(800);
 
       const fact = parseJSON<{ passed: boolean; issues: string[]; feedback: string }>(

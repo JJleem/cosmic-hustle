@@ -1,7 +1,9 @@
-web/node_modules
-web/.next
-web/.env*
-web/next-env.d.ts
-web/*.tsbuildinfo
-web/cosmic-hustle.db
-.DS_Store
+node_modules/
+.next/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+.env*.local
+drizzle/
