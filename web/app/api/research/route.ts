@@ -235,6 +235,7 @@ async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) 
 
 async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research") {
   let topic = topicInput;
+  let resolvedTaskType = taskTypeId;
   let promptVariants: Record<string, string> = TASK_TYPE_MAP[taskTypeId]?.promptVariants ?? {};
 
   // ── 0. 플랜 차장 — 의도 파악 + 태스크 정의 + 팀 구성 ────────────────────
@@ -267,8 +268,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         plan_note: "",
       });
 
-      // 플랜이 결정한 task_type으로 promptVariants 교체
-      promptVariants = TASK_TYPE_MAP[plan.task_type]?.promptVariants ?? promptVariants;
+      // 플랜이 결정한 task_type으로 promptVariants + resolvedTaskType 교체
+      resolvedTaskType = plan.task_type ?? resolvedTaskType;
+      promptVariants = TASK_TYPE_MAP[resolvedTaskType]?.promptVariants ?? promptVariants;
 
       // topic을 플랜의 명확화된 objective로 보강
       if (plan.objective && plan.objective !== topic) {
@@ -407,50 +409,79 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     kaOutput, { insights: [], conclusion: "", data_quality: "medium" },
   );
 
-  // 카→오버 커뮤니케이션
-  if (agentEnabled(agentConfigs, "over")) {
-    await delay(400);
-    send({ type: "agent_message", agentId: "over", message: "카 과장님 인사이트 받았어요... 이거 좋은 이야기가 될 것 같은데요?" });
-    await delay(600);
-  }
+  const isDevTask = resolvedTaskType === "dev";
+  const writerVars = {
+    topic,
+    insights: ka.insights.map((i) => `${i.title}: ${i.description}`).join("; "),
+    conclusion: ka.conclusion,
+    facts: pocke.key_facts.slice(0, 4).join("; "),
+  };
 
-  // ── 4. Over + 5. Fact: 작성 → 검토 루프 ────────────────────────────
+  // ── 4. 런 or 오버 + 5. Fact: 구현/작성 → 검토 루프 ─────────────────
   let overReport = "";
   let factPassed = false;
   let attempt = 0;
   let factFeedback = "";
 
-  if (!agentEnabled(agentConfigs, "over")) {
-    overReport = `# ${topic} 리서치 리포트\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
+  // 쓰지 않는 에이전트 스킵 처리
+  if (isDevTask && agentEnabled(agentConfigs, "over")) {
+    send({ type: "agent_done", agentId: "over", message: "이번 태스크는 런 담당." });
+  }
+  if (!isDevTask && agentEnabled(agentConfigs, "run")) {
+    send({ type: "agent_done", agentId: "run", message: "이번 태스크는 오버 담당." });
+  }
+
+  if (isDevTask) {
+    // 카→런 커뮤니케이션
+    if (agentEnabled(agentConfigs, "run")) {
+      await delay(400);
+      send({ type: "agent_message", agentId: "run", message: "분석 받음. 바로 짤게요." });
+      await delay(400);
+    }
+  } else {
+    // 카→오버 커뮤니케이션
+    if (agentEnabled(agentConfigs, "over")) {
+      await delay(400);
+      send({ type: "agent_message", agentId: "over", message: "카 과장님 인사이트 받았어요... 이거 좋은 이야기가 될 것 같은데요?" });
+      await delay(600);
+    }
+  }
+
+  const writerAgentId = isDevTask ? "run" : "over";
+  const writerEnabled = agentEnabled(agentConfigs, writerAgentId);
+
+  if (!writerEnabled) {
+    overReport = `# ${topic}\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
     factPassed = true;
   }
 
   while (!factPassed && attempt < 2) {
     attempt++;
 
-    send({ type: "agent_start", agentId: "over", message: attempt === 1 ? "이 숫자 뒤에 얼마나 많은 이야기가..." : "...알겠습니다. 수정할게요." });
-    if (attempt === 2) send({ type: "agent_expression", agentId: "over", expression: null });
+    const writerStartMsg = isDevTask
+      ? (attempt === 1 ? "코드 작성 시작." : "...수정할게요.")
+      : (attempt === 1 ? "이 숫자 뒤에 얼마나 많은 이야기가..." : "...알겠습니다. 수정할게요.");
+
+    send({ type: "agent_start", agentId: writerAgentId, message: writerStartMsg });
+    if (attempt === 2) send({ type: "agent_expression", agentId: writerAgentId, expression: null });
 
     try {
-      let overStreamed = false;
+      let writerStreamed = false;
       overReport = await runAgent(
-        buildPrompt(agentConfigs, "over", {
-          topic,
-          insights: ka.insights.map((i) => `${i.title}: ${i.description}`).join("; "),
-          conclusion: ka.conclusion,
-          facts: pocke.key_facts.slice(0, 4).join("; "),
+        buildPrompt(agentConfigs, writerAgentId, {
+          ...writerVars,
           feedback: attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : "",
         }, promptVariants),
-        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1 },
-        (chunk) => { if (chunk.trim()) { overStreamed = true; send({ type: "agent_stream", agentId: "over", chunk }); } },
-        (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "over", chunk: thinking }); },
+        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, writerAgentId) ?? 1 },
+        (chunk) => { if (chunk.trim()) { writerStreamed = true; send({ type: "agent_stream", agentId: writerAgentId, chunk }); } },
+        (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: writerAgentId, chunk: thinking }); },
       );
-      if (!overStreamed && overReport.trim()) await streamChunked("over", overReport, send);
+      if (!writerStreamed && overReport.trim()) await streamChunked(writerAgentId, overReport, send);
       await delay(1800);
-      send({ type: "agent_done", agentId: "over", message: "리포트 완성. 걸작이에요. 팩트 부장님께." });
+      send({ type: "agent_done", agentId: writerAgentId, message: isDevTask ? "구현 완료. 팩트 부장님 리뷰 받을게요." : "리포트 완성. 걸작이에요. 팩트 부장님께." });
     } catch {
-      overReport = `# ${topic} 리서치 리포트\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
-      send({ type: "agent_done", agentId: "over", message: "초안 완성. 팩트 부장님께." });
+      overReport = `# ${topic}\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
+      send({ type: "agent_done", agentId: writerAgentId, message: "초안 완성. 팩트 부장님께." });
     }
 
     if (!agentEnabled(agentConfigs, "fact")) {
@@ -486,16 +517,16 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       if (!factPassed) {
         send({ type: "agent_message", agentId: "fact", message: `오류 ${fact.issues.length}건. 수정 후 재검토.` });
         send({ type: "agent_expression", agentId: "fact", expression: "err" });
-        send({ type: "agent_expression", agentId: "over", expression: "sad" });
+        send({ type: "agent_expression", agentId: writerAgentId, expression: "sad" });
         await delay(400);
-        send({ type: "agent_message", agentId: "over", message: "...다시요? (상처받음)" });
+        send({ type: "agent_message", agentId: writerAgentId, message: isDevTask ? "...다시 짤게요." : "...다시요? (상처받음)" });
         await delay(800);
         send({ type: "agent_expression", agentId: "fact", expression: null });
       } else {
         send({ type: "agent_expression", agentId: "fact", expression: null });
         send({ type: "agent_done", agentId: "fact", message: "통과." });
         await delay(300);
-        send({ type: "agent_done", agentId: "over", message: "통과라고 했다... 역시 걸작." });
+        send({ type: "agent_done", agentId: writerAgentId, message: isDevTask ? "통과. 배포 가능." : "통과라고 했다... 역시 걸작." });
       }
     } catch {
       factPassed = true;
@@ -506,7 +537,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   if (!factPassed) {
     send({ type: "agent_expression", agentId: "fact", expression: null });
     send({ type: "agent_done", agentId: "fact", message: "통과 처리." });
-    send({ type: "agent_done", agentId: "over", message: "...감사합니다." });
+    send({ type: "agent_done", agentId: writerAgentId, message: isDevTask ? "...배포합니다." : "...감사합니다." });
   }
 
   const reportId = crypto.randomUUID();

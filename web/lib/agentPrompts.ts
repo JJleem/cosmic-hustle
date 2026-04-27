@@ -129,6 +129,26 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 {"insights": [{"title": "인사이트 제목", "description": "설명"}], "conclusion": "기술 채택 결론 2문장", "data_quality": "high|medium|low"}
 \`\`\``,
 
+  // ── 개발 태스크 ──────────────────────────────────────────────────────
+  run: `런 사원. 개발자.
+주제: "{topic}".
+분석: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}분석을 바탕으로 구현 방향 작성. 코드 예시 포함 (마크다운 코드블록). 주요 결정사항과 트레이드오프 명시. 600~800자.`,
+
+  fact_dev: `팩트 부장. 코드 리뷰어.
+코드/구현:
+{report}
+
+참고 소스:
+{sources}
+
+체크: ① 보안 취약점 ② 로직 오류 ③ 성능 문제 ④ 미구현 항목.
+\`\`\`json
+{"passed": true/false, "issues": ["문제1"], "feedback": "수정 지시사항", "unverified_claims": []}
+\`\`\``,
+
   over_tech: `오버 사원. 기술 문서 작가.
 주제: "{topic}".
 인사이트: {insights}.

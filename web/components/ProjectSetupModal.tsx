@@ -31,13 +31,14 @@ const DEFAULT_ROLES: Record<string, string> = {
   wiki:  "배경 지식 연결 + 위키 업데이트",
   pocke: "웹 리서치 + 정보 수집",
   ka:    "데이터 분석 + 인사이트 도출",
-  over:  "리포트 작성",
+  run:   "코드 구현 + 기술 문서 작성 (개발 태스크)",
+  over:  "리포트 작성 (리서치/마케팅 태스크)",
   fact:  "팩트체크 + 품질 검수",
   ping:  "아이디어 캡처",
 };
 
 // 파이프라인 순서대로
-const ORDERED_AGENTS = ["plan", "wiki", "pocke", "ka", "over", "fact", "ping"];
+const ORDERED_AGENTS = ["plan", "wiki", "pocke", "ka", "run", "over", "fact", "ping"];
 
 function initConfigs(defaultSettings?: AllAgentSettings): AgentConfig[] {
   return ORDERED_AGENTS.map((id) => ({

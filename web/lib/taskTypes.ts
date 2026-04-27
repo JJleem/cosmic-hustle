@@ -33,8 +33,17 @@ export const TASK_TYPES: TaskType[] = [
     emoji: "⚙️",
     description: "기술 스택 분석, 아키텍처 검토, 도입 가이드",
     color: "#86efac",
-    defaultAgents: ["wiki", "pocke", "ka", "over", "fact", "ping"],
+    defaultAgents: ["plan", "wiki", "pocke", "ka", "over", "fact", "ping"],
     promptVariants: { pocke: "pocke_tech", ka: "ka_tech", over: "over_tech" },
+  },
+  {
+    id: "dev",
+    name: "개발",
+    emoji: "💻",
+    description: "기술 구현, 코드 작성, 아키텍처 설계",
+    color: "#67E8F9",
+    defaultAgents: ["plan", "wiki", "pocke", "ka", "run", "fact", "ping"],
+    promptVariants: { pocke: "pocke_tech", ka: "ka_tech", fact: "fact_dev" },
   },
 ];
 

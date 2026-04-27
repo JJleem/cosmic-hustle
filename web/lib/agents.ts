@@ -177,6 +177,28 @@ export const AGENTS: AgentDef[] = [
     weakness: "너무 극적으로 써서 가끔 보고서가 소설이 됨. 팩트 체크 요청받으면 상처받음.",
   },
   {
+    id: "run",
+    name: "런",
+    title: "사원",
+    role: "개발자",
+    color: "#67E8F9",
+    glow: "rgba(103,232,249,0.5)",
+    image: "/characters/run/default.png",
+    departmentId: "research",
+    responsibilities: ["코드 구현", "기술 문서 작성", "트레이드오프 분석"],
+    idleMessages: [
+      "이미 짰어요.",
+      "빌드 중...",
+      "...",
+      "스택 오버플로 검색 중.",
+      "주석? 필요없어요.",
+      "에러? 피처예요.",
+    ],
+    planet: "모든 것이 컴파일되어야 존재하는 행성. 오류 없이 태어난 아이는 전설. 생각을 실행하기 전 반드시 빌드 단계 거침.",
+    personality: "말수 없음. 시키면 바로 짬. '이미 짰어요'가 첫 마디. 설명은 코드로 함. 새벽에 제일 활발.",
+    weakness: "주석을 절대 안 씀. 나중에 본인도 못 읽음.",
+  },
+  {
     id: "ping",
     name: "핑",
     title: "인턴",
@@ -225,11 +247,12 @@ export const AGENTS: AgentDef[] = [
 export const AGENT_MAP = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
 
 export const PIPELINE: { ids: string[]; label: string }[] = [
-  { ids: ["plan"],        label: "기획" },
-  { ids: ["wiki"],        label: "지식 확인" },
-  { ids: ["pocke"],       label: "리서치" },
-  { ids: ["ka"],          label: "분석" },
-  { ids: ["over"],        label: "작성" },
-  { ids: ["fact"],        label: "검토" },
+  { ids: ["plan"],         label: "기획" },
+  { ids: ["wiki"],         label: "지식 확인" },
+  { ids: ["pocke"],        label: "리서치" },
+  { ids: ["ka"],           label: "분석" },
+  { ids: ["run"],          label: "구현" },
+  { ids: ["over"],         label: "작성" },
+  { ids: ["fact"],         label: "검토" },
   { ids: ["ping", "wiki"], label: "마무리" },
 ];
