@@ -44,6 +44,7 @@ type SSEEvent =
   | { type: "agent_start"; agentId: string; message: string }
   | { type: "agent_message"; agentId: string; message: string }
   | { type: "agent_stream"; agentId: string; chunk: string }
+  | { type: "agent_thinking"; agentId: string; chunk: string }
   | { type: "agent_done"; agentId: string; message: string }
   | { type: "agent_expression"; agentId: string; expression: string | null }
   | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
@@ -63,6 +64,7 @@ export async function runAgent(
   prompt: string,
   options: RunAgentOptions = {},
   onProgress?: (text: string) => void,
+  onThinking?: (text: string) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [
@@ -112,6 +114,8 @@ export async function runAgent(
               const delta = se.delta;
               if (delta?.type === "text_delta" && delta.text && onProgress) {
                 onProgress(delta.text as string);
+              } else if (delta?.type === "thinking_delta" && delta.thinking && onThinking) {
+                onThinking(delta.thinking as string);
               }
             }
           } else if (event.type === "assistant" && event.message?.content) {
@@ -293,6 +297,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ka") ?? 1 },
         (chunk) => { if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); } },
+        (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "ka", chunk: thinking }); },
       );
       if (!kaStreamed && kaOutput.trim()) await streamChunked("ka", kaOutput, send);
       await delay(1200);
@@ -342,6 +347,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "over") ?? 1 },
         (chunk) => { if (chunk.trim()) { overStreamed = true; send({ type: "agent_stream", agentId: "over", chunk }); } },
+        (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "over", chunk: thinking }); },
       );
       if (!overStreamed && overReport.trim()) await streamChunked("over", overReport, send);
       await delay(1800);
@@ -368,6 +374,7 @@ async function orchestrate(topic: string, agentConfigs: AgentConfig[], send: (ev
         buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800) }),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
         (chunk) => { if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); } },
+        (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "fact", chunk: thinking }); },
       );
       if (!factStreamed && factRaw.trim()) await streamChunked("fact", factRaw, send);
       await delay(800);

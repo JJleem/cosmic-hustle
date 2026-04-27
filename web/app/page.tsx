@@ -121,6 +121,9 @@ export default function Home() {
             [event.agentId as string]: (prev[event.agentId as string] ?? "") + (event.chunk as string),
           }));
           break;
+        case "agent_thinking":
+          speak(event.agentId as string, "...");
+          break;
         case "agent_done": {
           const doneId = event.agentId as string;
           setAgentStatus((prev) => ({ ...prev, [doneId]: "done" }));
