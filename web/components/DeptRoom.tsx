@@ -42,8 +42,8 @@ export default function DeptRoom({
       {/* 배경 단체사진 */}
       <motion.div
         className="absolute inset-0"
-        initial={{ filter: "brightness(0.15) saturate(0.6)" }}
-        animate={{ filter: "brightness(0.32) saturate(0.85)" }}
+        initial={{ filter: "brightness(0.25) saturate(0.7)" }}
+        animate={{ filter: "brightness(0.55) saturate(1)" }}
         transition={{ duration: 0.7, ease: "easeOut" }}
       >
         <img

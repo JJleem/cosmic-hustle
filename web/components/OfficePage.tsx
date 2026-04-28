@@ -114,8 +114,8 @@ export default function OfficePage({
                     className="absolute inset-0"
                     animate={{
                       filter: isHovered
-                        ? "brightness(0.28) saturate(0.9)"
-                        : "brightness(0.15) saturate(0.6)",
+                        ? "brightness(0.45) saturate(1)"
+                        : "brightness(0.25) saturate(0.75)",
                     }}
                     transition={{ duration: 0.3 }}
                   >
