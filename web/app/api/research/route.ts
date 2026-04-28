@@ -52,7 +52,7 @@ type SSEEvent =
   | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
   | { type: "ping_ideas"; ideas: Array<{ title: string; spark: string }> }
   | { type: "clarify_request"; sessionId: string; questions: string[] }
-  | { type: "ceo_checkin"; sessionId: string; summary: string; keyFacts: string[] }
+  | { type: "ceo_checkin"; sessionId: string; agentId: string; summary: string; keyFacts: string[] }
   | { type: "complete" }
   | { type: "error"; message: string };
 
@@ -241,7 +241,9 @@ function isCancelled(sId: string): boolean {
   return cancelledSessions.has(sId);
 }
 
-async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research", mode: "background" | "checkin" | "full" = "checkin") {
+type ReportStyle = { length: "brief" | "standard" | "detailed"; tone: "formal" | "casual" | "analytical" };
+
+async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research", mode: "background" | "checkin" | "full" = "checkin", reportStyle?: ReportStyle) {
   let topic = topicInput;
   let resolvedTaskType = taskTypeId;
   let promptVariants: Record<string, string> = TASK_TYPE_MAP[taskTypeId]?.promptVariants ?? {};
@@ -300,6 +302,32 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   }
 
   if (isCancelled(sessionId)) return;
+
+  // ── 태스크 타입 + 작성자 결정 (ka 실행 전에 필요) ──────────────────────
+  const isDevTask = resolvedTaskType === "dev";
+  const isDesignTask = resolvedTaskType === "design_ux" || resolvedTaskType === "design_ui";
+  const isMarketingTask = resolvedTaskType === "marketing";
+  const isBlogTask = resolvedTaskType === "blog";
+  const writerAgentId = isDevTask ? "run" : isDesignTask ? "pixel" : isMarketingTask ? "buzz" : "over";
+  const writerAgentName = writerAgentId === "run" ? "런" : writerAgentId === "pixel" ? "픽셀" : writerAgentId === "buzz" ? "버즈" : "오버";
+
+  // ── 파이프라인 체크인 스케줄러 ────────────────────────────────────────
+  // checkin 모드: 첫 번째 에이전트와 마지막 직전 에이전트가 체크인 요청
+  // 위키는 배경 준비 역할 — 체크인 파이프라인에서 제외
+  const activePipeline = ["pocke", "ka", writerAgentId, "fact"]
+    .filter((id) => agentEnabled(agentConfigs, id));
+  const _pLen = activePipeline.length;
+  const checkinPositions = new Set<number>(_pLen <= 2 ? [0] : [0, _pLen - 2]);
+
+  let ceoNotes = "";
+  const maybeCheckin = async (agentId: string, summary: string, keyFacts: string[]): Promise<void> => {
+    if (mode !== "checkin") return;
+    const idx = activePipeline.indexOf(agentId);
+    if (idx < 0 || !checkinPositions.has(idx)) return;
+    send({ type: "ceo_checkin", sessionId, agentId, summary, keyFacts });
+    const response = await waitForCEO(sessionId);
+    if (response.trim()) ceoNotes += `[CEO: ${response}]\n`;
+  };
 
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;
@@ -374,18 +402,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
   if (isCancelled(sessionId)) return;
 
-  // ── CEO 체크인 — 포케 결과 확인 후 방향 승인 (백그라운드 모드에서는 스킵) ──
-  let ceoNotes = "";
-  if (agentEnabled(agentConfigs, "ka") && mode !== "background") {
+  // ── 포케 체크인 (checkin 모드, 파이프라인 스케줄에 따라 동적 결정) ──
+  {
     const unverified = pocke.sources.filter((s) => s.url === "검증불가" || !s.url).length;
     const summary = pocke.sources.length > 0
       ? `소스 ${pocke.sources.length}개 수집${unverified > 0 ? ` (검증불가 ${unverified}개 포함)` : ""}`
       : `팩트 ${pocke.key_facts.length}개 수집`;
-    send({ type: "ceo_checkin", sessionId, summary, keyFacts: pocke.key_facts.slice(0, 4) });
-    const ceoResponse = await waitForCEO(sessionId);
-    if (ceoResponse.trim()) {
-      ceoNotes = `[CEO 추가 지시: ${ceoResponse}]\n`;
-    }
+    await maybeCheckin("pocke", summary, pocke.key_facts.slice(0, 4));
   }
 
   // 포케→카 커뮤니케이션
@@ -413,9 +436,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       );
       if (!kaStreamed && kaOutput.trim()) await streamChunked("ka", kaOutput, send);
       await delay(1200);
-      send({ type: "agent_done", agentId: "ka", message: "찾았다!!! 핵심 인사이트 잡음. 오버한테 넘길게." });
+      send({ type: "agent_done", agentId: "ka", message: `찾았다!!! 핵심 인사이트 잡음. ${writerAgentName}한테 넘길게.` });
     } catch {
-      send({ type: "agent_done", agentId: "ka", message: "분석 완료. 오버한테 넘길게." });
+      send({ type: "agent_done", agentId: "ka", message: `분석 완료. ${writerAgentName}한테 넘길게.` });
     }
   }
 
@@ -424,11 +447,6 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   );
 
   if (isCancelled(sessionId)) return;
-
-  const isDevTask = resolvedTaskType === "dev";
-  const isDesignTask = resolvedTaskType === "design_ux" || resolvedTaskType === "design_ui";
-  const isMarketingTask = resolvedTaskType === "marketing";
-  const isBlogTask = resolvedTaskType === "blog";
 
   const writerVars = {
     topic,
@@ -451,7 +469,6 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   let attempt = 0;
   let factFeedback = "";
 
-  const writerAgentId = isDevTask ? "run" : isDesignTask ? "pixel" : isMarketingTask ? "buzz" : "over";
   const allWriters = ["run", "over", "pixel", "buzz"] as const;
 
   // 쓰지 않는 writer 스킵 처리
@@ -498,10 +515,15 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
     try {
       let writerStreamed = false;
+      const lengthMap = { brief: "~400자", standard: "~700자", detailed: "~1200자" };
+      const toneMap = { formal: "공식적·격식체", casual: "친근하고 쉬운 문체", analytical: "데이터·수치 중심 분석적 문체" };
+      const styleNote = reportStyle
+        ? `분량: ${lengthMap[reportStyle.length]}. 문체: ${toneMap[reportStyle.tone]}.\n`
+        : "";
       overReport = await runAgent(
         buildPrompt(agentConfigs, writerAgentId, {
           ...writerVars,
-          feedback: attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : "",
+          feedback: `${styleNote}${attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : ""}`,
         }, promptVariants),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, writerAgentId) ?? 1 },
         (chunk) => { if (chunk.trim()) { writerStreamed = true; send({ type: "agent_stream", agentId: writerAgentId, chunk }); } },
@@ -514,6 +536,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     } catch {
       overReport = `# ${topic}\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
       send({ type: "agent_done", agentId: writerAgentId, message: "초안 완성. 팩트 부장님께." });
+    }
+
+    // 작가 완료 후 체크인 (첫 번째 시도만, 팩트 검토 전)
+    if (attempt === 1) {
+      const preview = overReport.slice(0, 400).replace(/\n+/g, " ").trim();
+      const previewLines = preview ? [`📄 ${preview}${overReport.length > 400 ? "..." : ""}`] : [];
+      await maybeCheckin(writerAgentId, "초안 완성됐어요. 팩트 검토 전 내용 확인해주세요.", previewLines);
     }
 
     if (!agentEnabled(agentConfigs, "fact")) {
@@ -668,12 +697,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { topic?: string; taskTypeId?: string; agentConfigs?: AgentConfig[]; mode?: string };
+  const body = await request.json() as { topic?: string; taskTypeId?: string; agentConfigs?: AgentConfig[]; mode?: string; reportStyle?: ReportStyle };
   const topic = body.topic?.trim();
   if (!topic) return Response.json({ error: "topic required" }, { status: 400 });
   const taskTypeId = body.taskTypeId ?? "research";
   const agentConfigs: AgentConfig[] = body.agentConfigs ?? [];
   const mode = (["background", "checkin", "full"].includes(body.mode ?? "") ? body.mode : "checkin") as "background" | "checkin" | "full";
+  const reportStyle: ReportStyle | undefined = body.reportStyle ?? undefined;
 
   const sessionId = crypto.randomUUID();
   const now = new Date();
@@ -703,7 +733,7 @@ export async function POST(request: Request) {
 
       send({ type: "session_start", sessionId });
 
-      orchestrate(topic, agentConfigs, send, sessionId, taskTypeId, mode)
+      orchestrate(topic, agentConfigs, send, sessionId, taskTypeId, mode, reportStyle)
         .then(async () => {
           await db.update(sessions)
             .set({ status: "done", completedAt: new Date() })

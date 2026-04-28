@@ -54,6 +54,7 @@ export default function Home() {
   const [streamLog, setStreamLog] = useState<Record<string, string>>({});
   const [chatFeed, setChatFeed] = useState<Array<{ id: string; agentId: string; text: string; at: Date }>>([]);
   const [ceoCheckin, setCeoCheckin] = useState<CeoCheckinState | null>(null);
+  const [currentMode, setCurrentMode] = useState<"background" | "checkin" | "full">("checkin");
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -201,6 +202,7 @@ export default function Home() {
           setCeoCheckin({
             type: "clarify_request",
             sessionId: event.sessionId as string,
+            agentId: "plan",
             questions: event.questions as string[],
           });
           break;
@@ -208,6 +210,7 @@ export default function Home() {
           setCeoCheckin({
             type: "ceo_checkin",
             sessionId: event.sessionId as string,
+            agentId: event.agentId as string,
             summary: event.summary as string,
             keyFacts: event.keyFacts as string[],
           });
@@ -234,7 +237,9 @@ export default function Home() {
     if (idleTimerRef.current) clearInterval(idleTimerRef.current);
     setShowSetup(false);
     setPhase("working");
+    setCurrentMode(config.mode);
     setTopic(config.topic);
+    if (config.mode === "background") setTab("office");
     // 활성화된 에이전트만 waiting, 나머지는 idle 유지
     const enabledIds = new Set(config.agentConfigs.filter((c) => c.enabled).map((c) => c.agentId));
     setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "disabled"])));
@@ -246,7 +251,7 @@ export default function Home() {
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode }),
+        body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode, reportStyle: config.reportStyle }),
         signal: abort.signal,
       });
 
@@ -515,7 +520,7 @@ export default function Home() {
         <CeoCheckin state={ceoCheckin} onRespond={handleCeoResponse} />
       )}
 
-      {phase === "working" && (
+      {phase === "working" && currentMode === "full" && (
         <ProjectWorkView
           topic={topic}
           agentStatus={agentStatus}

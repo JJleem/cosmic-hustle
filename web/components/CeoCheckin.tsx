@@ -1,16 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { AGENTS } from "@/lib/agents";
 
 type ClarifyRequest = {
   type: "clarify_request";
   sessionId: string;
+  agentId: string;
   questions: string[];
 };
 
 type CeoCheckin = {
   type: "ceo_checkin";
   sessionId: string;
+  agentId: string;
   summary: string;
   keyFacts: string[];
 };
@@ -24,6 +27,7 @@ type Props = {
 
 export default function CeoCheckin({ state, onRespond }: Props) {
   const [answer, setAnswer] = useState("");
+  const agent = AGENTS.find((a) => a.id === state.agentId);
 
   const submit = (response: string) => {
     onRespond(state.sessionId, response);
@@ -32,60 +36,115 @@ export default function CeoCheckin({ state, onRespond }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+      className="fixed bottom-6 right-6 z-[70] w-[380px]"
+      style={{ animation: "slideUp 0.25s ease-out" }}
     >
+      <style>{`
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       <div
-        className="w-[420px] rounded-2xl flex flex-col gap-5 p-7"
+        className="rounded-2xl flex flex-col gap-4 p-5"
         style={{
           background: "#090e1a",
-          border: "1px solid #1e3050",
-          boxShadow: "0 0 60px rgba(99,179,237,0.08)",
+          border: `1px solid ${agent?.color ?? "#334155"}30`,
+          boxShadow: `0 0 40px ${agent?.color ?? "#334155"}12, 0 8px 32px rgba(0,0,0,0.5)`,
         }}
       >
+        {/* 에이전트 헤더 */}
+        <div className="flex items-center gap-3">
+          <div
+            className="w-11 h-11 rounded-full overflow-hidden shrink-0"
+            style={{ border: `2px solid ${agent?.color ?? "#334155"}50` }}
+          >
+            {agent?.image ? (
+              <img src={agent.image} alt={agent.name} className="w-full h-full object-cover object-top" />
+            ) : (
+              <div className="w-full h-full" style={{ background: agent?.color ?? "#334155" }} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold" style={{ color: agent?.color ?? "#94a3b8" }}>
+              {agent?.name ?? state.agentId}
+            </p>
+            <p className="text-[10px] text-slate-500 truncate">
+              {state.type === "clarify_request" ? "시작 전 확인 요청" : "체크인 요청"}
+            </p>
+          </div>
+          <div
+            className="w-2 h-2 rounded-full animate-pulse shrink-0"
+            style={{ background: agent?.color ?? "#94a3b8" }}
+          />
+        </div>
+
+        {/* 내용 */}
         {state.type === "clarify_request" ? (
           <>
-            {/* 의도 확인 */}
             <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] tracking-[0.2em] uppercase text-sky-400/60">CEO 확인 필요</p>
-              <p className="text-sm font-semibold text-slate-100">
-                잠깐, 확인이 필요해요
-              </p>
-              <p className="text-xs text-slate-500">
-                팀이 작업을 시작하기 전에 아래 내용을 명확히 해주세요.
-              </p>
+              <p className="text-sm font-semibold text-slate-100">시작하기 전에 확인할게요.</p>
+              <p className="text-xs text-slate-500">팀이 작업을 시작하기 전에 아래 내용을 명확히 해주세요.</p>
             </div>
-
             <div className="flex flex-col gap-2">
               {state.questions.map((q, i) => (
                 <div
                   key={i}
-                  className="flex gap-2.5 rounded-xl px-4 py-3 text-xs text-slate-300 leading-relaxed"
+                  className="flex gap-2.5 rounded-xl px-3 py-2.5 text-xs text-slate-300 leading-relaxed"
                   style={{ background: "#0f1928", border: "1px solid #1a2a40" }}
                 >
-                  <span style={{ color: "#3b82f6" }}>Q.</span>
+                  <span className="shrink-0" style={{ color: agent?.color ?? "#3b82f6" }}>Q.</span>
                   {q}
                 </div>
               ))}
             </div>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-semibold text-slate-100">이 방향으로 계속할까요?</p>
+              <p className="text-xs text-slate-500">{state.summary}</p>
+            </div>
+            {state.keyFacts.length > 0 && (
+              <div
+                className="rounded-xl px-3 py-2.5 flex flex-col gap-1.5"
+                style={{ background: "#0f1928", border: "1px solid #1a2a40" }}
+              >
+                <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-0.5">수집된 핵심 팩트</p>
+                {state.keyFacts.map((f, i) => (
+                  <div key={i} className="flex gap-2 text-xs text-slate-400 leading-snug">
+                    <span className="shrink-0" style={{ color: agent?.color ?? "#34d399", opacity: 0.6 }}>▸</span>
+                    {f}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
-            <textarea
-              autoFocus
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(answer);
-              }}
-              placeholder="답변을 입력하세요... (⌘Enter로 제출)"
-              rows={3}
-              className="rounded-xl px-4 py-3 text-sm text-slate-200 placeholder:text-slate-700 resize-none focus:outline-none"
-              style={{
-                background: "#0c1422",
-                border: "1px solid #1e3050",
-              }}
-            />
+        {/* 입력 */}
+        <textarea
+          autoFocus
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(answer);
+          }}
+          placeholder={
+            state.type === "clarify_request"
+              ? "답변 입력... (⌘Enter 제출)"
+              : "방향 수정이 필요하면 입력... (없으면 그냥 승인)"
+          }
+          rows={2}
+          className="rounded-xl px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-700 resize-none focus:outline-none"
+          style={{ background: "#0c1422", border: "1px solid #1e3050" }}
+        />
 
-            <div className="flex gap-2">
+        {/* 버튼 */}
+        <div className="flex gap-2">
+          {state.type === "clarify_request" ? (
+            <>
               <button
                 onClick={() => submit("")}
                 className="flex-1 text-xs py-2 rounded-xl border transition-all hover:bg-slate-800"
@@ -97,58 +156,13 @@ export default function CeoCheckin({ state, onRespond }: Props) {
                 onClick={() => submit(answer)}
                 disabled={!answer.trim()}
                 className="flex-1 text-xs py-2 rounded-xl font-semibold transition-all disabled:opacity-30"
-                style={{
-                  background: "linear-gradient(135deg, #1e3a5f, #2a4f7c)",
-                  border: "1px solid #2a5a9c",
-                  color: "#93c5fd",
-                }}
+                style={{ background: `${agent?.color ?? "#3b82f6"}20`, border: `1px solid ${agent?.color ?? "#3b82f6"}50`, color: agent?.color ?? "#93c5fd" }}
               >
                 확인 완료
               </button>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* CEO 중간 체크인 */}
-            <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] tracking-[0.2em] uppercase text-emerald-400/60">포케 완료 — CEO 확인</p>
-              <p className="text-sm font-semibold text-slate-100">
-                이 방향으로 분석할까요?
-              </p>
-              <p className="text-xs text-slate-500">{state.summary}</p>
-            </div>
-
-            {state.keyFacts.length > 0 && (
-              <div
-                className="rounded-xl px-4 py-3 flex flex-col gap-1.5"
-                style={{ background: "#0f1928", border: "1px solid #1a2a40" }}
-              >
-                <p className="text-[10px] text-slate-600 tracking-widest uppercase mb-1">수집된 핵심 팩트</p>
-                {state.keyFacts.map((f, i) => (
-                  <div key={i} className="flex gap-2 text-xs text-slate-400 leading-snug">
-                    <span style={{ color: "#34d399", opacity: 0.6 }}>▸</span>
-                    {f}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(answer);
-              }}
-              placeholder="방향을 바꾸고 싶다면 여기에 입력... (없으면 그냥 승인)"
-              rows={2}
-              className="rounded-xl px-4 py-3 text-sm text-slate-200 placeholder:text-slate-700 resize-none focus:outline-none"
-              style={{
-                background: "#0c1422",
-                border: "1px solid #1e3050",
-              }}
-            />
-
-            <div className="flex gap-2">
+            </>
+          ) : (
+            <>
               <button
                 onClick={() => submit(answer)}
                 disabled={!answer.trim()}
@@ -160,17 +174,13 @@ export default function CeoCheckin({ state, onRespond }: Props) {
               <button
                 onClick={() => submit("")}
                 className="flex-1 text-xs py-2 rounded-xl font-semibold transition-all"
-                style={{
-                  background: "linear-gradient(135deg, #0f2d1f, #1a4a2e)",
-                  border: "1px solid #1a5c36",
-                  color: "#4ade80",
-                }}
+                style={{ background: `${agent?.color ?? "#34d399"}20`, border: `1px solid ${agent?.color ?? "#34d399"}50`, color: agent?.color ?? "#4ade80" }}
               >
                 이 방향 맞아요 ✓
               </button>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
