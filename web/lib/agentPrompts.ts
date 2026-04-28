@@ -18,7 +18,7 @@ export const DEFAULT_PROMPTS: Record<string, string> = {
 CEO 요청: "{topic}"
 
 분석:
-1. 태스크 타입 결정: research(일반 리서치) / marketing(시장·경쟁사 분석) / tech(기술 스택·아키텍처) / design(UI·UX 디자인) / dev(코드 구현)
+1. 태스크 타입 결정: research(일반 리서치) / marketing(시장·경쟁사 분석) / blog(블로그 포스팅) / tech(기술 스택·아키텍처) / design_ux(UX 리서치) / design_ui(UI/HTML 결과물) / dev_plan(개발 기획서) / dev_spec(기능명세서) / dev(코드 구현)
 2. 목표를 한 문장으로 명확화
 3. 범위 한정 (지역/기간/대상 등)
 4. 모호한 고유명사·지명·브랜드명 감지 → 질문 생성 (최대 2개, 없으면 빈 배열)
@@ -156,6 +156,14 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 팩트: {facts}.
 {feedback}기술 분석 리포트. ## 구조. 장단점 비교 포함. 600~800자.`,
 
+  // ── 블로그 포스팅 ─────────────────────────────────────────────────────
+  over_blog: `오버 사원. 블로그 작가.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}Velog·티스토리 스타일 블로그 포스팅. 도입부(훅)→본문→마무리 구조. 독자 친화적 문체. 소제목(##) 활용. 코드블록·이미지 alt 설명 포함. 1000~1500자.`,
+
   // ── 디자인 태스크 ─────────────────────────────────────────────────────
   pixel: `픽셀 사원. 디자이너.
 주제: "{topic}".
@@ -163,6 +171,39 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 결론: {conclusion}.
 팩트: {facts}.
 {feedback}디자인 관점 가이드 문서. 와이어프레임 구조·컴포넌트 목록·비주얼 방향성·색상 팔레트 포함. 마크다운 ## 구조. 600~800자.`,
+
+  pixel_ux: `픽셀 사원. UX 디자이너.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}UX 리서치 리포트. 사용자 페르소나·여정 맵·페인포인트·개선 방향·와이어프레임 구조 포함. 마크다운 ## 구조. 600~800자.`,
+
+  pixel_ui: `픽셀 사원. UI 개발자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}완성된 HTML/CSS 결과물 생성. 반드시 단일 HTML 파일 (인라인 \`<style>\` 포함). 모던·반응형 디자인. 마크다운 코드블록(\`\`\`html) 안에 전체 코드 출력.`,
+
+  // ── 개발 기획서 / 기능명세서 ──────────────────────────────────────────
+  over_dev_plan: `오버 사원. 기술 기획자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}개발 기획서. 아래 ## 섹션 구조 유지:
+## 배경 및 목적 / ## 목표 / ## 범위 / ## 주요 기능 / ## 기술 스택 / ## 일정
+표(마크다운 table) 적극 활용. 800~1200자.`,
+
+  over_dev_spec: `오버 사원. 기술 기획자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}기능명세서. 아래 ## 섹션 구조 유지:
+## 기능 목록 (우선순위 P0/P1/P2 표기) / ## 기능 상세 (각 기능: 설명·입력·출력·예외처리 표)
+마크다운 table 필수. 800~1200자.`,
 
   // ── 마케팅 전략 태스크 ────────────────────────────────────────────────
   buzz: `버즈 대리. 마케터.
@@ -183,15 +224,20 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 
 // 에이전트별 사용 가능한 변수 힌트
 export const PROMPT_VARS_HINT: Record<string, string[]> = {
-  wiki:  ["{topic}"],
-  pocke: ["{topic}", "{context}", "{keywords}"],
-  ka:    ["{topic}", "{facts}", "{ceo_notes}"],
-  over:  ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
-  fact:  ["{report}", "{sources}"],
-  ping:  ["{topic}", "{conclusion}"],
-  pixel: ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
-  buzz:  ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
-  root:  ["{topic}", "{report}"],
+  wiki:          ["{topic}"],
+  pocke:         ["{topic}", "{context}", "{keywords}"],
+  ka:            ["{topic}", "{facts}", "{ceo_notes}"],
+  over:          ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  over_blog:     ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  over_dev_plan: ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  over_dev_spec: ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  fact:          ["{report}", "{sources}"],
+  ping:          ["{topic}", "{conclusion}"],
+  pixel:         ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  pixel_ux:      ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  pixel_ui:      ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  buzz:          ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  root:          ["{topic}", "{report}"],
 };
 
 export function fillPrompt(template: string, vars: Partial<PromptVars>): string {

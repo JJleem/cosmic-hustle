@@ -426,8 +426,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   if (isCancelled(sessionId)) return;
 
   const isDevTask = resolvedTaskType === "dev";
-  const isDesignTask = resolvedTaskType === "design";
+  const isDesignTask = resolvedTaskType === "design_ux" || resolvedTaskType === "design_ui";
   const isMarketingTask = resolvedTaskType === "marketing";
+  const isBlogTask = resolvedTaskType === "blog";
 
   const writerVars = {
     topic,
