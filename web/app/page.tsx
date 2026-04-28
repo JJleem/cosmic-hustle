@@ -57,6 +57,8 @@ export default function Home() {
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const sessionIdRef = useRef("");
+  const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
 
   // DB에서 초기 데이터 로드
   useEffect(() => {
@@ -75,6 +77,28 @@ export default function Home() {
       );
     }).catch(() => { /* DB 로드 실패 시 빈 상태 유지 */ });
   }, []);
+
+  // 이전 세션 이어서 보기 체크
+  useEffect(() => {
+    const stored = localStorage.getItem("cosmicHustleSession");
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as { sessionId: string; topic: string };
+      fetch(`/api/research/${parsed.sessionId}/events`)
+        .then((r) => r.json())
+        .then((data: { status: string }) => {
+          if (data.status === "working" || data.status === "done") {
+            setResumeInfo(parsed);
+          } else {
+            localStorage.removeItem("cosmicHustleSession");
+          }
+        })
+        .catch(() => localStorage.removeItem("cosmicHustleSession"));
+    } catch {
+      localStorage.removeItem("cosmicHustleSession");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const speakTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const speak = useCallback((agentId: string, message: string) => {
@@ -107,6 +131,13 @@ export default function Home() {
   const handleSSE = useCallback(
     (event: Record<string, unknown>, inputTopic: string) => {
       switch (event.type) {
+        case "session_start":
+          sessionIdRef.current = event.sessionId as string;
+          localStorage.setItem("cosmicHustleSession", JSON.stringify({
+            sessionId: event.sessionId,
+            topic: inputTopic,
+          }));
+          break;
         case "agent_start":
           setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "active" }));
           setStreamLog((prev) => ({ ...prev, [event.agentId as string]: "" }));
@@ -186,6 +217,7 @@ export default function Home() {
             if (prev.some((h) => h.topic === inputTopic)) return prev;
             return [{ id: uid(), topic: inputTopic, completedAt: new Date() }, ...prev];
           });
+          localStorage.removeItem("cosmicHustleSession");
           setPhase("done");
           speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
           break;
@@ -249,6 +281,70 @@ export default function Home() {
     }
   };
 
+  const resumeSession = async ({ sessionId, topic: resumeTopic }: { sessionId: string; topic: string }) => {
+    setResumeInfo(null);
+    const res = await fetch(`/api/research/${sessionId}/events`);
+    const { status, events } = await res.json() as {
+      status: string;
+      events: Array<{ seq: number; event: Record<string, unknown> }>;
+    };
+
+    if (status === "cancelled" || status === "error") {
+      localStorage.removeItem("cosmicHustleSession");
+      return;
+    }
+
+    // 이벤트 배치 재생 — 최종 상태 계산
+    const newStatus: AgentStates = Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"]));
+    const newStreamLog: Record<string, string> = {};
+    const newLastMsg: Record<string, string> = {};
+    const newReports: Report[] = [];
+    const newIdeas: Idea[] = [];
+
+    for (const { event: e } of events) {
+      switch (e.type) {
+        case "agent_start":
+          newStatus[e.agentId as string] = "active";
+          newStreamLog[e.agentId as string] = "";
+          newLastMsg[e.agentId as string] = e.message as string;
+          break;
+        case "agent_done":
+          newStatus[e.agentId as string] = "done";
+          newLastMsg[e.agentId as string] = e.message as string;
+          break;
+        case "agent_stream":
+          newStreamLog[e.agentId as string] = (newStreamLog[e.agentId as string] ?? "") + (e.chunk as string);
+          break;
+        case "agent_message":
+          newLastMsg[e.agentId as string] = e.message as string;
+          break;
+        case "report":
+          newReports.push({
+            id: e.reportId as string,
+            agentId: e.agentId as string,
+            topic: (e.topic as string) ?? resumeTopic,
+            content: e.content as string,
+            createdAt: new Date(),
+          });
+          break;
+        case "ping_ideas":
+          newIdeas.push(...(e.ideas as Idea[]));
+          break;
+      }
+    }
+
+    setAgentStatus(newStatus);
+    setStreamLog(newStreamLog);
+    setLastMessage(newLastMsg);
+    setReports((prev) => [...newReports.filter((r) => !prev.some((p) => p.id === r.id)), ...prev]);
+    setPingIdeas(newIdeas);
+    setTopic(resumeTopic);
+    setPhase(status === "done" ? "done" : "working");
+    sessionIdRef.current = sessionId;
+
+    if (status !== "working") localStorage.removeItem("cosmicHustleSession");
+  };
+
   const handleCeoResponse = async (sessionId: string, response: string) => {
     setCeoCheckin(null);
     await fetch(`/api/research/${sessionId}/respond`, {
@@ -261,6 +357,12 @@ export default function Home() {
   const stopResearch = () => {
     abortRef.current?.abort();
     abortRef.current = null;
+    const sId = sessionIdRef.current;
+    if (sId) {
+      void fetch(`/api/research/${sId}/cancel`, { method: "POST" });
+      sessionIdRef.current = "";
+    }
+    localStorage.removeItem("cosmicHustleSession");
     reset();
   };
 
@@ -331,6 +433,28 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {/* 이전 세션 resume 배너 */}
+      {resumeInfo && (
+        <div className="shrink-0 px-8 py-2 flex items-center gap-3 text-xs" style={{ background: "#0d1a2e", borderBottom: "1px solid #1e3a5f" }}>
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span className="text-slate-400">이전 세션 발견:</span>
+          <span className="text-slate-200 font-medium max-w-xs truncate">{resumeInfo.topic}</span>
+          <button
+            onClick={() => void resumeSession(resumeInfo)}
+            className="ml-2 px-3 py-1 rounded-full text-xs font-medium transition-all"
+            style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" }}
+          >
+            이어서 보기
+          </button>
+          <button
+            onClick={() => { setResumeInfo(null); localStorage.removeItem("cosmicHustleSession"); }}
+            className="text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 컨텐츠 */}
       <div className="flex-1 overflow-hidden">

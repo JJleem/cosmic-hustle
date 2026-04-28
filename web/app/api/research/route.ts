@@ -2,7 +2,7 @@ import { spawn, execSync } from "child_process";
 import path from "path";
 import fs from "fs";
 import { db } from "@/db";
-import { sessions, reports } from "@/db/schema";
+import { sessions, reports, sessionEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { DEFAULT_PROMPTS, fillPrompt, type PromptVars } from "@/lib/agentPrompts";
 import { TASK_TYPE_MAP, DEFAULT_TASK_TYPE } from "@/lib/taskTypes";
@@ -42,6 +42,7 @@ export const WIKI_DIR = path.resolve(
 );
 
 type SSEEvent =
+  | { type: "session_start"; sessionId: string }
   | { type: "agent_start"; agentId: string; message: string }
   | { type: "agent_message"; agentId: string; message: string }
   | { type: "agent_stream"; agentId: string; chunk: string }
@@ -57,6 +58,9 @@ type SSEEvent =
 
 // CEO 응답 대기 — 세션별 Promise resolver 저장
 export const pendingResponses = new Map<string, (r: string) => void>();
+
+// 취소된 세션 ID 집합 — cancel 엔드포인트가 추가, orchestrate()가 체크
+export const cancelledSessions = new Set<string>();
 
 function waitForCEO(sessionId: string, timeoutMs = 90_000): Promise<string> {
   return new Promise((resolve) => {
@@ -233,6 +237,10 @@ async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) 
   }
 }
 
+function isCancelled(sId: string): boolean {
+  return cancelledSessions.has(sId);
+}
+
 async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research") {
   let topic = topicInput;
   let resolvedTaskType = taskTypeId;
@@ -291,6 +299,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     await delay(400);
   }
 
+  if (isCancelled(sessionId)) return;
+
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;
   if (agentEnabled(agentConfigs, "wiki")) {
@@ -321,6 +331,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     keywords: [topic],
     wiki_pages_found: [],
   });
+
+  if (isCancelled(sessionId)) return;
 
   // 위키→포케 커뮤니케이션
   if (agentEnabled(agentConfigs, "pocke")) {
@@ -359,6 +371,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   const pocke = parseJSON<{ sources: Array<{ title: string; summary: string; url?: string }>; key_facts: string[] }>(
     pockeOutput, { sources: [], key_facts: [] },
   );
+
+  if (isCancelled(sessionId)) return;
 
   // ── CEO 체크인 — 포케 결과 확인 후 방향 승인 ──────────────────────────
   let ceoNotes = "";
@@ -408,6 +422,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   const ka = parseJSON<{ insights: Array<{ title: string; description: string }>; conclusion: string; data_quality: string }>(
     kaOutput, { insights: [], conclusion: "", data_quality: "medium" },
   );
+
+  if (isCancelled(sessionId)) return;
 
   const isDevTask = resolvedTaskType === "dev";
   const isDesignTask = resolvedTaskType === "design";
@@ -646,6 +662,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
   await Promise.allSettled(finalTasks);
 
+  cancelledSessions.delete(sessionId);
   send({ type: "complete" });
 }
 
@@ -669,9 +686,20 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
+      let seqCounter = 0;
       const send = (event: SSEEvent) => {
-        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { /* closed */ }
+        const seq = ++seqCounter;
+        void db.insert(sessionEvents).values({
+          id: crypto.randomUUID(),
+          sessionId,
+          seq,
+          payload: JSON.stringify(event),
+          createdAt: new Date(),
+        });
+        try { controller.enqueue(encoder.encode(`id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`)); } catch { /* closed */ }
       };
+
+      send({ type: "session_start", sessionId });
 
       orchestrate(topic, agentConfigs, send, sessionId, taskTypeId)
         .then(async () => {

@@ -22,3 +22,11 @@ export const memos = sqliteTable("memos", {
   text: text("text").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
+
+export const sessionEvents = sqliteTable("session_events", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  seq: integer("seq").notNull(),
+  payload: text("payload").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
