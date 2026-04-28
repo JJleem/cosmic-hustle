@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Department, AgentDef, AgentStatus, AGENTS } from "@/lib/agents";
 import AgentImage from "./AgentImage";
-import AgentWorkspace, { Idea } from "./AgentWorkspace";
+import AgentChatPanel from "./AgentChatPanel";
 
 type Props = {
   dept: Department;
@@ -12,17 +12,15 @@ type Props = {
   agentExpression: Record<string, string | null>;
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
-  pingIdeas: Idea[];
-  lastTopic: string;
   onBack: () => void;
 };
 
 const STATUS_CONFIG: Record<AgentStatus, { color: string; label: string; pulse: boolean }> = {
-  idle:     { color: "#FB923C", label: "idle",    pulse: false },
-  active:   { color: "#34D399", label: "working", pulse: true  },
-  done:     { color: "#93c5fd", label: "done",    pulse: false },
-  waiting:  { color: "#475569", label: "standby", pulse: false },
-  disabled: { color: "#1e2535", label: "off",     pulse: false },
+  idle:     { color: "#FB923C", label: "대기중", pulse: false },
+  active:   { color: "#34D399", label: "작업중", pulse: true  },
+  done:     { color: "#93c5fd", label: "완료",   pulse: false },
+  waiting:  { color: "#475569", label: "준비중", pulse: false },
+  disabled: { color: "#1e2535", label: "비활성", pulse: false },
 };
 
 function StatusBadge({ status }: { status: AgentStatus }) {
@@ -46,7 +44,7 @@ function StatusBadge({ status }: { status: AgentStatus }) {
 
 export default function DeptRoom({
   dept, agentStatus, agentExpression, speaking,
-  lastMessage, pingIdeas, lastTopic, onBack,
+  lastMessage, onBack,
 }: Props) {
   const [selected, setSelected] = useState<AgentDef | null>(null);
   const members = AGENTS.filter((a) => a.departmentId === dept.id);
@@ -240,14 +238,17 @@ export default function DeptRoom({
         })}
       </div>
 
-      {selected && (
-        <AgentWorkspace
-          agent={selected}
-          pingIdeas={pingIdeas}
-          lastTopic={lastTopic}
-          onClose={() => setSelected(null)}
-        />
-      )}
+      <AnimatePresence>
+        {selected && (
+          <AgentChatPanel
+            key={selected.id}
+            agent={selected}
+            agentStatus={agentStatus[selected.id] ?? "idle"}
+            agentExpression={agentExpression[selected.id] ?? null}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

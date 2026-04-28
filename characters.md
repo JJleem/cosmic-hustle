@@ -300,3 +300,189 @@ CEO 입력 (주제)
     ↓
 CEO에게 최종 리포트 + 아이디어 카드 전달
 ```
+
+---
+
+## 이미지 생성 가이드
+
+### 공통 스타일 원칙
+
+| 항목 | 설정 |
+|------|------|
+| **렌더링** | 3D rendered, Pixar animation style |
+| **비율** | --ar 1:1 |
+| **버전** | --v 6 |
+| **프레이밍** | bust shot portrait, upper body only, cropped at lower chest, NOT full body |
+| **크기감** | small character centered with plenty of breathing room, character occupying roughly 60% of frame height |
+| **배경** | pure white background |
+| **조명** | warm soft golden studio lighting (기본) / cool teal-tinted (루트 전용) |
+| **금지** | absolutely no text, no readable labels, no symbols, no glyphs, no runes, no writing on skin or face |
+| **--no 태그** | text symbols glyphs runes writing on skin bald |
+
+---
+
+### Base Prompt 구조
+
+```
+[프레이밍 — 맨 앞]
+bust shot portrait, upper body only, cropped at lower chest, NOT full body,
+small character centered with plenty of breathing room around it,
+character occupying roughly 60% of frame height, wide margin on all sides,
+zoomed out slightly, not close-up, not filling the frame,
+
+[캐릭터 외형]
+- 피부색 + NOT bald + 머리 스타일
+- 외계인 특징 (이 캐릭터만의 alien feature)
+- 눈/표정 특징
+- 의상 + 소품
+
+[기본 표정/포즈]
+
+[주변 오브젝트 — ambient floating elements]
+
+[스타일 마무리]
+smooth clean 3D design, NOT creepy,
+no text, no readable labels, no symbols anywhere,
+absolutely no glyphs, runes, or writing on the skin or face,
+3D rendered, Pixar animation style,
+warm soft golden studio lighting,
+pure white background,
+portrait framing — naturally cropped at the lower chest,
+grounded like a headshot, not floating,
+high quality render
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+### Expression Prompt 구조 (base 이미지 생성 후 사용)
+
+```
+This is the reference character. Keep everything identical —
+same [피부색 + 핵심 외형 특징 나열],
+same upper body portrait framing on pure white background,
+same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere on skin or image.
+
+Change only the expression and pose:
+[표정/포즈/액션 묘사]
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+### 완성된 Base Prompts
+
+#### 버즈 대리
+
+```
+bust shot portrait, upper body only, cropped at lower chest, NOT full body,
+small character centered with plenty of breathing room around it,
+character occupying roughly 60% of frame height, wide margin on all sides,
+zoomed out slightly, not close-up, not filling the frame,
+
+A small chubby chibi alien girl with smooth vivid warm orange skin,
+NOT bald — has fluffy cotton-candy pompom twin bunches
+sitting wide on both sides of her head,
+soft deep orange-amber puffs that bounce with every movement —
+the hair of someone whose content was already trending
+before she even hit post,
+
+clearly alien, unmistakably not human:
+TWO spring-coil antennae rising from between the hair bunches,
+each tipped with a tiny glowing orange star — her built-in trend receivers,
+small cute cone-shaped ear structures, slightly flared like natural speakers,
+evolved on a planet where your voice needs to carry across a crowd,
+
+FOUR eyes — large expressive upper pair, smaller bright lower pair,
+all glossy and warm and anime-wide,
+the kind of face that the algorithm just loves,
+and she absolutely knows it,
+
+tiny star-shaped bioluminescent patches scattered across both cheeks —
+not freckles exactly, more like her skin kept a little bit of every spotlight
+she's ever stood under,
+
+wearing a fitted cropped jacket over a layered top,
+shoulder slightly oversized — intentional,
+small charm accessories on the lapel, cute meets editorial,
+
+one hand holding a tiny sleek phone at the exact instagrammable angle —
+not posed, just how she naturally holds it,
+the other hand doing a casual but confident pointing gesture,
+
+floating around her — not screens, not charts,
+but tiny glowing engagement icons drifting in slow lazy orbit:
+small hearts, stars, trending arrows, sparkle bursts —
+the ambient atmosphere of someone whose content just lands,
+
+smooth clean 3D design, NOT creepy,
+no text, no readable labels, no symbols anywhere,
+absolutely no glyphs, runes, or writing on the skin or face,
+3D rendered, Pixar animation style,
+warm soft golden studio lighting,
+pure white background,
+portrait framing — naturally cropped at the lower chest,
+grounded like a headshot, not floating,
+high quality render
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 루트 사원
+
+```
+bust shot portrait, upper body only, cropped at lower chest, NOT full body,
+small character centered with plenty of breathing room around it,
+character occupying roughly 60% of frame height, wide margin on all sides,
+zoomed out slightly, not close-up, not filling the frame,
+
+A small chubby chibi character in a cute rounded astronaut helmet and space suit,
+the helmet IS the face — dark visor with NO visible face inside,
+instead two simple cute terminal-cursor eyes displayed on the visor surface:
+small glowing rectangular block cursors, one on each side, blinking softly —
+like a monitor displaying a face, calm and steady,
+simple small line for a mouth below the cursor eyes,
+the whole expression lives on the helmet display, not behind it,
+
+helmet: smooth rounded dome shape, clean and slightly oversized chibi-style,
+emerald green accent stripe running along the side of the helmet,
+small antenna nub on top of the helmet — short, functional, not decorative,
+
+the suit: deep navy base with emerald green panel accents,
+pipeline circuit line patterns along the chest piece as suit markings,
+sealed utility pockets across the chest,
+left wrist panel with a small abstract monitoring display — graphs only, no text,
+
+posture perfectly still and upright,
+floating around the character: small abstract pipeline node shapes
+and directional flow arrows drifting in slow methodical orbit,
+
+smooth clean 3D design, Pixar animation style,
+cute chibi astronaut robot character — think Wall-E meets LoL Astronaut skin,
+cool teal-tinted studio lighting,
+pure white background,
+portrait framing — cropped at the lower chest, not full body,
+grounded like a headshot, not floating,
+high quality render,
+absolutely no text, no readable labels, no symbols anywhere,
+no glyphs, runes, or writing on helmet or suit
+--ar 1:1 --v 6 --no text symbols glyphs runes writing full-body legs feet close-up zoomed-in tight-crop
+```
+
+---
+
+### 미완성 Base Prompts (생성 필요)
+
+| 캐릭터 | 상태 | 비고 |
+|--------|------|------|
+| 플랜 차장 | 재생성 필요 | 노란빛 피부, 안경, 포스트잇, 바코드 이마 문양 |
+| 런 사원 | 재생성 필요 | 시안빛 피부, 후드집업, 헤드폰, 다크서클 |
+| 픽셀 사원 | 재생성 필요 | 살구빛 피부, 여성, 색상 팔레트 핀, 스타일러스 |
+| 포케 대리 | 미생성 | 민트 그린 피부, 볼따구 빵빵, 주머니 |
+| 카 과장 | 미생성 | 연보라 피부, 안경 겹겹이, 다크서클, 커피 |
+| 오버 사원 | 미생성 | 복숭아빛 피부, 베레모, 머플러, 깃털 펜 |
+| 팩트 부장 | 미생성 | 회백색 피부, 빨간 눈, 무표정, 빨간펜 |
+| 위키 대리 | 미생성 | 라벤더 피부, 여성, 동그란 안경, 잎사귀 귀 |
+| 핑 인턴 | 미생성 | 라임 그린 피부, 안테나, 오버사이즈 티셔츠 |

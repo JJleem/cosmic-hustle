@@ -241,7 +241,7 @@ function isCancelled(sId: string): boolean {
   return cancelledSessions.has(sId);
 }
 
-async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research") {
+async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research", mode: "background" | "checkin" | "full" = "checkin") {
   let topic = topicInput;
   let resolvedTaskType = taskTypeId;
   let promptVariants: Record<string, string> = TASK_TYPE_MAP[taskTypeId]?.promptVariants ?? {};
@@ -285,8 +285,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         topic = `${topic} (목표: ${plan.objective}${plan.scope ? ` / 범위: ${plan.scope}` : ""})`;
       }
 
-      // 모호한 경우 CEO에게 확인 요청
-      if (plan.needs_clarification && plan.clarify_questions.length > 0) {
+      // 모호한 경우 CEO에게 확인 요청 (백그라운드 모드에서는 스킵)
+      if (plan.needs_clarification && plan.clarify_questions.length > 0 && mode !== "background") {
         send({ type: "clarify_request", sessionId, questions: plan.clarify_questions });
         const ceoAnswer = await waitForCEO(sessionId);
         if (ceoAnswer.trim()) topic += ` (CEO 보충: ${ceoAnswer})`;
@@ -374,9 +374,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
   if (isCancelled(sessionId)) return;
 
-  // ── CEO 체크인 — 포케 결과 확인 후 방향 승인 ──────────────────────────
+  // ── CEO 체크인 — 포케 결과 확인 후 방향 승인 (백그라운드 모드에서는 스킵) ──
   let ceoNotes = "";
-  if (agentEnabled(agentConfigs, "ka")) {
+  if (agentEnabled(agentConfigs, "ka") && mode !== "background") {
     const unverified = pocke.sources.filter((s) => s.url === "검증불가" || !s.url).length;
     const summary = pocke.sources.length > 0
       ? `소스 ${pocke.sources.length}개 수집${unverified > 0 ? ` (검증불가 ${unverified}개 포함)` : ""}`
@@ -668,11 +668,12 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { topic?: string; taskTypeId?: string; agentConfigs?: AgentConfig[] };
+  const body = await request.json() as { topic?: string; taskTypeId?: string; agentConfigs?: AgentConfig[]; mode?: string };
   const topic = body.topic?.trim();
   if (!topic) return Response.json({ error: "topic required" }, { status: 400 });
   const taskTypeId = body.taskTypeId ?? "research";
   const agentConfigs: AgentConfig[] = body.agentConfigs ?? [];
+  const mode = (["background", "checkin", "full"].includes(body.mode ?? "") ? body.mode : "checkin") as "background" | "checkin" | "full";
 
   const sessionId = crypto.randomUUID();
   const now = new Date();
@@ -702,7 +703,7 @@ export async function POST(request: Request) {
 
       send({ type: "session_start", sessionId });
 
-      orchestrate(topic, agentConfigs, send, sessionId, taskTypeId)
+      orchestrate(topic, agentConfigs, send, sessionId, taskTypeId, mode)
         .then(async () => {
           await db.update(sessions)
             .set({ status: "done", completedAt: new Date() })

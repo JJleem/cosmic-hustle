@@ -15,10 +15,13 @@ export type AgentConfig = {
   maxTurns?: number;
 };
 
+export type ProjectMode = "background" | "checkin" | "full";
+
 export type ProjectConfig = {
   topic: string;
   taskTypeId: string;
   agentConfigs: AgentConfig[];
+  mode: ProjectMode;
 };
 
 type Props = {
@@ -58,9 +61,16 @@ function initConfigs(taskTypeId: string, defaultSettings?: AllAgentSettings): Ag
   }));
 }
 
+const MODE_OPTIONS: { id: ProjectMode; label: string; desc: string; icon: string }[] = [
+  { id: "background", label: "백그라운드", desc: "결과만 받기", icon: "⚡" },
+  { id: "checkin",    label: "체크인",     desc: "2곳 개입",   icon: "✋" },
+  { id: "full",       label: "풀 모니터링", desc: "실시간 확인", icon: "👁" },
+];
+
 export default function ProjectSetupModal({ onStart, onClose, defaultSettings }: Props) {
   const [topic, setTopic] = useState("");
   const [selectedTypeId, setSelectedTypeId] = useState("auto");
+  const [mode, setMode] = useState<ProjectMode>("checkin");
   const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs("auto", defaultSettings));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -102,7 +112,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
   const handleStart = () => {
     const trimmed = topic.trim();
     if (!trimmed) { topicRef.current?.focus(); return; }
-    onStart({ topic: trimmed, taskTypeId: selectedTypeId, agentConfigs: configs });
+    onStart({ topic: trimmed, taskTypeId: selectedTypeId, agentConfigs: configs, mode });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -433,6 +443,35 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
                       </div>
                     )}
                   </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 진행 모드 */}
+          <div className="mt-5 mb-2">
+            <label className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold block mb-2">
+              진행 모드
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {MODE_OPTIONS.map((opt) => {
+                const isSelected = mode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setMode(opt.id)}
+                    className="flex flex-col items-center gap-1 px-2 py-3 rounded-2xl border transition-all"
+                    style={
+                      isSelected
+                        ? { background: "#1e3a5f", borderColor: "#2a5a9c", color: "#93c5fd" }
+                        : { background: "#0d1222", borderColor: "#1e2535", color: "#475569" }
+                    }
+                  >
+                    <span className="text-base leading-none">{opt.icon}</span>
+                    <span className="text-[10px] font-bold">{opt.label}</span>
+                    <span className="text-[8px] opacity-70">{opt.desc}</span>
+                  </button>
                 );
               })}
             </div>

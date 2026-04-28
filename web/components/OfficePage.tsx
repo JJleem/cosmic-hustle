@@ -250,8 +250,6 @@ export default function OfficePage({
                 agentExpression={agentExpression}
                 speaking={speaking}
                 lastMessage={lastMessage}
-                pingIdeas={pingIdeas}
-                lastTopic={lastTopic}
                 onBack={() => setSelectedDeptId(null)}
               />
             );
