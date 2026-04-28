@@ -30,18 +30,13 @@ export default function ProjectWorkView({
   const logRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const [confirmStop, setConfirmStop] = useState(false);
-  // 에이전트 전환 중 null 순간에도 마지막 에이전트 유지 (깜박임 방지)
-  const [lastAgent, setLastAgent] = useState(
-    AGENTS.find((a) => agentStatus[a.id] !== "disabled") ?? AGENTS[0]
-  );
 
-  const activeAgentId =
-    AGENTS.find((a) => agentStatus[a.id] === "active")?.id ?? null;
-  const activeAgent = activeAgentId ? AGENT_MAP[activeAgentId] : null;
-  useEffect(() => {
-    if (activeAgent) setLastAgent(activeAgent);
-  }, [activeAgent]);
-  const displayAgent = activeAgent ?? lastAgent;
+  // active → done 순서로 표시할 에이전트 결정 (state/effect 없이 순수 파생)
+  const displayAgent =
+    AGENTS.find((a) => agentStatus[a.id] === "active") ??
+    [...AGENTS].reverse().find((a) => agentStatus[a.id] === "done") ??
+    AGENTS.find((a) => agentStatus[a.id] !== "disabled") ??
+    AGENTS[0];
 
   // disabled 상태가 아닌 스테이지만 파이프라인에 표시
   const visiblePipeline = PIPELINE.filter((stage) =>
