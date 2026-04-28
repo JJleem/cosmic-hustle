@@ -410,6 +410,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   );
 
   const isDevTask = resolvedTaskType === "dev";
+  const isDesignTask = resolvedTaskType === "design";
+  const isMarketingTask = resolvedTaskType === "marketing";
+
   const writerVars = {
     topic,
     insights: ka.insights.map((i) => `${i.title}: ${i.description}`).join("; "),
@@ -417,37 +420,49 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     facts: pocke.key_facts.slice(0, 4).join("; "),
   };
 
-  // ── 4. 런 or 오버 + 5. Fact: 구현/작성 → 검토 루프 ─────────────────
+  // writer별 메시지 정의
+  const writerMessages = {
+    run:   { start1: "코드 작성 시작.", start2: "...수정할게요.", retry: "...다시 짤게요.", done: "통과. 배포 가능.", final: "...배포합니다." },
+    over:  { start1: "이 숫자 뒤에 얼마나 많은 이야기가...", start2: "...알겠습니다. 수정할게요.", retry: "...다시요? (상처받음)", done: "통과라고 했다... 역시 걸작.", final: "...감사합니다." },
+    pixel: { start1: "이 여백 어떻게 쓸지 감 잡혔어요. 디자인 시작할게요.", start2: "...그리드부터 다시 잡을게요.", retry: "...레이아웃 다시요? (눈 충혈)", done: "통과. 폰트는 제가 결정했어요.", final: "...올릴게요." },
+    buzz:  { start1: "바이럴 각 잡혔어요! 전략 써볼게요.", start2: "...타겟 다시 잡고 수정할게요.", retry: "...다시요? 타겟 재설정할게요.", done: "통과. 이거 퍼질 것 같은데요.", final: "...올릴게요." },
+  } as const;
+
+  // ── 4. 작성/구현 + 5. Fact: 구현/작성 → 검토 루프 ─────────────────
   let overReport = "";
   let factPassed = false;
   let attempt = 0;
   let factFeedback = "";
 
-  // 쓰지 않는 에이전트 스킵 처리
-  if (isDevTask && agentEnabled(agentConfigs, "over")) {
-    send({ type: "agent_done", agentId: "over", message: "이번 태스크는 런 담당." });
-  }
-  if (!isDevTask && agentEnabled(agentConfigs, "run")) {
-    send({ type: "agent_done", agentId: "run", message: "이번 태스크는 오버 담당." });
-  }
+  const writerAgentId = isDevTask ? "run" : isDesignTask ? "pixel" : isMarketingTask ? "buzz" : "over";
+  const allWriters = ["run", "over", "pixel", "buzz"] as const;
 
-  if (isDevTask) {
-    // 카→런 커뮤니케이션
-    if (agentEnabled(agentConfigs, "run")) {
-      await delay(400);
-      send({ type: "agent_message", agentId: "run", message: "분석 받음. 바로 짤게요." });
-      await delay(400);
-    }
-  } else {
-    // 카→오버 커뮤니케이션
-    if (agentEnabled(agentConfigs, "over")) {
-      await delay(400);
-      send({ type: "agent_message", agentId: "over", message: "카 과장님 인사이트 받았어요... 이거 좋은 이야기가 될 것 같은데요?" });
-      await delay(600);
+  // 쓰지 않는 writer 스킵 처리
+  for (const id of allWriters) {
+    if (id !== writerAgentId && agentEnabled(agentConfigs, id)) {
+      const skipMsgs: Record<string, string> = {
+        run: "이번엔 코드 없어요.",
+        over: "이번 태스크는 다른 팀원 담당.",
+        pixel: "이번엔 디자인 없어요.",
+        buzz: "이번엔 마케팅 없어요.",
+      };
+      send({ type: "agent_done", agentId: id, message: skipMsgs[id] });
     }
   }
 
-  const writerAgentId = isDevTask ? "run" : "over";
+  // 카 → writer 커뮤니케이션
+  if (agentEnabled(agentConfigs, writerAgentId)) {
+    await delay(400);
+    const introMsgs: Record<string, string> = {
+      run: "분석 받음. 바로 짤게요.",
+      over: "카 과장님 인사이트 받았어요... 이거 좋은 이야기가 될 것 같은데요?",
+      pixel: "인사이트 받았어요. 비주얼로 풀어볼게요.",
+      buzz: "데이터 받았어요. 바이럴 각 보일 것 같은데요?",
+    };
+    send({ type: "agent_message", agentId: writerAgentId, message: introMsgs[writerAgentId] });
+    await delay(600);
+  }
+
   const writerEnabled = agentEnabled(agentConfigs, writerAgentId);
 
   if (!writerEnabled) {
@@ -458,9 +473,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   while (!factPassed && attempt < 2) {
     attempt++;
 
-    const writerStartMsg = isDevTask
-      ? (attempt === 1 ? "코드 작성 시작." : "...수정할게요.")
-      : (attempt === 1 ? "이 숫자 뒤에 얼마나 많은 이야기가..." : "...알겠습니다. 수정할게요.");
+    const msgs = writerMessages[writerAgentId];
+    const writerStartMsg = attempt === 1 ? msgs.start1 : msgs.start2;
 
     send({ type: "agent_start", agentId: writerAgentId, message: writerStartMsg });
     if (attempt === 2) send({ type: "agent_expression", agentId: writerAgentId, expression: null });
@@ -478,7 +492,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       );
       if (!writerStreamed && overReport.trim()) await streamChunked(writerAgentId, overReport, send);
       await delay(1800);
-      send({ type: "agent_done", agentId: writerAgentId, message: isDevTask ? "구현 완료. 팩트 부장님 리뷰 받을게요." : "리포트 완성. 걸작이에요. 팩트 부장님께." });
+      const doneMsg = isDevTask ? "구현 완료. 팩트 부장님 리뷰 받을게요." : "완성. 팩트 부장님께.";
+      send({ type: "agent_done", agentId: writerAgentId, message: doneMsg });
     } catch {
       overReport = `# ${topic}\n\n${ka.conclusion}\n\n${pocke.key_facts.join("\n")}`;
       send({ type: "agent_done", agentId: writerAgentId, message: "초안 완성. 팩트 부장님께." });
@@ -519,14 +534,14 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         send({ type: "agent_expression", agentId: "fact", expression: "err" });
         send({ type: "agent_expression", agentId: writerAgentId, expression: "sad" });
         await delay(400);
-        send({ type: "agent_message", agentId: writerAgentId, message: isDevTask ? "...다시 짤게요." : "...다시요? (상처받음)" });
+        send({ type: "agent_message", agentId: writerAgentId, message: writerMessages[writerAgentId].retry });
         await delay(800);
         send({ type: "agent_expression", agentId: "fact", expression: null });
       } else {
         send({ type: "agent_expression", agentId: "fact", expression: null });
         send({ type: "agent_done", agentId: "fact", message: "통과." });
         await delay(300);
-        send({ type: "agent_done", agentId: writerAgentId, message: isDevTask ? "통과. 배포 가능." : "통과라고 했다... 역시 걸작." });
+        send({ type: "agent_done", agentId: writerAgentId, message: writerMessages[writerAgentId].done });
       }
     } catch {
       factPassed = true;
@@ -537,7 +552,30 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   if (!factPassed) {
     send({ type: "agent_expression", agentId: "fact", expression: null });
     send({ type: "agent_done", agentId: "fact", message: "통과 처리." });
-    send({ type: "agent_done", agentId: writerAgentId, message: isDevTask ? "...배포합니다." : "...감사합니다." });
+    send({ type: "agent_done", agentId: writerAgentId, message: writerMessages[writerAgentId].final });
+  }
+
+  // ── 5.5. Root: 배포 계획 (dev 태스크만) ──────────────────────────────
+  if (isDevTask && agentEnabled(agentConfigs, "root")) {
+    await delay(400);
+    send({ type: "agent_message", agentId: "root", message: "구현 확인. 파이프라인 설계할게요." });
+    await delay(500);
+    send({ type: "agent_start", agentId: "root", message: "CI/CD 설계 중..." });
+    try {
+      let rootStreamed = false;
+      const rootOutput = await runAgent(
+        buildPrompt(agentConfigs, "root", { topic, report: overReport.slice(0, 600) }, promptVariants),
+        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "root") ?? 1 },
+        (chunk) => { if (chunk.trim()) { rootStreamed = true; send({ type: "agent_stream", agentId: "root", chunk }); } },
+      );
+      if (!rootStreamed && rootOutput.trim()) await streamChunked("root", rootOutput, send);
+      overReport += `\n\n---\n\n${rootOutput}`;
+      send({ type: "agent_done", agentId: "root", message: "파이프라인 준비됐어요. 자동화 완료." });
+    } catch {
+      send({ type: "agent_done", agentId: "root", message: "배포 계획 완료." });
+    }
+  } else if (agentEnabled(agentConfigs, "root")) {
+    send({ type: "agent_done", agentId: "root", message: "이번엔 배포 없어요." });
   }
 
   const reportId = crypto.randomUUID();

@@ -39,7 +39,9 @@ export default function ProjectWorkView({
   const activeAgentId =
     AGENTS.find((a) => agentStatus[a.id] === "active")?.id ?? null;
   const activeAgent = activeAgentId ? AGENT_MAP[activeAgentId] : null;
-  if (activeAgent) lastAgentRef.current = activeAgent;
+  useEffect(() => {
+    if (activeAgent) lastAgentRef.current = activeAgent;
+  }, [activeAgent]);
   const displayAgent = activeAgent ?? lastAgentRef.current;
 
   // disabled 상태가 아닌 스테이지만 파이프라인에 표시

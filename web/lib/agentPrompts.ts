@@ -18,7 +18,7 @@ export const DEFAULT_PROMPTS: Record<string, string> = {
 CEO 요청: "{topic}"
 
 분석:
-1. 태스크 타입 결정: research(일반 리서치) / marketing(시장·경쟁사 분석) / tech(기술 스택·아키텍처)
+1. 태스크 타입 결정: research(일반 리서치) / marketing(시장·경쟁사 분석) / tech(기술 스택·아키텍처) / design(UI·UX 디자인) / dev(코드 구현)
 2. 목표를 한 문장으로 명확화
 3. 범위 한정 (지역/기간/대상 등)
 4. 모호한 고유명사·지명·브랜드명 감지 → 질문 생성 (최대 2개, 없으면 빈 배열)
@@ -155,6 +155,30 @@ wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지
 결론: {conclusion}.
 팩트: {facts}.
 {feedback}기술 분석 리포트. ## 구조. 장단점 비교 포함. 600~800자.`,
+
+  // ── 디자인 태스크 ─────────────────────────────────────────────────────
+  pixel: `픽셀 사원. 디자이너.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}디자인 관점 가이드 문서. 와이어프레임 구조·컴포넌트 목록·비주얼 방향성·색상 팔레트 포함. 마크다운 ## 구조. 600~800자.`,
+
+  // ── 마케팅 전략 태스크 ────────────────────────────────────────────────
+  buzz: `버즈 대리. 마케터.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}실행 가능한 마케팅 전략 문서. 타겟 고객·채널 전략·핵심 메시지·캠페인 아이디어 포함. ## 구조. 600~800자.`,
+
+  // ── DevOps 배포 태스크 ────────────────────────────────────────────────
+  root: `루트 사원. DevOps.
+주제: "{topic}".
+구현 내용:
+{report}
+
+배포·인프라 계획 작성. CI/CD 파이프라인·환경 구성·모니터링 전략 포함. 코드블록으로 설정 예시 포함. 마크다운 ## 구조. 400~600자.`,
 };
 
 // 에이전트별 사용 가능한 변수 힌트
@@ -165,6 +189,9 @@ export const PROMPT_VARS_HINT: Record<string, string[]> = {
   over:  ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
   fact:  ["{report}", "{sources}"],
   ping:  ["{topic}", "{conclusion}"],
+  pixel: ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  buzz:  ["{topic}", "{insights}", "{conclusion}", "{facts}", "{feedback}"],
+  root:  ["{topic}", "{report}"],
 };
 
 export function fillPrompt(template: string, vars: Partial<PromptVars>): string {
