@@ -87,21 +87,24 @@ CEO 입력
   - 성찰형 질문 (API): 버튼 눌릴 때만 호출, 1~3문장
   - API: GET /api/agent/[id]/history, POST /api/agent/[id]/chat
   - 페르소나: lib/agentPersonas.ts
+- [x] ProjectSetupModal 시작 모드 선택 UI
+  - `ProjectConfig.mode: "background" | "checkin" | "full"`
+  - background: 체크인 게이트 2곳 모두 스킵 (clarify_request, ceo_checkin)
+  - route.ts orchestrate()에 mode 파라미터 전파
+- [x] AgentImage 깜빡임 제거
+  - Next.js Image → background-image div로 교체
+  - window.Image() 동일 URL 프리로드 후 crossfade 시작
+- [x] DeptRoom 조직도 레이아웃 + 부서 소개 섹션
+  - Department 타입에 description·mission 필드 추가
+  - 최고직급자(110px) 상단 → 연결선 → 팀원(82px) 그리드
+  - 부서 설명·미션 태그 헤더 영역 추가
+- [x] 캐릭터 이미지 에셋 추가 (buzz·pixel·plan·root·run 폴더)
+- [x] 부서 배경 이미지 추가 (research·creative·operations.png)
 
-## 다음 작업
+## 잔여 작업
 
-### 진행 중: ProjectSetupModal 시작 모드 선택
-
-CEO가 프로젝트 시작 시 3가지 모드 중 선택:
-
-- **백그라운드** — 결과만 받기, UI 업데이트 최소화
-- **체크인** — 플랜 확인 + 포케 후 체크인 2곳만 개입 (현재 기본값)
-- **풀 모니터링** — 모든 에이전트 상태 실시간 확인
-
-`ProjectConfig`에 `mode: "background" | "checkin" | "full"` 필드 추가.
-파이프라인 route.ts에서 mode에 따라 체크인 게이트 스킵 여부 결정.
-
-### 잔여 작업
-
+- [ ] 캐릭터 이미지 — 일부 에이전트 working.png·done.png 미완성
+- [ ] 루트 컬러 충돌 — #34D399 vs 포케 #86EFAC · 핑 #6EE7B7 (모두 그린 계열)
 - [ ] OutputFormat 렌더러 — design_ui 타입 결과물 HTML 프리뷰
 - [ ] Tistory 자동 포스팅 — blog 타입 결과물 발행
+- [ ] 풀 모니터링 모드 UI 구현 (현재 checkin과 동일하게 동작)
