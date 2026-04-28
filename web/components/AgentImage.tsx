@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { AgentStatus } from "@/lib/agents";
 
@@ -25,15 +25,49 @@ function getImageSrc(defaultSrc: string, status: AgentStatus, expression: string
 export default function AgentImage({ defaultSrc, size, status, expression = null }: Props) {
   const [showIdle, setShowIdle] = useState(false);
   const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set());
-
   const resolvedSrc = (src: string) => failedSrcs.has(src) ? defaultSrc : src;
-  const handleError = (src: string) => setFailedSrcs((prev) => new Set([...prev, src]));
 
-  // 실제로 화면에 보이는 src
-  const [visibleSrc, setVisibleSrc] = useState(() => getImageSrc(defaultSrc, status, expression, false));
-  // 크로스페이드 중 아래 깔리는 이전 src
-  const [underSrc, setUnderSrc] = useState(() => getImageSrc(defaultSrc, status, expression, false));
-  const [fading, setFading] = useState(false);
+  const initial = getImageSrc(defaultSrc, status, expression, false);
+  const [srcA, setSrcA] = useState(initial); // 아래 레이어 (현재 보이는 이미지)
+  const [srcB, setSrcB] = useState(initial); // 위 레이어 (다음 이미지)
+  const [crossfading, setCrossfading] = useState(false);
+
+  const inTransition = useRef(false);
+  const pendingSrc = useRef<string | null>(null);
+  const currentTarget = useRef(initial);
+
+  // 최신 상태를 캡처하는 ref — stale closure 방지
+  const doTransition = useRef((_next: string) => {});
+  doTransition.current = (next: string) => {
+    if (next === currentTarget.current) return;
+    if (inTransition.current) {
+      pendingSrc.current = next;
+      return;
+    }
+
+    inTransition.current = true;
+    currentTarget.current = next;
+
+    // B 레이어에 미리 src 세팅 (opacity=0이라 보이지 않음)
+    setSrcB(next);
+
+    // 브라우저 캐시에 올린 후 crossfade 시작 → 깜빡임 없음
+    const img = new window.Image();
+    const proceed = () => {
+      setCrossfading(true);
+      setTimeout(() => {
+        setSrcA(next);
+        setCrossfading(false);
+        inTransition.current = false;
+        const p = pendingSrc.current;
+        pendingSrc.current = null;
+        if (p && p !== next) doTransition.current(p);
+      }, 400);
+    };
+    img.onload = proceed;
+    img.onerror = proceed; // 실패해도 전환은 진행
+    img.src = next;
+  };
 
   // idle 깜빡임 타이머
   useEffect(() => {
@@ -51,46 +85,32 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
     return () => { clearTimeout(t); clearInterval(cycle); };
   }, [status, expression]);
 
-  // 이미지 변경 → 크로스페이드
+  // 이미지 변경 감지 → 프리로드 후 크로스페이드
   useEffect(() => {
-    const next = getImageSrc(defaultSrc, status, expression, showIdle);
-    if (next === visibleSrc) return;
-
-    // 현재 보이는 이미지를 아래 레이어로, 새 이미지를 위 레이어로
-    setUnderSrc(visibleSrc);
-    setVisibleSrc(next);
-    setFading(true);
-
-    // 페이드 완료 후: 언더레이어도 새 이미지로 동기화 (fading=false 시 underSrc가 보임)
-    const t = setTimeout(() => {
-      setFading(false);
-      setUnderSrc(next);
-    }, 500);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    doTransition.current(getImageSrc(defaultSrc, status, expression, showIdle));
   }, [defaultSrc, status, expression, showIdle]);
 
   return (
     <div className="relative w-full h-full">
-      {/* 아래 레이어: 이전 이미지 — 페이드 아웃 */}
+      {/* 아래 레이어: 현재 이미지 — crossfade 시 fade out */}
       <Image
-        src={resolvedSrc(underSrc)}
+        src={resolvedSrc(srcA)}
         alt=""
         fill
-        className="object-cover transition-opacity duration-500"
-        style={{ opacity: fading ? 0 : 1 }}
+        className="object-cover"
+        style={{ opacity: crossfading ? 0 : 1, transition: "opacity 400ms ease" }}
         sizes={`${size}px`}
-        onError={() => handleError(underSrc)}
+        onError={() => setFailedSrcs((prev) => new Set([...prev, srcA]))}
       />
-      {/* 위 레이어: 새 이미지 — 페이드 인 */}
+      {/* 위 레이어: 다음 이미지 — crossfade 시 fade in (미리 로드돼 있음) */}
       <Image
-        src={resolvedSrc(visibleSrc)}
+        src={resolvedSrc(srcB)}
         alt=""
         fill
-        className="object-cover transition-opacity duration-500 absolute inset-0"
-        style={{ opacity: fading ? 1 : 0 }}
+        className="object-cover absolute inset-0"
+        style={{ opacity: crossfading ? 1 : 0, transition: "opacity 400ms ease" }}
         sizes={`${size}px`}
-        onError={() => handleError(visibleSrc)}
+        onError={() => setFailedSrcs((prev) => new Set([...prev, srcB]))}
       />
     </div>
   );
