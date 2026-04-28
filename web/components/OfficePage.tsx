@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { AGENTS, AGENT_MAP, PIPELINE, DEPARTMENTS, AgentStatus, AgentDef } from "@/lib/agents";
-import AgentWorkspace, { Idea } from "./AgentWorkspace";
 import AgentImage from "./AgentImage";
+import HologramPartition from "./HologramPartition";
+import DeptRoom from "./DeptRoom";
+import { Idea } from "./AgentWorkspace";
 
 type Props = {
   agentStatus: Record<string, AgentStatus>;
@@ -14,302 +17,237 @@ type Props = {
   lastTopic: string;
 };
 
-// 에이전트별 고정 모니터 바 높이
-const MONITOR_BARS: Record<string, number[]> = {
-  wiki:  [6, 12, 8, 10, 6],
-  pocke: [10, 6, 14, 8, 12],
-  ka:    [14, 8, 12, 6, 10],
-  over:  [8, 14, 6, 12, 8],
-  fact:  [6, 6, 14, 6, 6],
-  ping:  [12, 14, 10, 14, 8],
-};
-
-export default function OfficePage({ agentStatus, agentExpression, speaking, lastMessage, pingIdeas, lastTopic }: Props) {
-  const [selected, setSelected] = useState<AgentDef | null>(null);
+export default function OfficePage({
+  agentStatus, agentExpression, speaking, lastMessage, pingIdeas, lastTopic,
+}: Props) {
+  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
+  const [hoveredDeptId, setHoveredDeptId]   = useState<string | null>(null);
+  const isTransitioning = selectedDeptId !== null;
 
   const activeStageIdx = PIPELINE.findIndex((s) =>
     s.ids.some((id) => agentStatus[id] === "active")
   );
 
   return (
-    <>
-      <div className="h-full px-8 py-5 flex flex-col gap-3">
+    <div className="h-full flex flex-col px-8 py-5 gap-3">
 
-        {/* 파이프라인 플로우 */}
-        <div className="shrink-0 flex items-center gap-1 overflow-x-auto pb-0.5">
-          <span className="text-[9px] text-slate-600 tracking-[0.2em] uppercase mr-3 font-bold whitespace-nowrap shrink-0">
-            Pipeline
-          </span>
-          {PIPELINE.map((stage, i) => {
-            const isActive = i === activeStageIdx;
-            const isDone = activeStageIdx !== -1 && i < activeStageIdx;
-            const agent = AGENT_MAP[stage.ids[0]];
-
-            return (
-              <div key={i} className="flex items-center gap-1 shrink-0">
-                {i > 0 && (
-                  <div
-                    className="w-5 h-px transition-all duration-700"
-                    style={{
-                      background: isDone
-                        ? `${agent.color}60`
-                        : isActive
-                        ? `${agent.color}40`
-                        : "#1a2030",
-                    }}
-                  />
-                )}
+      {/* 파이프라인 플로우 */}
+      <div className="shrink-0 flex items-center gap-1 overflow-x-auto pb-0.5">
+        <span className="text-[9px] text-slate-600 tracking-[0.2em] uppercase mr-3 font-bold whitespace-nowrap shrink-0">
+          Pipeline
+        </span>
+        {PIPELINE.map((stage, i) => {
+          const isActive = i === activeStageIdx;
+          const isDone   = activeStageIdx !== -1 && i < activeStageIdx;
+          const agent    = AGENT_MAP[stage.ids[0]];
+          return (
+            <div key={i} className="flex items-center gap-1 shrink-0">
+              {i > 0 && (
                 <div
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide transition-all duration-500"
-                  style={
-                    isActive
-                      ? {
-                          background: `${agent.color}18`,
-                          border: `1px solid ${agent.color}55`,
-                          color: agent.color,
-                          boxShadow: `0 0 10px ${agent.glow}`,
-                        }
-                      : isDone
-                      ? {
-                          background: `${agent.color}08`,
-                          border: `1px solid ${agent.color}20`,
-                          color: `${agent.color}60`,
-                        }
-                      : {
-                          background: "transparent",
-                          border: "1px solid #1a2030",
-                          color: "#2a3347",
-                        }
-                  }
-                >
-                  {stage.ids.length > 1
-                    ? stage.ids.map((id) => AGENT_MAP[id].name).join("+")
-                    : agent.name}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 부서 그리드 */}
-        <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 overflow-hidden">
-          {DEPARTMENTS.map((dept) => {
-            const members = AGENTS.filter((a) => a.departmentId === dept.id);
-            if (members.length === 0) return null;
-
-            const deptHasActive = members.some((a) => agentStatus[a.id] === "active");
-
-            return (
-              <div
-                key={dept.id}
-                className="rounded-2xl border p-4 flex flex-col overflow-hidden relative transition-all duration-500"
-                style={{
-                  borderColor: deptHasActive ? `${dept.color}30` : `${dept.color}12`,
-                  background: deptHasActive ? `${dept.color}07` : `${dept.color}03`,
-                }}
-              >
-                {/* 배경 도트 그리드 */}
-                <div
-                  className="absolute inset-0 rounded-2xl pointer-events-none"
+                  className="w-5 h-px transition-all duration-700"
                   style={{
-                    backgroundImage: `radial-gradient(circle, ${dept.color}12 1px, transparent 1px)`,
-                    backgroundSize: "20px 20px",
-                    opacity: deptHasActive ? 1 : 0.4,
-                    transition: "opacity 0.5s",
+                    background: isDone
+                      ? `${agent.color}60`
+                      : isActive
+                      ? `${agent.color}40`
+                      : "#1a2030",
                   }}
                 />
+              )}
+              <div
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide transition-all duration-500"
+                style={
+                  isActive
+                    ? { background: `${agent.color}18`, border: `1px solid ${agent.color}55`, color: agent.color, boxShadow: `0 0 10px ${agent.glow}` }
+                    : isDone
+                    ? { background: `${agent.color}08`, border: `1px solid ${agent.color}20`, color: `${agent.color}60` }
+                    : { background: "transparent", border: "1px solid #1a2030", color: "#2a3347" }
+                }
+              >
+                {stage.ids.length > 1
+                  ? stage.ids.map((id) => AGENT_MAP[id].name).join("+")
+                  : agent.name}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-                {/* 부서 헤더 */}
-                <div className="flex items-center gap-2 mb-3 shrink-0 relative">
-                  <dept.icon size={11} style={{ color: `${dept.color}80` }} />
-                  <span
-                    className="text-[10px] font-bold tracking-[0.2em]"
-                    style={{ color: `${dept.color}90` }}
+      {/* 복도 + 방 영역 */}
+      <div className="relative flex-1 overflow-hidden rounded-2xl">
+
+        {/* ── 복도 뷰 ── */}
+        <div className="flex h-full">
+          {DEPARTMENTS.map((dept, di) => {
+            const members        = AGENTS.filter((a) => a.departmentId === dept.id);
+            const deptHasActive  = members.some((a) => agentStatus[a.id] === "active");
+            const isHovered      = hoveredDeptId === dept.id;
+            const otherHovered   = hoveredDeptId !== null && !isHovered;
+            const isDissolving   = isTransitioning;
+
+            return (
+              <div key={dept.id} className="flex flex-1 overflow-hidden">
+                {/* 파티션 (첫 번째 섹션 제외) */}
+                {di > 0 && (
+                  <HologramPartition
+                    color={dept.color}
+                    dissolving={isDissolving}
+                  />
+                )}
+
+                {/* 부서 섹션 */}
+                <motion.div
+                  layoutId={`dept-panel-${dept.id}`}
+                  className="relative flex-1 overflow-hidden cursor-pointer"
+                  style={{ borderRadius: di === 0 ? "16px 0 0 16px" : di === DEPARTMENTS.length - 1 ? "0 16px 16px 0" : 0 }}
+                  animate={{
+                    opacity: isTransitioning ? 0 : otherHovered ? 0.55 : 1,
+                    scale:   isTransitioning ? 0.97 : 1,
+                  }}
+                  transition={{ duration: 0.35, ease: "easeInOut" }}
+                  onHoverStart={() => !isTransitioning && setHoveredDeptId(dept.id)}
+                  onHoverEnd={() => setHoveredDeptId(null)}
+                  onClick={() => !isTransitioning && setSelectedDeptId(dept.id)}
+                >
+                  {/* 배경 단체사진 */}
+                  <motion.div
+                    className="absolute inset-0"
+                    animate={{
+                      filter: isHovered
+                        ? "brightness(0.28) saturate(0.9)"
+                        : "brightness(0.15) saturate(0.6)",
+                    }}
+                    transition={{ duration: 0.3 }}
                   >
-                    {dept.name}
-                  </span>
-                  <span className="text-[9px] text-slate-600">{dept.label}</span>
-                  {deptHasActive && (
-                    <div
-                      className="ml-auto w-1.5 h-1.5 rounded-full animate-pulse"
-                      style={{ background: dept.color }}
+                    <img
+                      src={`/departments/${dept.id}.png`}
+                      alt={dept.label}
+                      className="w-full h-full object-cover object-center"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
-                  )}
-                </div>
+                    {/* 사진 없을 때 fallback */}
+                    <div
+                      className="absolute inset-0"
+                      style={{ background: `radial-gradient(ellipse at center, ${dept.color}12 0%, #0b0f1e 100%)` }}
+                    />
+                  </motion.div>
 
-                {/* 에이전트 자리 */}
-                <div className="flex-1 flex items-center justify-center gap-6 flex-wrap relative">
-                  {members.map((agent) => {
-                    const status = agentStatus[agent.id] ?? "idle";
-                    const isActive = status === "active";
-                    const isDone = status === "done";
-                    const isWaiting = status === "waiting";
-                    const isDisabled = status === "disabled";
-                    const isSpeaking = speaking[agent.id];
-                    const msg = lastMessage[agent.id];
-                    const bars = MONITOR_BARS[agent.id] ?? [8, 12, 8, 10, 8];
+                  {/* 호버 glow 오버레이 */}
+                  <motion.div
+                    className="absolute inset-0 pointer-events-none"
+                    animate={{ opacity: isHovered ? 1 : 0 }}
+                    transition={{ duration: 0.3 }}
+                    style={{
+                      background: `linear-gradient(to top, ${dept.color}15 0%, transparent 60%)`,
+                      boxShadow: `inset 0 0 40px ${dept.color}10`,
+                    }}
+                  />
 
-                    return (
-                      <div
-                        key={agent.id}
-                        className="relative flex flex-col items-center gap-1.5 cursor-pointer group"
-                        onClick={() => setSelected(agent)}
+                  {/* 부서 헤더 */}
+                  <div className="absolute top-4 left-0 right-0 flex flex-col items-center gap-1 z-10">
+                    <motion.div
+                      animate={{ opacity: isHovered ? 1 : 0.5 }}
+                      transition={{ duration: 0.25 }}
+                      className="flex items-center gap-1.5"
+                    >
+                      <dept.icon size={10} style={{ color: dept.color }} />
+                      <span
+                        className="text-[10px] font-bold tracking-[0.2em] uppercase"
+                        style={{ color: dept.color }}
                       >
-                        {/* 말풍선 */}
-                        {msg && (isActive || isSpeaking) && (
-                          <div
-                            className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-10 animate-fadeIn"
-                            style={{ minWidth: 130, maxWidth: 200 }}
-                          >
-                            <div
-                              className="relative rounded-2xl rounded-b-sm px-3 py-2 text-[11px] text-slate-200 leading-snug"
-                              style={{
-                                background: "#0f1521",
-                                border: `1px solid ${agent.color}40`,
-                                boxShadow: `0 4px 20px ${agent.glow}`,
-                              }}
-                            >
-                              {msg}
-                              <div
-                                className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45"
-                                style={{
-                                  background: "#0f1521",
-                                  borderRight: `1px solid ${agent.color}40`,
-                                  borderBottom: `1px solid ${agent.color}40`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
+                        {dept.name}
+                      </span>
+                    </motion.div>
+                    <span className="text-[9px] text-slate-600">{dept.label}</span>
+                    {deptHasActive && (
+                      <div
+                        className="w-1.5 h-1.5 rounded-full animate-pulse mt-0.5"
+                        style={{ background: dept.color }}
+                      />
+                    )}
+                  </div>
 
-                        {/* 책상 영역 */}
-                        <div
-                          className="flex flex-col items-center gap-2 rounded-2xl px-3 pt-2 pb-3 transition-all duration-300 group-hover:bg-slate-800/30"
-                          style={{
-                            border: isActive
-                              ? `1px solid ${agent.color}35`
-                              : "1px solid transparent",
-                            background: isActive ? `${agent.color}06` : "transparent",
-                          }}
+                  {/* 에이전트 미니 아바타 */}
+                  <div className="absolute bottom-0 inset-x-0 flex items-end justify-center gap-3 flex-wrap px-3 pb-4">
+                    {members.map((agent, i) => {
+                      const status   = agentStatus[agent.id] ?? "idle";
+                      const isActive = status === "active";
+                      return (
+                        <motion.div
+                          key={agent.id}
+                          className="flex flex-col items-center gap-1"
+                          animate={{ y: isHovered ? -4 : 0, opacity: isHovered ? 1 : 0.7 }}
+                          transition={{ duration: 0.25, delay: i * 0.04 }}
                         >
-                          {/* 모니터 스크린 */}
                           <div
-                            className="w-14 h-8 rounded-md flex items-end justify-center gap-0.5 px-1.5 pb-1.5 transition-all duration-500"
+                            className="rounded-full overflow-hidden"
                             style={{
-                              background: isActive ? `${agent.color}12` : "#0a0f1a",
-                              border: `1px solid ${isActive ? `${agent.color}30` : "#0f1520"}`,
-                              boxShadow: isActive ? `0 0 8px ${agent.glow}` : "none",
+                              width: 44,
+                              height: 44,
+                              outline: isActive
+                                ? `2px solid ${agent.color}`
+                                : `1.5px solid ${agent.color}25`,
+                              outlineOffset: 2,
+                              boxShadow: isActive ? `0 0 14px ${agent.glow}` : `0 3px 10px rgba(0,0,0,0.5)`,
                             }}
                           >
-                            {bars.map((h, bi) => (
-                              <div
-                                key={bi}
-                                className="w-1 rounded-full"
-                                style={{
-                                  height: isActive ? h : 2,
-                                  background: isActive ? agent.color : "#1a2030",
-                                  opacity: isActive ? 0.7 : 0.3,
-                                  transition: `height 0.4s ease ${bi * 80}ms, background 0.4s ease`,
-                                  animation: isActive ? `pulse 1.5s ease-in-out ${bi * 300}ms infinite alternate` : "none",
-                                }}
-                              />
-                            ))}
+                            <AgentImage
+                              defaultSrc={agent.image}
+                              size={44}
+                              status={status}
+                              expression={agentExpression[agent.id] ?? null}
+                            />
                           </div>
+                          <span className="text-[8px] text-slate-500">{agent.name}</span>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
 
-                          {/* 아바타 */}
-                          <div className="relative">
-                            {isActive && (
-                              <div
-                                className="absolute inset-0 rounded-full animate-ping"
-                                style={{
-                                  background: agent.glow,
-                                  transform: "scale(1.4)",
-                                  opacity: 0.25,
-                                }}
-                              />
-                            )}
-                            <div
-                              className="relative rounded-full overflow-hidden transition-all duration-300"
-                              style={{
-                                width: 60,
-                                height: 60,
-                                outline: isActive
-                                  ? `2px solid ${agent.color}`
-                                  : isDone
-                                  ? `1px solid ${agent.color}35`
-                                  : `1.5px solid #1a2030`,
-                                outlineOffset: 3,
-                                boxShadow: isActive ? `0 0 20px 4px ${agent.glow}` : "none",
-                                opacity: isDisabled ? 0.2 : isWaiting ? 0.15 : 1,
-                                filter: isDisabled ? "grayscale(1)" : "none",
-                              }}
-                            >
-                              <AgentImage
-                                defaultSrc={agent.image}
-                                size={60}
-                                status={status}
-                                expression={agentExpression[agent.id] ?? null}
-                              />
-                              {isDone && (
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                  <span className="text-sm">✓</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* 이름표 */}
-                          <div className="text-center">
-                            <p
-                              className="text-xs font-semibold transition-colors duration-300"
-                              style={{
-                                color: isDisabled
-                                  ? "#1e2535"
-                                  : isActive
-                                  ? agent.color
-                                  : isDone
-                                  ? `${agent.color}50`
-                                  : "#475569",
-                              }}
-                            >
-                              {agent.name}
-                            </p>
-                            <p className="text-[9px] text-slate-600 mt-0.5">
-                              {agent.title} · {agent.role}
-                            </p>
-                          </div>
-
-                          {/* 책상 라인 */}
-                          <div
-                            className="w-16 h-1.5 rounded-full transition-all duration-500"
-                            style={{
-                              background: isActive
-                                ? `linear-gradient(90deg, transparent, ${agent.color}50, transparent)`
-                                : isDone
-                                ? `${agent.color}18`
-                                : "#0d1120",
-                              boxShadow: isActive ? `0 0 6px ${agent.glow}` : "none",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                  {/* 진입 힌트 */}
+                  <motion.div
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                    animate={{ opacity: isHovered ? 1 : 0 }}
+                    transition={{ duration: 0.25 }}
+                  >
+                    <div
+                      className="text-[9px] tracking-[0.3em] uppercase font-bold px-3 py-1.5 rounded-full backdrop-blur-sm"
+                      style={{
+                        color: dept.color,
+                        border: `1px solid ${dept.color}50`,
+                        background: "#0b0f1e70",
+                      }}
+                    >
+                      입장
+                    </div>
+                  </motion.div>
+                </motion.div>
               </div>
             );
           })}
         </div>
-      </div>
 
-      {selected && (
-        <AgentWorkspace
-          agent={selected}
-          pingIdeas={pingIdeas}
-          lastTopic={lastTopic}
-          onClose={() => setSelected(null)}
-        />
-      )}
-    </>
+        {/* ── 방 뷰 (선택된 부서) ── */}
+        <AnimatePresence>
+          {selectedDeptId && (() => {
+            const dept = DEPARTMENTS.find((d) => d.id === selectedDeptId);
+            if (!dept) return null;
+            return (
+              <DeptRoom
+                key={selectedDeptId}
+                dept={dept}
+                agentStatus={agentStatus}
+                agentExpression={agentExpression}
+                speaking={speaking}
+                lastMessage={lastMessage}
+                pingIdeas={pingIdeas}
+                lastTopic={lastTopic}
+                onBack={() => setSelectedDeptId(null)}
+              />
+            );
+          })()}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
