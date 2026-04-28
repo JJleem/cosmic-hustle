@@ -1,10 +1,7 @@
 import {
   Search,
-  BarChart2,
   Feather,
-  ShieldCheck,
-  Palette,
-  Megaphone,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,39 +40,18 @@ export const DEPARTMENTS: Department[] = [
     icon: Search,
   },
   {
-    id: "analysis",
-    name: "ANALYSIS",
-    label: "분석부",
-    color: "#A78BFA",
-    icon: BarChart2,
-  },
-  {
     id: "creative",
     name: "CREATIVE",
     label: "크리에이티브부",
-    color: "#F9A8D4",
+    color: "#A78BFA",
     icon: Feather,
   },
   {
-    id: "review",
-    name: "REVIEW",
-    label: "검토부",
+    id: "operations",
+    name: "OPERATIONS",
+    label: "운영부",
     color: "#CBD5E1",
-    icon: ShieldCheck,
-  },
-  {
-    id: "design",
-    name: "DESIGN",
-    label: "디자인부",
-    color: "#FDBA74",
-    icon: Palette,
-  },
-  {
-    id: "marketing",
-    name: "MARKETING",
-    label: "마케팅부",
-    color: "#FB923C",
-    icon: Megaphone,
+    icon: Briefcase,
   },
 ];
 
@@ -156,7 +132,7 @@ export const AGENTS: AgentDef[] = [
     color: "#A78BFA",
     glow: "rgba(167,139,250,0.5)",
     image: "/characters/ka/default.png",
-    departmentId: "analysis",
+    departmentId: "creative",
     responsibilities: ["데이터 가공", "패턴 발견", "인사이트 도출"],
     idleMessages: [
       "17.3%...",
@@ -244,7 +220,7 @@ export const AGENTS: AgentDef[] = [
     color: "#CBD5E1",
     glow: "rgba(203,213,225,0.5)",
     image: "/characters/fact/default.png",
-    departmentId: "review",
+    departmentId: "operations",
     responsibilities: ["팩트체크", "논리 오류 탐지", "품질 검수"],
     idleMessages: [
       ".",
@@ -266,7 +242,7 @@ export const AGENTS: AgentDef[] = [
     color: "#FDBA74",
     glow: "rgba(253,186,116,0.5)",
     image: "/characters/pixel/default.png",
-    departmentId: "design",
+    departmentId: "creative",
     responsibilities: ["UI/UX 설계", "디자인 가이드 작성", "시각 자료 기획"],
     idleMessages: [
       "이 여백... 맞아요?",
@@ -288,7 +264,7 @@ export const AGENTS: AgentDef[] = [
     color: "#FB923C",
     glow: "rgba(251,146,60,0.5)",
     image: "/characters/buzz/default.png",
-    departmentId: "marketing",
+    departmentId: "operations",
     responsibilities: ["마케팅 전략 수립", "카피라이팅", "채널 전략 설계"],
     idleMessages: [
       "바이럴 각이다!",
@@ -310,7 +286,7 @@ export const AGENTS: AgentDef[] = [
     color: "#34D399",
     glow: "rgba(52,211,153,0.5)",
     image: "/characters/root/default.png",
-    departmentId: "review",
+    departmentId: "operations",
     responsibilities: ["인프라 설계", "배포 파이프라인 구성", "모니터링 계획"],
     idleMessages: [
       "파이프라인 점검 중.",
