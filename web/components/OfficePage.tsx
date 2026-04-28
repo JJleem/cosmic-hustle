@@ -186,9 +186,11 @@ export default function OfficePage({
                               height: 44,
                               outline: isActive
                                 ? `2px solid ${agent.color}`
-                                : `1.5px solid ${agent.color}25`,
+                                : `1.5px solid ${agent.color}30`,
                               outlineOffset: 2,
-                              boxShadow: isActive ? `0 0 14px ${agent.glow}` : `0 3px 10px rgba(0,0,0,0.5)`,
+                              boxShadow: isActive
+                                ? `0 0 14px ${agent.glow}`
+                                : `0 4px 12px rgba(0,0,0,0.6)`,
                             }}
                           >
                             <AgentImage
@@ -198,7 +200,15 @@ export default function OfficePage({
                               expression={agentExpression[agent.id] ?? null}
                             />
                           </div>
-                          <span className="text-[8px] text-slate-500">{agent.name}</span>
+                          <span
+                            className="text-[8px] font-medium px-1.5 py-0.5 rounded-md backdrop-blur-sm"
+                            style={{
+                              color: isActive ? agent.color : "#cbd5e1",
+                              background: "#0b0f1e99",
+                            }}
+                          >
+                            {agent.name}
+                          </span>
                         </motion.div>
                       );
                     })}
