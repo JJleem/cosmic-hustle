@@ -13,6 +13,8 @@ export type Department = {
   label: string;
   color: string;
   icon: LucideIcon;
+  description: string;
+  mission: string[];
 };
 
 export type AgentDef = {
@@ -38,6 +40,8 @@ export const DEPARTMENTS: Department[] = [
     label: "리서치부",
     color: "#86EFAC",
     icon: Search,
+    description: "CEO의 질문을 실행 가능한 정보로 전환합니다. 방향 설정부터 정보 수집·분석·기술 구현까지 파이프라인의 핵심을 담당합니다.",
+    mission: ["정보 수집", "데이터 분석", "기술 구현"],
   },
   {
     id: "creative",
@@ -45,6 +49,8 @@ export const DEPARTMENTS: Department[] = [
     label: "크리에이티브부",
     color: "#A78BFA",
     icon: Feather,
+    description: "데이터를 언어와 시각으로 풀어냅니다. 리포트, 블로그, 디자인, 아이디어가 여기서 완성됩니다.",
+    mission: ["콘텐츠 제작", "UI/UX 설계", "아이디어 발굴"],
   },
   {
     id: "operations",
@@ -52,6 +58,8 @@ export const DEPARTMENTS: Department[] = [
     label: "운영부",
     color: "#CBD5E1",
     icon: Briefcase,
+    description: "결과물의 신뢰도를 보장합니다. 팩트체크, 인프라 배포, 마케팅 전략 — 파이프라인의 마지막 수비수들입니다.",
+    mission: ["팩트 검증", "인프라 배포", "마케팅 전략"],
   },
 ];
 
