@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Zap, Loader2 } from "lucide-react";
-import { AGENTS, AGENT_MAP, PIPELINE } from "@/lib/agents";
+import { AGENT_MAP } from "@/lib/agents";
 import { AllAgentSettings } from "@/lib/agentSettings";
+import { TASK_TYPES } from "@/lib/taskTypes";
 import AgentImage from "./AgentImage";
 
 export type AgentConfig = {
@@ -31,19 +32,26 @@ const DEFAULT_ROLES: Record<string, string> = {
   wiki:  "배경 지식 연결 + 위키 업데이트",
   pocke: "웹 리서치 + 정보 수집",
   ka:    "데이터 분석 + 인사이트 도출",
-  run:   "코드 구현 + 기술 문서 작성 (개발 태스크)",
-  over:  "리포트 작성 (리서치/마케팅 태스크)",
+  run:   "코드 구현 + 기술 문서 (개발 태스크)",
+  over:  "리포트 · 블로그 · 문서 작성",
+  pixel: "UI/UX 디자인 + HTML/CSS 결과물",
+  buzz:  "마케팅 전략 + 캠페인 기획",
   fact:  "팩트체크 + 품질 검수",
+  root:  "배포 계획 + CI/CD (개발 태스크)",
   ping:  "아이디어 캡처",
 };
 
-// 파이프라인 순서대로
-const ORDERED_AGENTS = ["plan", "wiki", "pocke", "ka", "run", "over", "fact", "ping"];
+// 파이프라인 전체 순서
+const ORDERED_AGENTS = ["plan", "wiki", "pocke", "ka", "run", "over", "pixel", "buzz", "fact", "root", "ping"];
 
-function initConfigs(defaultSettings?: AllAgentSettings): AgentConfig[] {
+function initConfigs(taskTypeId: string, defaultSettings?: AllAgentSettings): AgentConfig[] {
+  const activeIds = taskTypeId === "auto"
+    ? new Set(ORDERED_AGENTS)
+    : new Set(TASK_TYPES.find((t) => t.id === taskTypeId)?.defaultAgents ?? ORDERED_AGENTS);
+
   return ORDERED_AGENTS.map((id) => ({
     agentId: id,
-    enabled: true,
+    enabled: activeIds.has(id),
     basePrompt: defaultSettings?.[id]?.basePrompt,
     instruction: defaultSettings?.[id]?.instruction ?? "",
     maxTurns: defaultSettings?.[id]?.maxTurns,
@@ -52,7 +60,8 @@ function initConfigs(defaultSettings?: AllAgentSettings): AgentConfig[] {
 
 export default function ProjectSetupModal({ onStart, onClose, defaultSettings }: Props) {
   const [topic, setTopic] = useState("");
-  const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs(defaultSettings));
+  const [selectedTypeId, setSelectedTypeId] = useState("auto");
+  const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs("auto", defaultSettings));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
@@ -61,6 +70,16 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
   useEffect(() => {
     topicRef.current?.focus();
   }, []);
+
+  const handleTypeSelect = (typeId: string) => {
+    setSelectedTypeId(typeId);
+    const activeIds = typeId === "auto"
+      ? new Set(ORDERED_AGENTS)
+      : new Set(TASK_TYPES.find((t) => t.id === typeId)?.defaultAgents ?? ORDERED_AGENTS);
+    setConfigs((prev) =>
+      prev.map((c) => ({ ...c, enabled: activeIds.has(c.agentId) }))
+    );
+  };
 
   const toggleAgent = (agentId: string) => {
     setConfigs((prev) =>
@@ -83,7 +102,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
   const handleStart = () => {
     const trimmed = topic.trim();
     if (!trimmed) { topicRef.current?.focus(); return; }
-    onStart({ topic: trimmed, taskTypeId: "auto", agentConfigs: configs });
+    onStart({ topic: trimmed, taskTypeId: selectedTypeId, agentConfigs: configs });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -135,6 +154,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
   };
 
   const enabledCount = configs.filter((c) => c.enabled).length;
+  const selectedType = TASK_TYPES.find((t) => t.id === selectedTypeId);
 
   return (
     <div
@@ -216,6 +236,61 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* 태스크 타입 선택 */}
+          <div className="mb-5">
+            <label className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold block mb-2">
+              타입
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {/* 자동 감지 */}
+              <button
+                type="button"
+                onClick={() => handleTypeSelect("auto")}
+                className="text-[10px] px-3 py-1.5 rounded-full border transition-all"
+                style={
+                  selectedTypeId === "auto"
+                    ? { background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" }
+                    : { background: "#0d1222", color: "#475569", border: "1px solid #1e2535" }
+                }
+              >
+                ✦ 자동 감지
+              </button>
+
+              {TASK_TYPES.map((type) => {
+                const isSelected = selectedTypeId === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => handleTypeSelect(type.id)}
+                    className="text-[10px] px-3 py-1.5 rounded-full border transition-all"
+                    style={
+                      isSelected
+                        ? {
+                            background: `${type.color}20`,
+                            color: type.color,
+                            border: `1px solid ${type.color}60`,
+                          }
+                        : {
+                            background: "#0d1222",
+                            color: "#475569",
+                            border: "1px solid #1e2535",
+                          }
+                    }
+                  >
+                    {type.emoji} {type.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedType && (
+              <p className="text-[9px] mt-2" style={{ color: `${selectedType.color}90` }}>
+                {selectedType.description}
+              </p>
             )}
           </div>
 
@@ -377,9 +452,15 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings }:
             disabled={!topic.trim()}
             className="text-xs font-bold px-5 py-2 rounded-full transition-all"
             style={{
-              background: topic.trim() ? "linear-gradient(135deg, #1e3a5f, #2a4f7c)" : "#1a2235",
-              color: topic.trim() ? "#93c5fd" : "#334155",
-              border: `1px solid ${topic.trim() ? "#2a5a9c" : "#1e2535"}`,
+              background: topic.trim()
+                ? selectedType
+                  ? `linear-gradient(135deg, ${selectedType.color}30, ${selectedType.color}50)`
+                  : "linear-gradient(135deg, #1e3a5f, #2a4f7c)"
+                : "#1a2235",
+              color: topic.trim()
+                ? selectedType ? selectedType.color : "#93c5fd"
+                : "#334155",
+              border: `1px solid ${topic.trim() ? selectedType ? `${selectedType.color}60` : "#2a5a9c" : "#1e2535"}`,
             }}
           >
             시작 →
