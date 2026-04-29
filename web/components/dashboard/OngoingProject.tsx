@@ -24,15 +24,20 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs }: 
   const isDone = phase === "done";
   const isActive = isWorking || isDone;
 
-  const activeStageIdx = PIPELINE.findIndex((s) =>
+  // 활성화된 에이전트만 파이프라인에 표시 (disabled 제외)
+  const visiblePipeline = isActive
+    ? PIPELINE.filter((s) => s.ids.some((id) => agentStatus[id] !== "disabled"))
+    : PIPELINE;
+
+  const activeStageIdx = visiblePipeline.findIndex((s) =>
     s.ids.some((id) => agentStatus[id] === "active")
   );
 
   // 완료된 스테이지 수 (진행률 계산용)
-  const doneStageCount = PIPELINE.filter((s) =>
+  const doneStageCount = visiblePipeline.filter((s) =>
     s.ids.every((id) => agentStatus[id] === "done")
   ).length;
-  const progressPct = isDone ? 100 : Math.round((doneStageCount / PIPELINE.length) * 100);
+  const progressPct = isDone ? 100 : Math.round((doneStageCount / visiblePipeline.length) * 100);
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -86,7 +91,7 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs }: 
 
           {/* 파이프라인 아바타 스테이지 */}
           <div className="shrink-0 flex items-center justify-between px-1">
-            {PIPELINE.map((stage, i) => {
+            {visiblePipeline.map((stage, i) => {
               const isStageActive = i === activeStageIdx;
               const isStageDone =
                 activeStageIdx !== -1
@@ -202,23 +207,23 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs }: 
             <div
               className="shrink-0 rounded-xl px-3 py-2 flex items-center gap-2.5 animate-fadeIn"
               style={{
-                background: `${AGENT_MAP[PIPELINE[activeStageIdx].ids[0]].color}08`,
-                border: `1px solid ${AGENT_MAP[PIPELINE[activeStageIdx].ids[0]].color}20`,
+                background: `${AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color}08`,
+                border: `1px solid ${AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color}20`,
               }}
             >
               <div
                 className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse"
-                style={{ background: AGENT_MAP[PIPELINE[activeStageIdx].ids[0]].color }}
+                style={{ background: AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color }}
               />
               <div>
                 <span
                   className="text-[10px] font-bold"
-                  style={{ color: AGENT_MAP[PIPELINE[activeStageIdx].ids[0]].color }}
+                  style={{ color: AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color }}
                 >
-                  {PIPELINE[activeStageIdx].ids.map((id) => AGENT_MAP[id].name).join(", ")}
+                  {visiblePipeline[activeStageIdx].ids.map((id) => AGENT_MAP[id].name).join(", ")}
                 </span>
                 <span className="text-[10px] text-slate-500 ml-1.5">
-                  {PIPELINE[activeStageIdx].label} 진행중
+                  {visiblePipeline[activeStageIdx].label} 진행중
                 </span>
               </div>
             </div>

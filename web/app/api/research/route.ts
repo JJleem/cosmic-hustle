@@ -62,7 +62,7 @@ export const pendingResponses = new Map<string, (r: string) => void>();
 // 취소된 세션 ID 집합 — cancel 엔드포인트가 추가, orchestrate()가 체크
 export const cancelledSessions = new Set<string>();
 
-function waitForCEO(sessionId: string, timeoutMs = 90_000): Promise<string> {
+function waitForCEO(sessionId: string, timeoutMs = 600_000): Promise<string> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       pendingResponses.delete(sessionId);
@@ -311,19 +311,19 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   const writerAgentId = isDevTask ? "run" : isDesignTask ? "pixel" : isMarketingTask ? "buzz" : "over";
   const writerAgentName = writerAgentId === "run" ? "런" : writerAgentId === "pixel" ? "픽셀" : writerAgentId === "buzz" ? "버즈" : "오버";
 
-  // ── 파이프라인 체크인 스케줄러 ────────────────────────────────────────
-  // checkin 모드: 첫 번째 에이전트와 마지막 직전 에이전트가 체크인 요청
-  // 위키는 배경 준비 역할 — 체크인 파이프라인에서 제외
-  const activePipeline = ["pocke", "ka", writerAgentId, "fact"]
-    .filter((id) => agentEnabled(agentConfigs, id));
-  const _pLen = activePipeline.length;
-  const checkinPositions = new Set<number>(_pLen <= 2 ? [0] : [0, _pLen - 2]);
+  // ── 파이프라인 체크인 게이트 (에이전트 ID 기반, 구성에 따라 동적 결정) ─
+  // 게이트 1: 리서치·분석 완료 시점 — ka 있으면 ka 후, 없으면 pocke 후
+  // 게이트 2: 결과물 완료 시점    — fact 있으면 fact 후, 없으면 writer 후
+  const checkinGates = new Set<string>();
+  if (agentEnabled(agentConfigs, "ka"))           checkinGates.add("ka");
+  else if (agentEnabled(agentConfigs, "pocke"))   checkinGates.add("pocke");
+  if (agentEnabled(agentConfigs, "fact"))         checkinGates.add("fact");
+  else if (agentEnabled(agentConfigs, writerAgentId)) checkinGates.add(writerAgentId);
 
   let ceoNotes = "";
   const maybeCheckin = async (agentId: string, summary: string, keyFacts: string[]): Promise<void> => {
     if (mode !== "checkin") return;
-    const idx = activePipeline.indexOf(agentId);
-    if (idx < 0 || !checkinPositions.has(idx)) return;
+    if (!checkinGates.has(agentId)) return;
     send({ type: "ceo_checkin", sessionId, agentId, summary, keyFacts });
     const response = await waitForCEO(sessionId);
     if (response.trim()) ceoNotes += `[CEO: ${response}]\n`;
@@ -402,15 +402,6 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
   if (isCancelled(sessionId)) return;
 
-  // ── 포케 체크인 (checkin 모드, 파이프라인 스케줄에 따라 동적 결정) ──
-  {
-    const unverified = pocke.sources.filter((s) => s.url === "검증불가" || !s.url).length;
-    const summary = pocke.sources.length > 0
-      ? `소스 ${pocke.sources.length}개 수집${unverified > 0 ? ` (검증불가 ${unverified}개 포함)` : ""}`
-      : `팩트 ${pocke.key_facts.length}개 수집`;
-    await maybeCheckin("pocke", summary, pocke.key_facts.slice(0, 4));
-  }
-
   // 포케→카 커뮤니케이션
   if (agentEnabled(agentConfigs, "ka")) {
     await delay(400);
@@ -447,6 +438,15 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   );
 
   if (isCancelled(sessionId)) return;
+
+  // ── ka 체크인 — 리서치·분석 완료, 작성 전 CEO 확인 ───────────────────
+  {
+    const kaFacts = ka.insights.slice(0, 3).map((i) => `${i.title}: ${i.description.slice(0, 60)}`);
+    const kaSummary = ka.insights.length > 0
+      ? `인사이트 ${ka.insights.length}개 도출됐어요. 이 방향으로 작성할까요?`
+      : `분석 완료. 이 방향으로 계속할까요?`;
+    await maybeCheckin("ka", kaSummary, kaFacts);
+  }
 
   const writerVars = {
     topic,
@@ -538,13 +538,6 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       send({ type: "agent_done", agentId: writerAgentId, message: "초안 완성. 팩트 부장님께." });
     }
 
-    // 작가 완료 후 체크인 (첫 번째 시도만, 팩트 검토 전)
-    if (attempt === 1) {
-      const preview = overReport.slice(0, 400).replace(/\n+/g, " ").trim();
-      const previewLines = preview ? [`📄 ${preview}${overReport.length > 400 ? "..." : ""}`] : [];
-      await maybeCheckin(writerAgentId, "초안 완성됐어요. 팩트 검토 전 내용 확인해주세요.", previewLines);
-    }
-
     if (!agentEnabled(agentConfigs, "fact")) {
       factPassed = true;
       break;
@@ -599,6 +592,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     send({ type: "agent_expression", agentId: "fact", expression: null });
     send({ type: "agent_done", agentId: "fact", message: "통과 처리." });
     send({ type: "agent_done", agentId: writerAgentId, message: writerMessages[writerAgentId].final });
+  }
+
+  // ── fact 체크인 — 최종 결과물 CEO 확인 ──────────────────────────────
+  {
+    const preview = overReport.slice(0, 200).replace(/\n+/g, " ").trim();
+    await maybeCheckin("fact", "검토까지 완료됐어요. 최종 결과물 확인해주세요.",
+      preview ? [`📄 ${preview}${overReport.length > 200 ? "..." : ""}`] : []);
   }
 
   // ── 5.5. Root: 배포 계획 (dev 태스크만) ──────────────────────────────
