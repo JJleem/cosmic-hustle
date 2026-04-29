@@ -58,6 +58,7 @@ export default function Home() {
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionIdRef = useRef("");
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
 
@@ -305,6 +306,7 @@ export default function Home() {
     const newLastMsg: Record<string, string> = {};
     const newReports: Report[] = [];
     const newIdeas: Idea[] = [];
+    let lastCheckin: CeoCheckinState | null = null;
 
     for (const { event: e } of events) {
       switch (e.type) {
@@ -312,6 +314,7 @@ export default function Home() {
           newStatus[e.agentId as string] = "active";
           newStreamLog[e.agentId as string] = "";
           newLastMsg[e.agentId as string] = e.message as string;
+          lastCheckin = null; // 파이프라인이 체크인 이후에도 계속됨
           break;
         case "agent_done":
           newStatus[e.agentId as string] = "done";
@@ -335,6 +338,12 @@ export default function Home() {
         case "ping_ideas":
           newIdeas.push(...(e.ideas as Idea[]));
           break;
+        case "clarify_request":
+          lastCheckin = { type: "clarify_request", sessionId, agentId: "plan", questions: e.questions as string[] };
+          break;
+        case "ceo_checkin":
+          lastCheckin = { type: "ceo_checkin", sessionId, agentId: e.agentId as string, summary: e.summary as string, keyFacts: e.keyFacts as string[] };
+          break;
       }
     }
 
@@ -347,7 +356,37 @@ export default function Home() {
     setPhase(status === "done" ? "done" : "working");
     sessionIdRef.current = sessionId;
 
-    if (status !== "working") localStorage.removeItem("cosmicHustleSession");
+    if (status !== "working") {
+      localStorage.removeItem("cosmicHustleSession");
+      return;
+    }
+
+    // 체크인 대기 중이면 UI 복원
+    if (lastCheckin) setCeoCheckin(lastCheckin);
+
+    // 새 이벤트 폴링 시작
+    let lastSeq = events.length > 0 ? events[events.length - 1].seq : 0;
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const pollRes = await fetch(`/api/research/${sessionId}/events?since=${lastSeq}`);
+        const { status: pollStatus, events: newEvents } = await pollRes.json() as {
+          status: string;
+          events: Array<{ seq: number; event: Record<string, unknown> }>;
+        };
+        for (const { seq, event } of newEvents) {
+          handleSSE(event, resumeTopic);
+          lastSeq = seq;
+        }
+        if (pollStatus !== "working") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          if (pollStatus === "done") {
+            localStorage.removeItem("cosmicHustleSession");
+          }
+        }
+      } catch { /* 네트워크 오류 무시 */ }
+    }, 3000);
   };
 
   const handleCeoResponse = async (sessionId: string, response: string) => {
@@ -362,6 +401,7 @@ export default function Home() {
   const stopResearch = () => {
     abortRef.current?.abort();
     abortRef.current = null;
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     const sId = sessionIdRef.current;
     if (sId) {
       void fetch(`/api/research/${sId}/cancel`, { method: "POST" });
@@ -466,7 +506,7 @@ export default function Home() {
         {tab === "dashboard" && (
           <div className="h-full grid grid-cols-2 grid-rows-2 gap-4 p-6">
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} />
+              <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} onStop={stopResearch} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <ReportBoard reports={reports} />
@@ -517,7 +557,7 @@ export default function Home() {
       )}
 
       {ceoCheckin && (
-        <CeoCheckin state={ceoCheckin} onRespond={handleCeoResponse} />
+        <CeoCheckin state={ceoCheckin} onRespond={handleCeoResponse} onCancel={stopResearch} />
       )}
 
       {phase === "working" && currentMode === "full" && (

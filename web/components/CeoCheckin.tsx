@@ -23,6 +23,7 @@ export type CeoCheckinState = ClarifyRequest | CeoCheckin;
 type Props = {
   state: CeoCheckinState;
   onRespond: (sessionId: string, response: string) => void;
+  onCancel?: () => void;
 };
 
 const CONTENT_LABEL: Record<string, string> = {
@@ -39,7 +40,7 @@ const CONTENT_LABEL: Record<string, string> = {
   ping:  "아이디어 목록",
 };
 
-export default function CeoCheckin({ state, onRespond }: Props) {
+export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
   const [answer, setAnswer] = useState("");
   const agent = AGENTS.find((a) => a.id === state.agentId);
   const contentLabel = CONTENT_LABEL[state.agentId] ?? "작업 내용";
@@ -89,10 +90,21 @@ export default function CeoCheckin({ state, onRespond }: Props) {
               {state.type === "clarify_request" ? "시작 전 확인 요청" : "체크인 요청"}
             </p>
           </div>
-          <div
-            className="w-2 h-2 rounded-full animate-pulse shrink-0"
-            style={{ background: agent?.color ?? "#94a3b8" }}
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            <div
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{ background: agent?.color ?? "#94a3b8" }}
+            />
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="text-[10px] text-slate-500 hover:text-red-400 transition-colors px-2 py-1 rounded-lg hover:bg-red-400/10"
+                title="프로젝트 중단"
+              >
+                중단
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 내용 */}

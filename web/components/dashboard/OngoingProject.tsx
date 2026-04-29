@@ -9,6 +9,7 @@ type Props = {
   phase: "idle" | "working" | "done";
   agentStatus: Record<string, AgentStatus>;
   handoffs: Handoff[];
+  onStop?: () => void;
 };
 
 function timeLabel(at: Date): string {
@@ -19,7 +20,7 @@ function timeLabel(at: Date): string {
   return at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function OngoingProject({ topic, phase, agentStatus, handoffs }: Props) {
+export default function OngoingProject({ topic, phase, agentStatus, handoffs, onStop }: Props) {
   const isWorking = phase === "working";
   const isDone = phase === "done";
   const isActive = isWorking || isDone;
@@ -47,11 +48,21 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs }: 
           진행중인 프로젝트
         </p>
         {isActive && (
-          <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${isWorking ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
-            <span className={`text-[9px] font-bold tracking-widest ${isWorking ? "text-emerald-400" : "text-slate-500"}`}>
-              {isWorking ? "LIVE" : "DONE"}
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${isWorking ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+              <span className={`text-[9px] font-bold tracking-widest ${isWorking ? "text-emerald-400" : "text-slate-500"}`}>
+                {isWorking ? "LIVE" : "DONE"}
+              </span>
+            </div>
+            {isWorking && onStop && (
+              <button
+                onClick={onStop}
+                className="text-[9px] text-slate-500 hover:text-red-400 transition-colors px-2 py-0.5 rounded-full border border-slate-700 hover:border-red-400/40 hover:bg-red-400/10"
+              >
+                중단
+              </button>
+            )}
           </div>
         )}
       </div>
