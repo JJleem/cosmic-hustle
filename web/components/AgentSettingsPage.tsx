@@ -52,7 +52,7 @@ export default function AgentSettingsPage({ settings, onChange }: Props) {
 
   return (
     <div className="h-full flex overflow-hidden">
-      {/* 에이전트 목록 */}
+      {/* 사이드바 */}
       <div
         className="w-56 shrink-0 border-r flex flex-col"
         style={{ borderColor: "#1a2235" }}
@@ -110,7 +110,7 @@ export default function AgentSettingsPage({ settings, onChange }: Props) {
         })}
       </div>
 
-      {/* 에디터 */}
+      {/* 에이전트 에디터 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 헤더 */}
         <div

@@ -1,10 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2 } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
+
+function extractHtml(content: string): string | null {
+  const match = content.match(/```html\s*([\s\S]*?)```/);
+  if (match) return match[1].trim();
+  const trimmed = content.trim();
+  if (/^<!DOCTYPE html/i.test(trimmed) || /^<html/i.test(trimmed)) return trimmed;
+  return null;
+}
 
 export type Report = {
   id: string;
@@ -97,6 +105,7 @@ export default function ReportBoard({ reports }: Props) {
   const [translating, setTranslating] = useState(false);
   const [translated, setTranslated] = useState<string | null>(null);
   const [showTranslated, setShowTranslated] = useState(false);
+  const [htmlViewMode, setHtmlViewMode] = useState<"preview" | "source">("preview");
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelected(null); };
@@ -170,7 +179,7 @@ export default function ReportBoard({ reports }: Props) {
               return (
                 <div
                   key={r.id}
-                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); }}
+                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); setHtmlViewMode("preview"); }}
                   className="rounded-xl border border-slate-500 bg-slate-700/50 p-3 hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1.5">
@@ -244,6 +253,24 @@ export default function ReportBoard({ reports }: Props) {
 
               {/* 액션 버튼 */}
               <div className="flex items-center gap-1 shrink-0 ml-1">
+                {extractHtml(selected.content) && (
+                  <>
+                    <button
+                      onClick={() => setHtmlViewMode((m) => m === "preview" ? "source" : "preview")}
+                      title={htmlViewMode === "preview" ? "소스 보기" : "프리뷰 보기"}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all"
+                      style={
+                        htmlViewMode === "preview"
+                          ? { background: "#14321e", color: "#4ade80", border: "1px solid #166534" }
+                          : { color: "#94a3b8" }
+                      }
+                    >
+                      {htmlViewMode === "preview" ? <Code size={12} /> : <Monitor size={12} />}
+                      <span>{htmlViewMode === "preview" ? "소스" : "프리뷰"}</span>
+                    </button>
+                    <div className="w-px h-4 bg-slate-700" />
+                  </>
+                )}
                 <button
                   onClick={handleTranslate}
                   title={translated ? (showTranslated ? "원문 보기" : "영문 보기") : "영어로 번역"}
@@ -294,23 +321,57 @@ export default function ReportBoard({ reports }: Props) {
             </div>
 
             {/* 본문 */}
-            <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
-              {showTranslated && translated ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-                    <Languages size={11} className="text-blue-400" />
-                    <span className="text-[10px] text-blue-400 font-medium">English Translation (by Over)</span>
+            {(() => {
+              const htmlContent = extractHtml(selected.content);
+              if (htmlContent && !showTranslated) {
+                if (htmlViewMode === "preview") {
+                  return (
+                    <div className="flex-1 overflow-hidden flex flex-col">
+                      <div className="shrink-0 flex items-center gap-2 px-6 py-2 border-b border-slate-800/60" style={{ background: "#060a10" }}>
+                        <div className="flex gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+                        </div>
+                        <span className="text-[10px] text-slate-600 ml-2">HTML Preview</span>
+                      </div>
+                      <iframe
+                        srcDoc={htmlContent}
+                        className="flex-1 w-full border-0"
+                        sandbox="allow-scripts"
+                        title="HTML Preview"
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-hide">
+                    <pre className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap break-words font-mono">
+                      {htmlContent}
+                    </pre>
                   </div>
-                  <div className="report-body text-sm text-slate-300 leading-relaxed">
-                    <ReactMarkdown>{translated}</ReactMarkdown>
-                  </div>
+                );
+              }
+              return (
+                <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
+                  {showTranslated && translated ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
+                        <Languages size={11} className="text-blue-400" />
+                        <span className="text-[10px] text-blue-400 font-medium">English Translation (by Over)</span>
+                      </div>
+                      <div className="report-body text-sm text-slate-300 leading-relaxed">
+                        <ReactMarkdown>{translated}</ReactMarkdown>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="report-body text-sm text-slate-300 leading-relaxed">
+                      <ReactMarkdown>{selected.content}</ReactMarkdown>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="report-body text-sm text-slate-300 leading-relaxed">
-                  <ReactMarkdown>{selected.content}</ReactMarkdown>
-                </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* 푸터 */}
             <div className="shrink-0 px-8 py-3 border-t border-slate-800 flex items-center justify-between">

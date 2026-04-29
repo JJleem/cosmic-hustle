@@ -248,6 +248,17 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   let resolvedTaskType = taskTypeId;
   let promptVariants: Record<string, string> = TASK_TYPE_MAP[taskTypeId]?.promptVariants ?? {};
 
+  // maybeCheckin은 plan 이전에 사용되므로 먼저 선언
+  let ceoNotes = "";
+  const checkinGates = new Set<string>();
+  async function maybeCheckin(agentId: string, summary: string, keyFacts: string[]): Promise<void> {
+    if (mode !== "checkin") return;
+    if (!checkinGates.has(agentId)) return;
+    send({ type: "ceo_checkin", sessionId, agentId, summary, keyFacts });
+    const response = await waitForCEO(sessionId);
+    if (response.trim()) ceoNotes += `[CEO: ${response}]\n`;
+  }
+
   // ── 0. 플랜 차장 — 의도 파악 + 태스크 정의 + 팀 구성 ────────────────────
   if (agentEnabled(agentConfigs, "plan")) {
     send({ type: "agent_start", agentId: "plan", message: "요구사항 파악 중. 티켓 열게요." });
@@ -334,18 +345,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       return true;
     });
   const _pLen = seqPipeline.length;
-  const checkinGates = new Set<string>();
   if (_pLen >= 1) checkinGates.add(seqPipeline[0]);
   if (_pLen >= 3) checkinGates.add(seqPipeline[_pLen - 2]);
-
-  let ceoNotes = "";
-  const maybeCheckin = async (agentId: string, summary: string, keyFacts: string[]): Promise<void> => {
-    if (mode !== "checkin") return;
-    if (!checkinGates.has(agentId)) return;
-    send({ type: "ceo_checkin", sessionId, agentId, summary, keyFacts });
-    const response = await waitForCEO(sessionId);
-    if (response.trim()) ceoNotes += `[CEO: ${response}]\n`;
-  };
 
   // ── 1. Wiki: wiki-llm에서 배경 지식 읽기 ──────────────────────────────
   let wikiContext = `{"context": "${topic}에 대한 일반적 배경", "keywords": ["${topic}"], "wiki_pages_found": []}`;
@@ -671,13 +672,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   await db.insert(reports).values({
     id: reportId,
     sessionId,
-    agentId: "over",
+    agentId: writerAgentId,
     topic,
     content: overReport,
     createdAt: new Date(),
   });
 
-  send({ type: "report", agentId: "over", topic, content: overReport, reportId });
+  send({ type: "report", agentId: writerAgentId, topic, content: overReport, reportId });
 
   // ── 6. Ping + Wiki 동시 ──────────────────────────────────────────────
   await delay(300);
