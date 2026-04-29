@@ -295,8 +295,11 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       }
 
       send({ type: "agent_done", agentId: "plan", message: plan.plan_note || "기획 완료. 팀 투입할게요." });
+      await maybeCheckin("plan", plan.plan_note || "기획 방향 잡았어요. 이대로 진행할까요?",
+        [plan.objective, plan.scope, plan.output_format ? `형식: ${plan.output_format}` : ""].filter(Boolean) as string[]);
     } catch {
       send({ type: "agent_done", agentId: "plan", message: "기획 완료." });
+      await maybeCheckin("plan", "기획 완료됐어요. 이대로 진행할까요?", []);
     }
     await delay(400);
   }
@@ -311,14 +314,18 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   const writerAgentId = isDevTask ? "run" : isDesignTask ? "pixel" : isMarketingTask ? "buzz" : "over";
   const writerAgentName = writerAgentId === "run" ? "런" : writerAgentId === "pixel" ? "픽셀" : writerAgentId === "buzz" ? "버즈" : "오버";
 
-  // ── 파이프라인 체크인 게이트 (에이전트 ID 기반, 구성에 따라 동적 결정) ─
-  // 게이트 1: 리서치·분석 완료 시점 — ka 있으면 ka 후, 없으면 pocke 후
-  // 게이트 2: 결과물 완료 시점    — fact 있으면 fact 후, 없으면 writer 후
+  // ── 파이프라인 체크인 게이트 ─────────────────────────────────────────
+  // 실행 순서 배열을 만들고, 위치 기반으로 게이트 결정:
+  //   gate1 = 첫 번째 에이전트 완료 후
+  //   gate2 = 마지막 에이전트 직전 (두 번째에서 끝) 완료 후
+  // 에이전트 이름을 가정하지 않음 — 어떤 조합이든 동작
+  const seqPipeline = (["plan", "pocke", "ka", writerAgentId, "fact"] as string[])
+    .concat(isDevTask ? ["root"] : [])
+    .filter((id) => agentEnabled(agentConfigs, id));
+  const _pLen = seqPipeline.length;
   const checkinGates = new Set<string>();
-  if (agentEnabled(agentConfigs, "ka"))           checkinGates.add("ka");
-  else if (agentEnabled(agentConfigs, "pocke"))   checkinGates.add("pocke");
-  if (agentEnabled(agentConfigs, "fact"))         checkinGates.add("fact");
-  else if (agentEnabled(agentConfigs, writerAgentId)) checkinGates.add(writerAgentId);
+  if (_pLen >= 1) checkinGates.add(seqPipeline[0]);
+  if (_pLen >= 3) checkinGates.add(seqPipeline[_pLen - 2]);
 
   let ceoNotes = "";
   const maybeCheckin = async (agentId: string, summary: string, keyFacts: string[]): Promise<void> => {
@@ -401,6 +408,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   );
 
   if (isCancelled(sessionId)) return;
+
+  {
+    const summary = pocke.sources.length > 0
+      ? `소스 ${pocke.sources.length}개 수집됐어요.`
+      : `팩트 ${pocke.key_facts.length}개 수집됐어요.`;
+    await maybeCheckin("pocke", summary, pocke.key_facts.slice(0, 4));
+  }
 
   // 포케→카 커뮤니케이션
   if (agentEnabled(agentConfigs, "ka")) {
@@ -538,6 +552,12 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       send({ type: "agent_done", agentId: writerAgentId, message: "초안 완성. 팩트 부장님께." });
     }
 
+    if (attempt === 1) {
+      const preview = overReport.slice(0, 200).replace(/\n+/g, " ").trim();
+      await maybeCheckin(writerAgentId, "초안 완성됐어요. 계속할까요?",
+        preview ? [`📄 ${preview}${overReport.length > 200 ? "..." : ""}`] : []);
+    }
+
     if (!agentEnabled(agentConfigs, "fact")) {
       factPassed = true;
       break;
@@ -617,8 +637,10 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       if (!rootStreamed && rootOutput.trim()) await streamChunked("root", rootOutput, send);
       overReport += `\n\n---\n\n${rootOutput}`;
       send({ type: "agent_done", agentId: "root", message: "파이프라인 준비됐어요. 자동화 완료." });
+      await maybeCheckin("root", "배포 파이프라인 설계까지 완료됐어요. 확인해주세요.", []);
     } catch {
       send({ type: "agent_done", agentId: "root", message: "배포 계획 완료." });
+      await maybeCheckin("root", "배포 계획 완료됐어요. 확인해주세요.", []);
     }
   } else if (agentEnabled(agentConfigs, "root")) {
     send({ type: "agent_done", agentId: "root", message: "이번엔 배포 없어요." });
