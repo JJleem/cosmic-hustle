@@ -295,8 +295,13 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       }
 
       send({ type: "agent_done", agentId: "plan", message: plan.plan_note || "기획 완료. 팀 투입할게요." });
-      await maybeCheckin("plan", plan.plan_note || "기획 방향 잡았어요. 이대로 진행할까요?",
-        [plan.objective, plan.scope, plan.output_format ? `형식: ${plan.output_format}` : ""].filter(Boolean) as string[]);
+      await maybeCheckin("plan", "기획이 완료됐어요. 이 방향으로 진행할까요?", [
+        `목적: ${plan.objective}`,
+        ...(plan.scope ? [`범위: ${plan.scope}`] : []),
+        `태스크 타입: ${plan.task_type}`,
+        `출력 형식: ${plan.output_format}`,
+        ...(plan.plan_note ? [`메모: ${plan.plan_note}`] : []),
+      ]);
     } catch {
       send({ type: "agent_done", agentId: "plan", message: "기획 완료." });
       await maybeCheckin("plan", "기획 완료됐어요. 이대로 진행할까요?", []);
@@ -410,10 +415,10 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   if (isCancelled(sessionId)) return;
 
   {
-    const summary = pocke.sources.length > 0
-      ? `소스 ${pocke.sources.length}개 수집됐어요.`
-      : `팩트 ${pocke.key_facts.length}개 수집됐어요.`;
-    await maybeCheckin("pocke", summary, pocke.key_facts.slice(0, 4));
+    const summary = `소스 ${pocke.sources.length}개, 팩트 ${pocke.key_facts.length}개 수집됐어요.`;
+    const factLines = pocke.key_facts.slice(0, 4).map((f) => `📌 ${f}`);
+    const sourceLines = pocke.sources.slice(0, 3).map((s) => `🔗 ${s.title}${s.summary ? `: ${s.summary.slice(0, 70)}` : ""}`);
+    await maybeCheckin("pocke", summary, [...factLines, ...sourceLines]);
   }
 
   // 포케→카 커뮤니케이션
@@ -453,13 +458,15 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
   if (isCancelled(sessionId)) return;
 
-  // ── ka 체크인 — 리서치·분석 완료, 작성 전 CEO 확인 ───────────────────
   {
-    const kaFacts = ka.insights.slice(0, 3).map((i) => `${i.title}: ${i.description.slice(0, 60)}`);
     const kaSummary = ka.insights.length > 0
       ? `인사이트 ${ka.insights.length}개 도출됐어요. 이 방향으로 작성할까요?`
       : `분석 완료. 이 방향으로 계속할까요?`;
-    await maybeCheckin("ka", kaSummary, kaFacts);
+    const kaLines = [
+      ...(ka.conclusion ? [`결론: ${ka.conclusion.slice(0, 120)}`] : []),
+      ...ka.insights.slice(0, 4).map((i) => `💡 ${i.title}: ${i.description.slice(0, 80)}`),
+    ];
+    await maybeCheckin("ka", kaSummary, kaLines);
   }
 
   const writerVars = {
@@ -553,9 +560,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     }
 
     if (attempt === 1) {
-      const preview = overReport.slice(0, 200).replace(/\n+/g, " ").trim();
-      await maybeCheckin(writerAgentId, "초안 완성됐어요. 계속할까요?",
-        preview ? [`📄 ${preview}${overReport.length > 200 ? "..." : ""}`] : []);
+      const draftLines = overReport.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 8).map((l) => l.slice(0, 110));
+      await maybeCheckin(writerAgentId, "초안이 완성됐어요. 내용을 확인해주세요.", draftLines);
     }
 
     if (!agentEnabled(agentConfigs, "fact")) {
@@ -616,9 +622,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
 
   // ── fact 체크인 — 최종 결과물 CEO 확인 ──────────────────────────────
   {
-    const preview = overReport.slice(0, 200).replace(/\n+/g, " ").trim();
-    await maybeCheckin("fact", "검토까지 완료됐어요. 최종 결과물 확인해주세요.",
-      preview ? [`📄 ${preview}${overReport.length > 200 ? "..." : ""}`] : []);
+    const finalLines = overReport.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 8).map((l) => l.slice(0, 110));
+    await maybeCheckin("fact", "검토까지 완료됐어요. 최종 결과물 확인해주세요.", finalLines);
   }
 
   // ── 5.5. Root: 배포 계획 (dev 태스크만) ──────────────────────────────
@@ -637,7 +642,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       if (!rootStreamed && rootOutput.trim()) await streamChunked("root", rootOutput, send);
       overReport += `\n\n---\n\n${rootOutput}`;
       send({ type: "agent_done", agentId: "root", message: "파이프라인 준비됐어요. 자동화 완료." });
-      await maybeCheckin("root", "배포 파이프라인 설계까지 완료됐어요. 확인해주세요.", []);
+      await maybeCheckin("root", "배포 파이프라인 설계까지 완료됐어요. 확인해주세요.",
+        rootOutput.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 6).map((l) => l.slice(0, 110)));
     } catch {
       send({ type: "agent_done", agentId: "root", message: "배포 계획 완료." });
       await maybeCheckin("root", "배포 계획 완료됐어요. 확인해주세요.", []);

@@ -25,9 +25,22 @@ type Props = {
   onRespond: (sessionId: string, response: string) => void;
 };
 
+const CONTENT_LABEL: Record<string, string> = {
+  plan:  "기획 내용",
+  pocke: "수집된 데이터",
+  ka:    "분석 결과",
+  over:  "작성된 초안",
+  run:   "구현 내용",
+  pixel: "디자인 초안",
+  buzz:  "마케팅 전략",
+  fact:  "최종 결과물",
+  root:  "배포 계획",
+};
+
 export default function CeoCheckin({ state, onRespond }: Props) {
   const [answer, setAnswer] = useState("");
   const agent = AGENTS.find((a) => a.id === state.agentId);
+  const contentLabel = CONTENT_LABEL[state.agentId] ?? "작업 내용";
 
   const submit = (response: string) => {
     onRespond(state.sessionId, response);
@@ -36,7 +49,7 @@ export default function CeoCheckin({ state, onRespond }: Props) {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-[70] w-[380px]"
+      className="fixed bottom-6 right-6 z-[70] w-[460px]"
       style={{ animation: "slideUp 0.25s ease-out" }}
     >
       <style>{`
@@ -111,13 +124,17 @@ export default function CeoCheckin({ state, onRespond }: Props) {
                 className="rounded-xl px-3 py-2.5 flex flex-col gap-1.5"
                 style={{ background: "#0f1928", border: "1px solid #1a2a40" }}
               >
-                <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-0.5">수집된 핵심 팩트</p>
-                {state.keyFacts.map((f, i) => (
-                  <div key={i} className="flex gap-2 text-xs text-slate-400 leading-snug">
-                    <span className="shrink-0" style={{ color: agent?.color ?? "#34d399", opacity: 0.6 }}>▸</span>
-                    {f}
-                  </div>
-                ))}
+                <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-0.5 sticky top-0">
+                  {contentLabel}
+                </p>
+                <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto pr-0.5">
+                  {state.keyFacts.map((f, i) => (
+                    <div key={i} className="flex gap-2 text-xs text-slate-400 leading-snug">
+                      <span className="shrink-0 mt-0.5" style={{ color: agent?.color ?? "#34d399", opacity: 0.6 }}>▸</span>
+                      <span className="break-words whitespace-pre-wrap">{f}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </>
