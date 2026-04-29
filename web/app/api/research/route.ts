@@ -324,10 +324,15 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   //   gate1 = 첫 번째 에이전트 완료 후
   //   gate2 = 마지막 에이전트 직전 (두 번째에서 끝) 완료 후
   // 에이전트 이름을 가정하지 않음 — 어떤 조합이든 동작
-  const seqPipeline = (["plan", "wiki", "pocke", "ka", writerAgentId, "fact"] as string[])
-    .concat(isDevTask ? ["root"] : [])
-    .concat(["ping"])
-    .filter((id) => agentEnabled(agentConfigs, id));
+  // 11명 전원 명시 — writer 4명(over/run/pixel/buzz) 중 이번 태스크 담당자만 통과
+  const WRITERS = new Set(["over", "run", "pixel", "buzz"]);
+  const seqPipeline = ["plan", "wiki", "pocke", "ka", "over", "run", "pixel", "buzz", "fact", "root", "ping"]
+    .filter((id) => {
+      if (!agentEnabled(agentConfigs, id)) return false;
+      if (WRITERS.has(id)) return id === writerAgentId;
+      if (id === "root") return isDevTask;
+      return true;
+    });
   const _pLen = seqPipeline.length;
   const checkinGates = new Set<string>();
   if (_pLen >= 1) checkinGates.add(seqPipeline[0]);
