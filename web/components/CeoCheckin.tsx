@@ -27,6 +27,7 @@ type Props = {
 
 const CONTENT_LABEL: Record<string, string> = {
   plan:  "기획 내용",
+  wiki:  "배경 지식",
   pocke: "수집된 데이터",
   ka:    "분석 결과",
   over:  "작성된 초안",
@@ -35,6 +36,7 @@ const CONTENT_LABEL: Record<string, string> = {
   buzz:  "마케팅 전략",
   fact:  "최종 결과물",
   root:  "배포 계획",
+  ping:  "아이디어 목록",
 };
 
 export default function CeoCheckin({ state, onRespond }: Props) {

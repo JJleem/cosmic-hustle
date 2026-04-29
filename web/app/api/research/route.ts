@@ -324,8 +324,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   //   gate1 = 첫 번째 에이전트 완료 후
   //   gate2 = 마지막 에이전트 직전 (두 번째에서 끝) 완료 후
   // 에이전트 이름을 가정하지 않음 — 어떤 조합이든 동작
-  const seqPipeline = (["plan", "pocke", "ka", writerAgentId, "fact"] as string[])
+  const seqPipeline = (["plan", "wiki", "pocke", "ka", writerAgentId, "fact"] as string[])
     .concat(isDevTask ? ["root"] : [])
+    .concat(["ping"])
     .filter((id) => agentEnabled(agentConfigs, id));
   const _pLen = seqPipeline.length;
   const checkinGates = new Set<string>();
@@ -373,6 +374,15 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   });
 
   if (isCancelled(sessionId)) return;
+
+  {
+    const wikiLines = [
+      ...(wiki.context ? [`맥락: ${wiki.context.slice(0, 100)}`] : []),
+      ...wiki.keywords.slice(0, 3).map((k) => `🔑 키워드: ${k}`),
+      ...(wiki.wiki_pages_found?.slice(0, 3).map((p) => `📄 ${p}`) ?? []),
+    ];
+    await maybeCheckin("wiki", `관련 지식 ${wiki.wiki_pages_found?.length ?? 0}페이지 연결됐어요.`, wikiLines);
+  }
 
   // 위키→포케 커뮤니케이션
   if (agentEnabled(agentConfigs, "pocke")) {
@@ -685,8 +695,11 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           const parsed = parseJSON<{ ideas: Array<{ title: string; spark: string }> }>(result, { ideas: [] });
           if (parsed.ideas?.length) send({ type: "ping_ideas", ideas: parsed.ideas });
           send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });
+          const pingLines = (parsed.ideas ?? []).slice(0, 5).map((idea) => `💡 ${idea.title}: ${idea.spark}`);
+          await maybeCheckin("ping", `아이디어 ${parsed.ideas?.length ?? 0}개 캡처됐어요.`, pingLines);
         } catch {
           send({ type: "agent_done", agentId: "ping", message: "아이디어 캡처 완료!" });
+          await maybeCheckin("ping", "아이디어 캡처가 완료됐어요.", []);
         }
       })(),
     );
