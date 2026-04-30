@@ -1,4 +1,4 @@
-import { runAgent, parseJSON, WIKI_DIR, type RunAgentOptions } from "../../research/route";
+import { runAgent, parseJSON, WIKI_DIR, type RunAgentOptions } from "@/lib/agentRunner";
 
 export const maxDuration = 300;
 

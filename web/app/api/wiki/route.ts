@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { WIKI_DIR } from "../research/route";
+import { WIKI_DIR } from "@/lib/agentRunner";
 
 const WIKI_PAGES_DIR = path.join(WIKI_DIR, "wiki");
 

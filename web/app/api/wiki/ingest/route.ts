@@ -1,4 +1,4 @@
-import { runAgent, WIKI_DIR } from "../../research/route";
+import { runAgent, WIKI_DIR } from "@/lib/agentRunner";
 
 export const maxDuration = 300;
 

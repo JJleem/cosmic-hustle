@@ -1,4 +1,4 @@
-import { runAgent } from "@/app/api/research/route";
+import { runAgent } from "@/lib/agentRunner";
 import { AGENT_PERSONAS } from "@/lib/agentPersonas";
 
 export const maxDuration = 60;

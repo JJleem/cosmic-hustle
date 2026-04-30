@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { sessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { cancelledSessions, pendingResponses } from "../../route";
+import { cancelledSessions, pendingResponses } from "@/lib/agentRunner";
 
 export async function POST(
   _request: Request,
