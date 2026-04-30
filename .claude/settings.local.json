@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.db$\")",
+      "Bash(npm run *)",
+      "Bash(rm -rf node_modules)",
+      "Bash(npm install *)",
+      "Bash(cmd.exe /c \"rmdir /s /q \\\\\"C:\\\\Users\\\\DonghaeChoi\\\\Desktop\\\\personal repository\\\\cosmic-hustle\\\\web\\\\node_modules\\\\\"\")",
+      "Bash(powershell.exe -Command \"Remove-Item -Recurse -Force 'C:\\\\Users\\\\DonghaeChoi\\\\Desktop\\\\personal repository\\\\cosmic-hustle\\\\web\\\\node_modules'\")",
+      "Bash(node *)",
+      "Bash(git pull *)",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git -C \"/mnt/c/Users/DonghaeChoi/Desktop/personal repository/cosmic-hustle\" status)",
+      "Bash(git -C \"/mnt/c/Users/DonghaeChoi/Desktop/personal repository/cosmic-hustle\" diff --stat)",
+      "Bash(git *)",
+      "Bash(grep -v \"^\\\\s*//\")"
+    ]
+  }
+}

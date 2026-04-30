@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(grep -E \"\\\\.node$\")",
+      "Bash(node -e ' *)",
+      "Bash(python3 -c \"import json,sys; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('exports', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; p=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in p.items\\(\\) if k not in ['dependencies','devDependencies','optionalDependencies']]\")",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(echo \"claude.exe\")",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git rebase *)"
+    ]
+  }
+}
