@@ -29,16 +29,16 @@ export default function StarField() {
     resize();
 
     const mkStars = (): Star[] =>
-      Array.from({ length: 220 }, () => ({
+      Array.from({ length: 240 }, () => ({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        r: Math.random() ** 2 * 1.8 + 0.2,
-        alpha: Math.random() * 0.65 + 0.15,
-        twinkleSpeed: Math.random() * 0.012 + 0.004,
+        r: Math.random() ** 2 * 2.0 + 0.3,
+        alpha: Math.random() * 0.7 + 0.25,
+        twinkleSpeed: Math.random() * 0.014 + 0.005,
         twinklePhase: Math.random() * Math.PI * 2,
-        // 별마다 미세하게 다른 드리프트 속도 — 원근감
-        driftX: (Math.random() - 0.5) * 0.012,
-        driftY: (Math.random() - 0.5) * 0.006,
+        // 별 크기에 비례한 드리프트 — 큰 별(가까운)이 더 빠르게
+        driftX: (Math.random() - 0.5) * 0.032,
+        driftY: (Math.random() - 0.5) * 0.018,
       }));
 
     let stars = mkStars();
