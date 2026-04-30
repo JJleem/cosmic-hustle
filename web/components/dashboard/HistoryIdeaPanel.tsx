@@ -69,7 +69,7 @@ export default function HistoryIdeaPanel({ projects, ideas, reports = [], agentD
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        {tab === "history" && <HistoryList projects={projects} />}
+        {tab === "history" && <HistoryList projects={projects} onSelect={onIdeaSelect} />}
         {tab === "ideas" && <IdeaBoard ideas={ideas} onIdeaSelect={onIdeaSelect} />}
         {tab === "stats" && <StatsPanel projects={projects} reports={reports} agentDurations={agentDurations} />}
       </div>
@@ -77,7 +77,9 @@ export default function HistoryIdeaPanel({ projects, ideas, reports = [], agentD
   );
 }
 
-function HistoryList({ projects }: { projects: ProjectRecord[] }) {
+function HistoryList({ projects, onSelect }: { projects: ProjectRecord[]; onSelect?: (topic: string) => void }) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
   if (projects.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -91,17 +93,27 @@ function HistoryList({ projects }: { projects: ProjectRecord[] }) {
       {projects.map((p, i) => (
         <div
           key={p.id}
-          className="flex items-start gap-3 rounded-xl border border-slate-500 bg-slate-700/50 p-3 hover:bg-slate-700 transition-colors cursor-pointer"
+          onMouseEnter={() => setHoveredIdx(i)}
+          onMouseLeave={() => setHoveredIdx(null)}
+          onClick={() => onSelect?.(p.topic)}
+          className="flex items-start gap-3 rounded-xl border p-3 transition-colors cursor-pointer"
+          style={{
+            background: hoveredIdx === i ? "#111827" : "#0d1120",
+            borderColor: hoveredIdx === i ? "#334155" : "#1a2235",
+          }}
         >
           <span className="text-[10px] text-slate-400 mt-0.5 w-5 shrink-0 font-mono">
             {String(i + 1).padStart(2, "0")}
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs text-white font-semibold truncate">{p.topic}</p>
             <p className="text-[9px] text-slate-400 mt-0.5">
               {p.completedAt.toLocaleDateString("ko-KR")}
             </p>
           </div>
+          {onSelect && hoveredIdx === i && (
+            <span className="text-[9px] text-slate-500 shrink-0 mt-0.5">재실행 →</span>
+          )}
         </div>
       ))}
     </div>
