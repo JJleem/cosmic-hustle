@@ -98,11 +98,19 @@ function downloadMarkdown(report: Report) {
 }
 
 const WRITER_AGENTS = [
-  { id: "over",  label: "오버" },
-  { id: "run",   label: "런" },
-  { id: "pixel", label: "픽셀" },
-  { id: "buzz",  label: "버즈" },
+  { id: "over",  label: "리서치·글" },
+  { id: "run",   label: "개발" },
+  { id: "pixel", label: "디자인" },
+  { id: "buzz",  label: "마케팅" },
 ];
+
+const DATE_FILTERS = [
+  { id: "today", label: "오늘" },
+  { id: "week",  label: "이번주" },
+  { id: "month", label: "이번달" },
+] as const;
+
+type DateFilter = "today" | "week" | "month";
 
 type Props = { reports: Report[]; drafts?: Record<string, string>; onDelete?: (id: string) => void; onUpdate?: (updated: Report) => void };
 
@@ -117,6 +125,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState<DateFilter | null>(null);
   const [editing, setEditing] = useState(false);
   const [editTopic, setEditTopic] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -222,6 +231,19 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
 
   const filteredReports = reports.filter((r) => {
     if (filterAgent && r.agentId !== filterAgent) return false;
+    if (filterDate) {
+      const now = new Date();
+      const date = new Date(r.createdAt);
+      if (filterDate === "today") {
+        if (date.toDateString() !== now.toDateString()) return false;
+      } else if (filterDate === "week") {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (date < weekAgo) return false;
+      } else if (filterDate === "month") {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        if (date < monthAgo) return false;
+      }
+    }
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return r.topic.toLowerCase().includes(q) || r.content.toLowerCase().includes(q);
@@ -247,7 +269,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
               style={{ background: "#0c1220", border: "1px solid #1e2a3a" }}
             />
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => setFilterAgent(null)}
               className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
@@ -274,6 +296,30 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
                 </button>
               );
             })}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[8px] text-slate-700 font-bold tracking-wider uppercase">기간</span>
+            <button
+              onClick={() => setFilterDate(null)}
+              className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+              style={!filterDate
+                ? { background: "#1a2030", color: "#64748b", border: "1px solid #2a3545" }
+                : { color: "#374151", border: "1px solid #1a2235" }}
+            >
+              전체
+            </button>
+            {DATE_FILTERS.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setFilterDate(filterDate === id ? null : id)}
+                className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+                style={filterDate === id
+                  ? { background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" }
+                  : { color: "#374151", border: "1px solid #1a2235" }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
