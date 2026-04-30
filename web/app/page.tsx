@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import BottomAgentBar from "@/components/BottomAgentBar";
+import StarField from "@/components/StarField";
 import OfficePage from "@/components/OfficePage";
 import ProjectWorkView from "@/components/ProjectWorkView";
 import { Idea } from "@/components/AgentWorkspace";
@@ -465,9 +466,10 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen cosmic-bg text-white flex flex-col overflow-hidden">
+    <div className="h-screen cosmic-bg text-white flex flex-col overflow-hidden" style={{ position: "relative" }}>
+      <StarField />
       {/* 헤더 */}
-      <header className="shrink-0 px-8 py-3.5 flex items-center gap-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.055)", background: "rgba(7,9,26,0.7)", backdropFilter: "blur(20px)" }}>
+      <header className="shrink-0 px-8 py-3.5 flex items-center gap-4" style={{ position: "relative", zIndex: 10, borderBottom: "1px solid rgba(255,255,255,0.055)", background: "rgba(7,9,26,0.7)", backdropFilter: "blur(20px)" }}>
         <div className="flex items-center gap-2.5">
           <span className="text-base animate-float" style={{ display: "inline-block" }}>🪐</span>
           <h1
@@ -555,9 +557,9 @@ export default function Home() {
       )}
 
       {/* 컨텐츠 */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden" style={{ position: "relative", zIndex: 10 }}>
         {tab === "dashboard" && (
-          <div className="h-full grid grid-cols-2 grid-rows-2 gap-4 p-6">
+          <div className="h-full grid grid-cols-2 grid-rows-2 gap-5 p-6">
             <div className="glass-panel rounded-2xl p-5 overflow-hidden">
               <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
             </div>

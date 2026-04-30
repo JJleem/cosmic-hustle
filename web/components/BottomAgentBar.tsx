@@ -21,10 +21,12 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
       <div
         className="shrink-0 px-6 py-3"
         style={{
+          position: "relative",
+          zIndex: 10,
           borderTop: "1px solid rgba(255,255,255,0.055)",
-          background: "rgba(7,9,26,0.75)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
+          background: "rgba(7,9,26,0.82)",
+          backdropFilter: "blur(28px)",
+          WebkitBackdropFilter: "blur(28px)",
         }}
       >
         <div className="flex items-end justify-center gap-5">
