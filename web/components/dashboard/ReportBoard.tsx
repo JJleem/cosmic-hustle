@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2 } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -104,9 +104,9 @@ const WRITER_AGENTS = [
   { id: "buzz",  label: "버즈" },
 ];
 
-type Props = { reports: Report[]; drafts?: Record<string, string> };
+type Props = { reports: Report[]; drafts?: Record<string, string>; onDelete?: (id: string) => void };
 
-export default function ReportBoard({ reports, drafts = {} }: Props) {
+export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
   const [selected, setSelected] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -114,6 +114,7 @@ export default function ReportBoard({ reports, drafts = {} }: Props) {
   const [showTranslated, setShowTranslated] = useState(false);
   const [htmlViewMode, setHtmlViewMode] = useState<"preview" | "source">("preview");
   const [showDraft, setShowDraft] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
 
@@ -169,6 +170,17 @@ export default function ReportBoard({ reports, drafts = {} }: Props) {
     await navigator.clipboard.writeText(selected.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await fetch(`/api/reports/${id}`, { method: "DELETE" });
+      onDelete?.(id);
+      if (selected?.id === id) setSelected(null);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const filteredReports = reports.filter((r) => {
@@ -274,6 +286,16 @@ export default function ReportBoard({ reports, drafts = {} }: Props) {
                   <p className="text-[11px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">
                     {highlightPreview}
                   </p>
+                  <div className="flex justify-end mt-1.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void handleDelete(r.id); }}
+                      disabled={deletingId === r.id}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-40"
+                    >
+                      <Trash2 size={9} />
+                      {deletingId === r.id ? "삭제중..." : "삭제"}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -400,6 +422,14 @@ export default function ReportBoard({ reports, drafts = {} }: Props) {
                   <span>PDF</span>
                 </button>
                 <div className="w-px h-4 bg-slate-700" />
+                <button
+                  onClick={() => void handleDelete(selected.id)}
+                  disabled={deletingId === selected.id}
+                  title="보고서 삭제"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-40"
+                >
+                  <Trash2 size={12} />
+                </button>
                 <button
                   onClick={() => setSelected(null)}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-all"

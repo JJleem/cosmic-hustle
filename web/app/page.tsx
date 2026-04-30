@@ -435,6 +435,9 @@ export default function Home() {
     setStreamLog({});
     setChatFeed([]);
     setCeoCheckin(null);
+    setCurrentMode("checkin");
+    setReportDrafts({});
+    pendingDraftsRef.current = {};
   };
 
   return (
@@ -522,7 +525,11 @@ export default function Home() {
               <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <ReportBoard reports={reports} drafts={reportDrafts} />
+              <ReportBoard
+              reports={reports}
+              drafts={reportDrafts}
+              onDelete={(id) => setReports((prev) => prev.filter((r) => r.id !== id))}
+            />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <HistoryIdeaPanel
