@@ -14,6 +14,7 @@ type Props = {
   projects: ProjectRecord[];
   ideas: Idea[];
   reports?: ReportStat[];
+  agentDurations?: Record<string, number>;
   onIdeaSelect?: (topic: string) => void;
 };
 
@@ -24,7 +25,7 @@ const WRITERS = [
   { id: "buzz",  label: "버즈" },
 ];
 
-export default function HistoryIdeaPanel({ projects, ideas, reports = [], onIdeaSelect }: Props) {
+export default function HistoryIdeaPanel({ projects, ideas, reports = [], agentDurations = {}, onIdeaSelect }: Props) {
   const [tab, setTab] = useState<Tab>("history");
 
   return (
@@ -70,7 +71,7 @@ export default function HistoryIdeaPanel({ projects, ideas, reports = [], onIdea
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === "history" && <HistoryList projects={projects} />}
         {tab === "ideas" && <IdeaBoard ideas={ideas} onIdeaSelect={onIdeaSelect} />}
-        {tab === "stats" && <StatsPanel projects={projects} reports={reports} />}
+        {tab === "stats" && <StatsPanel projects={projects} reports={reports} agentDurations={agentDurations} />}
       </div>
     </div>
   );
@@ -107,7 +108,13 @@ function HistoryList({ projects }: { projects: ProjectRecord[] }) {
   );
 }
 
-function StatsPanel({ projects, reports }: { projects: ProjectRecord[]; reports: ReportStat[] }) {
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+}
+
+function StatsPanel({ projects, reports, agentDurations }: { projects: ProjectRecord[]; reports: ReportStat[]; agentDurations: Record<string, number> }) {
   const totalChars = reports.reduce((s, r) => s + r.content.length, 0);
   const avgChars = reports.length > 0 ? Math.round(totalChars / reports.length) : 0;
   const maxCount = Math.max(...WRITERS.map(({ id }) => reports.filter((r) => r.agentId === id).length), 1);
@@ -161,6 +168,35 @@ function StatsPanel({ projects, reports }: { projects: ProjectRecord[]; reports:
           )}
         </div>
       </div>
+
+      {/* 에이전트 소요 시간 */}
+      {Object.keys(agentDurations).length > 0 && (
+        <div className="rounded-xl px-3 py-3" style={{ background: "#0d1120", border: "1px solid #1a2235" }}>
+          <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">이번 세션 소요 시간</p>
+          <div className="flex flex-col gap-1.5">
+            {Object.entries(agentDurations)
+              .sort(([, a], [, b]) => b - a)
+              .map(([id, ms]) => {
+                const agent = AGENT_MAP[id];
+                const maxMs = Math.max(...Object.values(agentDurations));
+                return (
+                  <div key={id} className="flex items-center gap-2">
+                    <span className="text-[10px] w-8 shrink-0 font-semibold" style={{ color: agent?.color ?? "#94a3b8" }}>
+                      {agent?.name ?? id}
+                    </span>
+                    <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${(ms / maxMs) * 100}%`, background: agent?.color ?? "#94a3b8" }}
+                      />
+                    </div>
+                    <span className="text-[9px] text-slate-500 w-10 text-right shrink-0 font-mono">{fmtDuration(ms)}</span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* 최근 완료 프로젝트 */}
       {projects.length > 0 && (

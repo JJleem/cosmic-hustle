@@ -63,6 +63,9 @@ export default function Home() {
   const sessionIdRef = useRef("");
   const pendingDraftsRef = useRef<Record<string, string>>({});
   const [reportDrafts, setReportDrafts] = useState<Record<string, string>>({});
+  // agentId → 소요 ms (agent_start ts 기록 후 agent_done 에서 계산)
+  const agentStartTs = useRef<Record<string, number>>({});
+  const [agentDurations, setAgentDurations] = useState<Record<string, number>>({});
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
 
   // DB에서 초기 데이터 로드
@@ -148,6 +151,7 @@ export default function Home() {
           setStreamLog((prev) => ({ ...prev, [event.agentId as string]: "" }));
           speak(event.agentId as string, event.message as string);
           addChat(event.agentId as string, `[시작] ${event.message as string}`);
+          agentStartTs.current[event.agentId as string] = (event.ts as number | undefined) ?? Date.now();
           break;
         case "agent_message":
           speak(event.agentId as string, event.message as string);
@@ -167,6 +171,10 @@ export default function Home() {
           setAgentStatus((prev) => ({ ...prev, [doneId]: "done" }));
           speak(doneId, event.message as string);
           addChat(doneId, `[완료] ${event.message as string}`);
+          if (agentStartTs.current[doneId]) {
+            const elapsed = ((event.ts as number | undefined) ?? Date.now()) - agentStartTs.current[doneId];
+            setAgentDurations((prev) => ({ ...prev, [doneId]: elapsed }));
+          }
           // 파이프라인에서 다음 스테이지 찾아 핸드오프 기록
           const stageIdx = PIPELINE.findIndex((s) => s.ids.includes(doneId));
           const nextStage = stageIdx !== -1 ? PIPELINE[stageIdx + 1] : null;
@@ -438,6 +446,8 @@ export default function Home() {
     setCurrentMode("checkin");
     setReportDrafts({});
     pendingDraftsRef.current = {};
+    agentStartTs.current = {};
+    setAgentDurations({});
   };
 
   return (
@@ -536,6 +546,7 @@ export default function Home() {
               projects={history}
               ideas={pingIdeas}
               reports={reports}
+              agentDurations={agentDurations}
               onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
             />
             </div>

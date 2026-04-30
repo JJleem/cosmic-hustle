@@ -43,11 +43,11 @@ export const WIKI_DIR = path.resolve(
 
 type SSEEvent =
   | { type: "session_start"; sessionId: string }
-  | { type: "agent_start"; agentId: string; message: string }
+  | { type: "agent_start"; agentId: string; message: string; ts?: number }
   | { type: "agent_message"; agentId: string; message: string }
   | { type: "agent_stream"; agentId: string; chunk: string }
   | { type: "agent_thinking"; agentId: string; chunk: string }
-  | { type: "agent_done"; agentId: string; message: string }
+  | { type: "agent_done"; agentId: string; message: string; ts?: number }
   | { type: "agent_expression"; agentId: string; expression: string | null }
   | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
   | { type: "draft_report"; agentId: string; topic: string; content: string }
@@ -769,15 +769,19 @@ export async function POST(request: Request) {
     start(controller) {
       let seqCounter = 0;
       const send = (event: SSEEvent) => {
+        const enriched: SSEEvent =
+          event.type === "agent_start" || event.type === "agent_done"
+            ? { ...event, ts: Date.now() }
+            : event;
         const seq = ++seqCounter;
         void db.insert(sessionEvents).values({
           id: crypto.randomUUID(),
           sessionId,
           seq,
-          payload: JSON.stringify(event),
+          payload: JSON.stringify(enriched),
           createdAt: new Date(),
         });
-        try { controller.enqueue(encoder.encode(`id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`)); } catch { /* closed */ }
+        try { controller.enqueue(encoder.encode(`id: ${seq}\ndata: ${JSON.stringify(enriched)}\n\n`)); } catch { /* closed */ }
       };
 
       send({ type: "session_start", sessionId });

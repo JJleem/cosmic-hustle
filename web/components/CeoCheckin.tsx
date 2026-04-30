@@ -160,7 +160,12 @@ export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(answer);
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { submit(answer); return; }
+            // 빈 입력 상태에서 Enter = 승인 (ceo_checkin) / 그냥 진행 (clarify_request)
+            if (e.key === "Enter" && !e.shiftKey && !answer.trim()) {
+              e.preventDefault();
+              submit("");
+            }
           }}
           placeholder={
             state.type === "clarify_request"
