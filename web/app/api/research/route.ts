@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { sessions, reports, sessionEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { DEFAULT_PROMPTS, fillPrompt, type PromptVars } from "@/lib/agentPrompts";
+import { DEFAULT_PROMPTS, fillPrompt } from "@/lib/agentPrompts";
 import { TASK_TYPE_MAP, DEFAULT_TASK_TYPE } from "@/lib/taskTypes";
 import {
   runAgent,
@@ -9,7 +9,6 @@ import {
   WIKI_DIR,
   pendingResponses,
   cancelledSessions,
-  type RunAgentOptions,
 } from "@/lib/agentRunner";
 
 export const maxDuration = 300;
@@ -49,10 +48,6 @@ type AgentConfig = { agentId: string; enabled: boolean; basePrompt?: string; ins
 function agentEnabled(configs: AgentConfig[], id: string): boolean {
   const cfg = configs.find((c) => c.agentId === id);
   return cfg ? cfg.enabled : true;
-}
-
-function agentInstruction(configs: AgentConfig[], id: string): string {
-  return configs.find((c) => c.agentId === id)?.instruction?.trim() ?? "";
 }
 
 function agentMaxTurns(configs: AgentConfig[], id: string): number | undefined {

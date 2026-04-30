@@ -359,6 +359,15 @@ export default function Home() {
         case "ping_ideas":
           newIdeas.push(...(e.ideas as Idea[]));
           break;
+        case "agent_expression":
+          // 재개 시점에는 expression 상태 복원 불필요 (휘발성)
+          break;
+        case "agent_thinking":
+          // thinking은 재생 불필요
+          break;
+        case "draft_report":
+          // 재개 시 draft는 스킵 (이후 report 이벤트로 최종본 복원)
+          break;
         case "clarify_request":
           lastCheckin = { type: "clarify_request", sessionId, agentId: "plan", questions: e.questions as string[] };
           break;
@@ -439,6 +448,7 @@ export default function Home() {
     setLastMessage({});
     setPhase("idle");
     setTopic("");
+    setInitialTopic("");
     setHandoffs([]);
     setStreamLog({});
     setChatFeed([]);
