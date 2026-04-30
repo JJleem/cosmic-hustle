@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 type Star = {
   x: number; y: number; r: number;
   alpha: number; twinkleSpeed: number; twinklePhase: number;
+  driftX: number; driftY: number;
 };
 
 type ShootingStar = {
@@ -26,9 +27,7 @@ export default function StarField() {
       canvas.height = window.innerHeight;
     };
     resize();
-    window.addEventListener("resize", resize);
 
-    // 별 생성
     const mkStars = (): Star[] =>
       Array.from({ length: 220 }, () => ({
         x: Math.random() * canvas.width,
@@ -37,6 +36,9 @@ export default function StarField() {
         alpha: Math.random() * 0.65 + 0.15,
         twinkleSpeed: Math.random() * 0.012 + 0.004,
         twinklePhase: Math.random() * Math.PI * 2,
+        // 별마다 미세하게 다른 드리프트 속도 — 원근감
+        driftX: (Math.random() - 0.5) * 0.012,
+        driftY: (Math.random() - 0.5) * 0.006,
       }));
 
     let stars = mkStars();
@@ -48,8 +50,8 @@ export default function StarField() {
       const angle = (Math.random() * 30 + 10) * (Math.PI / 180);
       shootingStars.push({
         x: Math.random() * canvas.width * 0.8,
-        y: Math.random() * canvas.height * 0.4,
-        len: Math.random() * 120 + 80,
+        y: Math.random() * canvas.height * 0.35,
+        len: Math.random() * 130 + 80,
         speed: Math.random() * 4 + 5,
         alpha: Math.random() * 0.5 + 0.4,
         angle,
@@ -61,63 +63,81 @@ export default function StarField() {
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 성운 1 — 우상단 violet
-      const g1 = ctx.createRadialGradient(canvas.width * 0.82, canvas.height * 0.05, 0, canvas.width * 0.82, canvas.height * 0.05, canvas.width * 0.55);
-      g1.addColorStop(0, "rgba(120,40,240,0.13)");
-      g1.addColorStop(0.5, "rgba(80,30,180,0.06)");
-      g1.addColorStop(1, "transparent");
+      const t = frame * 0.004; // 전체 시간 (느린 속도)
+
+      // ── 성운 1: 우상단 violet — 천천히 부유
+      const n1x = canvas.width  * (0.82 + Math.sin(t * 0.7) * 0.04);
+      const n1y = canvas.height * (0.05 + Math.cos(t * 0.5) * 0.03);
+      const g1 = ctx.createRadialGradient(n1x, n1y, 0, n1x, n1y, canvas.width * 0.58);
+      g1.addColorStop(0,   "rgba(130,45,255,0.15)");
+      g1.addColorStop(0.4, "rgba(90,30,200,0.08)");
+      g1.addColorStop(1,   "transparent");
       ctx.fillStyle = g1;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 성운 2 — 좌하단 indigo/blue
-      const g2 = ctx.createRadialGradient(canvas.width * 0.05, canvas.height * 0.88, 0, canvas.width * 0.05, canvas.height * 0.88, canvas.width * 0.5);
-      g2.addColorStop(0, "rgba(30,60,200,0.12)");
-      g2.addColorStop(0.5, "rgba(20,40,150,0.05)");
-      g2.addColorStop(1, "transparent");
+      // ── 성운 2: 좌하단 indigo/blue — 다른 주기로 부유
+      const n2x = canvas.width  * (0.05 + Math.cos(t * 0.6) * 0.05);
+      const n2y = canvas.height * (0.88 + Math.sin(t * 0.8) * 0.03);
+      const g2 = ctx.createRadialGradient(n2x, n2y, 0, n2x, n2y, canvas.width * 0.52);
+      g2.addColorStop(0,   "rgba(35,65,220,0.14)");
+      g2.addColorStop(0.5, "rgba(20,45,160,0.06)");
+      g2.addColorStop(1,   "transparent");
       ctx.fillStyle = g2;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 성운 3 — 중앙 하단 teal 미세
-      const g3 = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.95, 0, canvas.width * 0.5, canvas.height * 0.95, canvas.width * 0.35);
-      g3.addColorStop(0, "rgba(20,100,140,0.07)");
-      g3.addColorStop(1, "transparent");
+      // ── 성운 3: 중앙 teal — 가장 느리게
+      const n3x = canvas.width  * (0.50 + Math.sin(t * 0.4) * 0.06);
+      const n3y = canvas.height * (0.92 + Math.cos(t * 0.3) * 0.04);
+      const g3 = ctx.createRadialGradient(n3x, n3y, 0, n3x, n3y, canvas.width * 0.38);
+      g3.addColorStop(0,   "rgba(20,110,155,0.09)");
+      g3.addColorStop(1,   "transparent");
       ctx.fillStyle = g3;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 별 렌더
+      // ── 별 드리프트 + 렌더
       stars.forEach((s) => {
-        const t = Math.sin(frame * s.twinkleSpeed + s.twinklePhase);
-        const a = s.alpha * (0.45 + 0.55 * ((t + 1) / 2));
-        // 큰 별은 약간 푸른빛
-        const blue = s.r > 1.2 ? 255 : 240;
+        // 천천히 이동
+        s.x += s.driftX;
+        s.y += s.driftY;
+        // 화면 밖으로 나가면 반대쪽에서 재진입
+        if (s.x < -2) s.x = canvas.width + 2;
+        if (s.x > canvas.width + 2) s.x = -2;
+        if (s.y < -2) s.y = canvas.height + 2;
+        if (s.y > canvas.height + 2) s.y = -2;
+
+        const tw = Math.sin(frame * s.twinkleSpeed + s.twinklePhase);
+        const a  = s.alpha * (0.4 + 0.6 * ((tw + 1) / 2));
+        const blue = s.r > 1.2 ? 255 : 238;
+
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(210, 220, ${blue}, ${a})`;
+        ctx.fillStyle = `rgba(210, 222, ${blue}, ${a})`;
         ctx.fill();
-        // 큰 별 글로우
+
         if (s.r > 1.2) {
-          const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4);
-          glow.addColorStop(0, `rgba(180,200,255,${a * 0.3})`);
+          const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 5);
+          glow.addColorStop(0, `rgba(180,200,255,${a * 0.28})`);
           glow.addColorStop(1, "transparent");
           ctx.fillStyle = glow;
           ctx.beginPath();
-          ctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2);
+          ctx.arc(s.x, s.y, s.r * 5, 0, Math.PI * 2);
           ctx.fill();
         }
       });
 
-      // 유성 렌더
-      shootingStars.forEach((ss, i) => {
+      // ── 유성 렌더
+      for (let i = shootingStars.length - 1; i >= 0; i--) {
+        const ss = shootingStars[i];
         const progress = ss.life / ss.maxLife;
         const headX = ss.x + Math.cos(ss.angle) * ss.speed * ss.life;
         const headY = ss.y + Math.sin(ss.angle) * ss.speed * ss.life;
         const tailX = headX - Math.cos(ss.angle) * ss.len * Math.min(progress * 3, 1);
         const tailY = headY - Math.sin(ss.angle) * ss.len * Math.min(progress * 3, 1);
-        const fade = progress < 0.7 ? 1 : (1 - progress) / 0.3;
+        const fade  = progress < 0.7 ? 1 : (1 - progress) / 0.3;
 
         const grad = ctx.createLinearGradient(tailX, tailY, headX, headY);
         grad.addColorStop(0, "transparent");
-        grad.addColorStop(1, `rgba(200,210,255,${ss.alpha * fade})`);
+        grad.addColorStop(1, `rgba(210,220,255,${ss.alpha * fade})`);
         ctx.beginPath();
         ctx.strokeStyle = grad;
         ctx.lineWidth = 1.5;
@@ -127,16 +147,15 @@ export default function StarField() {
 
         ss.life++;
         if (ss.life >= ss.maxLife) shootingStars.splice(i, 1);
-      });
+      }
 
-      // 유성 랜덤 생성 (약 12초에 1번)
-      if (frame % 720 === 0 && Math.random() < 0.7) spawnShootingStar();
+      // 약 10초에 1번 유성
+      if (frame % 600 === 0 && Math.random() < 0.75) spawnShootingStar();
 
       frame++;
       animId = requestAnimationFrame(draw);
     };
 
-    // 리사이즈 시 별 재생성
     const handleResize = () => { resize(); stars = mkStars(); };
     window.addEventListener("resize", handleResize);
 
