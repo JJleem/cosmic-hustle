@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, FileText, Loader } from "lucide-react";
+import { Upload, FileText, Loader, RotateCcw } from "lucide-react";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -124,7 +124,16 @@ export default function WikiIngest() {
           "border-slate-500 bg-slate-700/40 text-slate-300"
         }`}>
           {status === "loading" && <Loader size={11} className="animate-spin shrink-0" />}
-          <span>{message}</span>
+          <span className="flex-1">{message}</span>
+          {status === "error" && text.trim() && (
+            <button
+              onClick={() => void ingest(text.trim(), filename)}
+              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium text-red-200 hover:text-white hover:bg-red-500/20 transition-all"
+            >
+              <RotateCcw size={10} />
+              재시도
+            </button>
+          )}
         </div>
       )}
 
