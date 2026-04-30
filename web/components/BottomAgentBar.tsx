@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { AGENTS, AgentStatus, DEPT_MAP, AgentDef } from "@/lib/agents";
-import AgentChat from "./AgentChat";
 import AgentImage from "./AgentImage";
 
 type Props = {
@@ -11,10 +9,10 @@ type Props = {
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
   hideBubbles?: boolean;
+  onAgentClick: (agent: AgentDef) => void;
 };
 
-export default function BottomAgentBar({ agentStatus, agentExpression, speaking, lastMessage, hideBubbles = false }: Props) {
-  const [selected, setSelected] = useState<AgentDef | null>(null);
+export default function BottomAgentBar({ agentStatus, agentExpression, speaking, lastMessage, hideBubbles = false, onAgentClick }: Props) {
 
   return (
     <>
@@ -44,7 +42,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
               <div
                 key={agent.id}
                 className="relative flex flex-col items-center gap-1 cursor-pointer group"
-                onClick={() => setSelected(agent)}
+                onClick={() => onAgentClick(agent)}
               >
                 {/* 말풍선 */}
                 {!hideBubbles && msg && isSpeaking && (
@@ -138,7 +136,6 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
         </div>
       </div>
 
-      {selected && <AgentChat agent={selected} onClose={() => setSelected(null)} />}
     </>
   );
 }

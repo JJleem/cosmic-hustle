@@ -39,7 +39,8 @@
       "Bash(python3 -c \"import sys,json; [print\\(x['name']\\) for x in json.load\\(sys.stdin\\)]\")",
       "Bash(python3 -c \"import sys,json; [print\\(x['name']\\) for x in json.load\\(sys.stdin\\)]\" echo \"---\")",
       "Bash(python3 -c \"import sys,json; [print\\(x['name'], x['updated_at']\\) for x in json.load\\(sys.stdin\\)]\")",
-      "Bash(xargs cat *)"
+      "Bash(xargs cat *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
     ]
   }
 }

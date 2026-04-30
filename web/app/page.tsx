@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import BottomAgentBar from "@/components/BottomAgentBar";
+import AgentFullScreen from "@/components/AgentFullScreen";
 import StarField from "@/components/StarField";
 import OfficePage from "@/components/OfficePage";
 import ProjectWorkView from "@/components/ProjectWorkView";
@@ -14,7 +15,7 @@ import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
 import AgentSettingsPage from "@/components/AgentSettingsPage";
 import CeoCheckin, { type CeoCheckinState } from "@/components/CeoCheckin";
-import { AGENTS, PIPELINE, AgentStatus } from "@/lib/agents";
+import { AGENTS, PIPELINE, AgentStatus, AgentDef } from "@/lib/agents";
 import { AllAgentSettings, loadAgentSettings } from "@/lib/agentSettings";
 
 type PageTab = "dashboard" | "office" | "settings";
@@ -68,6 +69,7 @@ export default function Home() {
   const agentStartTs = useRef<Record<string, number>>({});
   const [agentDurations, setAgentDurations] = useState<Record<string, number>>({});
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AgentDef | null>(null);
 
   // DB에서 초기 데이터 로드
   useEffect(() => {
@@ -617,7 +619,18 @@ export default function Home() {
         speaking={speaking}
         lastMessage={lastMessage}
         hideBubbles={tab === "office"}
+        onAgentClick={setSelectedAgent}
       />
+
+      {selectedAgent && (
+        <AgentFullScreen
+          agent={selectedAgent}
+          agentStatus={agentStatus[selectedAgent.id] ?? "idle"}
+          lastMessage={lastMessage[selectedAgent.id] ?? ""}
+          agentSettings={agentSettings}
+          onClose={() => setSelectedAgent(null)}
+        />
+      )}
 
       {showSetup && (
         <ProjectSetupModal
