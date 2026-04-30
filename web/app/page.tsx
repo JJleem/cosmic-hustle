@@ -74,15 +74,19 @@ export default function Home() {
       fetch("/api/reports").then((r) => r.json()),
       fetch("/api/sessions").then((r) => r.json()),
     ]).then(([dbReports, dbSessions]) => {
-      setReports(
-        (dbReports as Array<{ id: string; agentId: string; topic: string; content: string; createdAt: number }>)
-          .map((r) => ({ ...r, createdAt: new Date(r.createdAt * 1000) }))
-      );
-      setHistory(
-        (dbSessions as Array<{ id: string; topic: string; completedAt: number | null }>)
-          .filter((s) => s.completedAt)
-          .map((s) => ({ id: s.id, topic: s.topic, completedAt: new Date((s.completedAt as number) * 1000) }))
-      );
+      if (Array.isArray(dbReports)) {
+        setReports(
+          (dbReports as Array<{ id: string; agentId: string; topic: string; content: string; createdAt: number }>)
+            .map((r) => ({ ...r, createdAt: new Date((typeof r.createdAt === "number" ? r.createdAt : 0) * 1000) }))
+        );
+      }
+      if (Array.isArray(dbSessions)) {
+        setHistory(
+          (dbSessions as Array<{ id: string; topic: string; completedAt: number | null }>)
+            .filter((s) => typeof s.completedAt === "number")
+            .map((s) => ({ id: s.id, topic: s.topic, completedAt: new Date((s.completedAt as number) * 1000) }))
+        );
+      }
     }).catch(() => { /* DB 로드 실패 시 빈 상태 유지 */ });
   }, []);
 

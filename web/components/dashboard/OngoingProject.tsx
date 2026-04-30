@@ -201,7 +201,7 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
                         }}
                       >
                         {stage.ids.length > 1
-                          ? stage.ids.map((id) => AGENT_MAP[id].name).join("+")
+                          ? stage.ids.map((id) => AGENT_MAP[id]?.name ?? id).join("+")
                           : primaryAgent.name}
                       </span>
                       <span className="text-[7px] text-slate-700 block mt-0.5 leading-none">
@@ -218,6 +218,7 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
           {activeStageIdx !== -1 && (() => {
             const activeAgent = AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]];
             const msg = lastMessage[visiblePipeline[activeStageIdx].ids[0]];
+            if (!activeAgent) return null;
             return (
               <div
                 className="shrink-0 rounded-xl px-3 py-2.5 flex flex-col gap-1.5 animate-fadeIn"
@@ -229,7 +230,7 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse" style={{ background: activeAgent.color }} />
                   <span className="text-[10px] font-bold" style={{ color: activeAgent.color }}>
-                    {visiblePipeline[activeStageIdx].ids.map((id) => AGENT_MAP[id].name).join(", ")}
+                    {visiblePipeline[activeStageIdx].ids.map((id) => AGENT_MAP[id]?.name ?? id).join(", ")}
                   </span>
                   <span className="text-[10px] text-slate-500 ml-0.5">· {visiblePipeline[activeStageIdx].label}</span>
                 </div>
