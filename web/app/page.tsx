@@ -559,29 +559,34 @@ export default function Home() {
       {/* 컨텐츠 */}
       <div className="flex-1 overflow-hidden" style={{ position: "relative", zIndex: 10 }}>
         {tab === "dashboard" && (
-          <div className="h-full grid grid-cols-2 grid-rows-2 gap-5 p-6">
-            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
-              <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
+          <div className="h-full flex gap-4 p-5">
+            {/* ── 왼쪽 aside ── */}
+            <div className="w-72 shrink-0 flex flex-col gap-4">
+              <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "5" }}>
+                <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
+              </div>
+              <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "4" }}>
+                <HistoryIdeaPanel
+                  projects={history}
+                  ideas={pingIdeas}
+                  reports={reports}
+                  agentDurations={agentDurations}
+                  onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
+                />
+              </div>
+              <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "3" }}>
+                <MemoWikiPanel />
+              </div>
             </div>
-            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
+
+            {/* ── 메인: 보고현황 ── */}
+            <div className="flex-1 glass-panel rounded-2xl p-5 overflow-hidden">
               <ReportBoard
-              reports={reports}
-              drafts={reportDrafts}
-              onDelete={(id) => setReports((prev) => prev.filter((r) => r.id !== id))}
-              onUpdate={(updated) => setReports((prev) => prev.map((r) => r.id === updated.id ? updated : r))}
-            />
-            </div>
-            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
-              <HistoryIdeaPanel
-              projects={history}
-              ideas={pingIdeas}
-              reports={reports}
-              agentDurations={agentDurations}
-              onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
-            />
-            </div>
-            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
-              <MemoWikiPanel />
+                reports={reports}
+                drafts={reportDrafts}
+                onDelete={(id) => setReports((prev) => prev.filter((r) => r.id !== id))}
+                onUpdate={(updated) => setReports((prev) => prev.map((r) => r.id === updated.id ? updated : r))}
+              />
             </div>
           </div>
         )}
