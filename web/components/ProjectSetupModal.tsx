@@ -34,6 +34,7 @@ type Props = {
   onStart: (config: ProjectConfig) => void;
   onClose: () => void;
   defaultSettings?: AllAgentSettings;
+  initialTopic?: string;
 };
 
 const DEFAULT_ROLES: Record<string, string> = {
@@ -87,8 +88,8 @@ function initConfigs(taskTypeId: string, defaultSettings?: AllAgentSettings): Ag
   }));
 }
 
-export default function ProjectSetupModal({ onStart, onClose, defaultSettings }: Props) {
-  const [topic, setTopic] = useState("");
+export default function ProjectSetupModal({ onStart, onClose, defaultSettings, initialTopic = "" }: Props) {
+  const [topic, setTopic] = useState(initialTopic);
   const [selectedTypeId, setSelectedTypeId] = useState("auto");
   const [mode, setMode] = useState<ProjectMode>("checkin");
   const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs("auto", defaultSettings));

@@ -9,6 +9,7 @@ type Props = {
   phase: "idle" | "working" | "done";
   agentStatus: Record<string, AgentStatus>;
   handoffs: Handoff[];
+  lastMessage: Record<string, string>;
   onStop?: () => void;
 };
 
@@ -20,7 +21,7 @@ function timeLabel(at: Date): string {
   return at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function OngoingProject({ topic, phase, agentStatus, handoffs, onStop }: Props) {
+export default function OngoingProject({ topic, phase, agentStatus, handoffs, lastMessage, onStop }: Props) {
   const isWorking = phase === "working";
   const isDone = phase === "done";
   const isActive = isWorking || isDone;
@@ -214,31 +215,32 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, on
           </div>
 
           {/* 현재 활성 에이전트 상태 표시 */}
-          {activeStageIdx !== -1 && (
-            <div
-              className="shrink-0 rounded-xl px-3 py-2 flex items-center gap-2.5 animate-fadeIn"
-              style={{
-                background: `${AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color}08`,
-                border: `1px solid ${AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color}20`,
-              }}
-            >
+          {activeStageIdx !== -1 && (() => {
+            const activeAgent = AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]];
+            const msg = lastMessage[visiblePipeline[activeStageIdx].ids[0]];
+            return (
               <div
-                className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse"
-                style={{ background: AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color }}
-              />
-              <div>
-                <span
-                  className="text-[10px] font-bold"
-                  style={{ color: AGENT_MAP[visiblePipeline[activeStageIdx].ids[0]].color }}
-                >
-                  {visiblePipeline[activeStageIdx].ids.map((id) => AGENT_MAP[id].name).join(", ")}
-                </span>
-                <span className="text-[10px] text-slate-500 ml-1.5">
-                  {visiblePipeline[activeStageIdx].label} 진행중
-                </span>
+                className="shrink-0 rounded-xl px-3 py-2.5 flex flex-col gap-1.5 animate-fadeIn"
+                style={{
+                  background: `${activeAgent.color}08`,
+                  border: `1px solid ${activeAgent.color}20`,
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse" style={{ background: activeAgent.color }} />
+                  <span className="text-[10px] font-bold" style={{ color: activeAgent.color }}>
+                    {visiblePipeline[activeStageIdx].ids.map((id) => AGENT_MAP[id].name).join(", ")}
+                  </span>
+                  <span className="text-[10px] text-slate-500 ml-0.5">· {visiblePipeline[activeStageIdx].label}</span>
+                </div>
+                {msg && (
+                  <p className="text-[10px] text-slate-400 leading-snug line-clamp-2 pl-3.5">
+                    {msg}
+                  </p>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {isDone && (
             <div

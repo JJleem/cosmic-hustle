@@ -10,9 +10,10 @@ type Tab = "history" | "ideas";
 type Props = {
   projects: ProjectRecord[];
   ideas: Idea[];
+  onIdeaSelect?: (topic: string) => void;
 };
 
-export default function HistoryIdeaPanel({ projects, ideas }: Props) {
+export default function HistoryIdeaPanel({ projects, ideas, onIdeaSelect }: Props) {
   const [tab, setTab] = useState<Tab>("history");
 
   return (
@@ -52,7 +53,7 @@ export default function HistoryIdeaPanel({ projects, ideas }: Props) {
         {tab === "history" ? (
           <HistoryList projects={projects} />
         ) : (
-          <IdeaBoard ideas={ideas} />
+          <IdeaBoard ideas={ideas} onIdeaSelect={onIdeaSelect} />
         )}
       </div>
     </div>
@@ -90,7 +91,9 @@ function HistoryList({ projects }: { projects: ProjectRecord[] }) {
   );
 }
 
-function IdeaBoard({ ideas }: { ideas: Idea[] }) {
+function IdeaBoard({ ideas, onIdeaSelect }: { ideas: Idea[]; onIdeaSelect?: (topic: string) => void }) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
   if (ideas.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
@@ -110,20 +113,31 @@ function IdeaBoard({ ideas }: { ideas: Idea[] }) {
       {ideas.map((idea, i) => (
         <div
           key={i}
-          className="rounded-xl border p-3 transition-colors"
+          onMouseEnter={() => setHoveredIdx(i)}
+          onMouseLeave={() => setHoveredIdx(null)}
+          className="rounded-xl border p-3 transition-all"
           style={{
-            background: "#0d1120",
-            borderColor: "#fbbf2420",
+            background: hoveredIdx === i ? "#111827" : "#0d1120",
+            borderColor: hoveredIdx === i ? "#fbbf2440" : "#fbbf2420",
           }}
         >
           <div className="flex items-start gap-2">
             <span style={{ color: "#fbbf24" }} className="text-[10px] mt-0.5 shrink-0 font-bold font-mono">
               {String(i + 1).padStart(2, "0")}
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-white font-semibold leading-snug">{idea.title}</p>
               {idea.spark && (
                 <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">{idea.spark}</p>
+              )}
+              {onIdeaSelect && hoveredIdx === i && (
+                <button
+                  onClick={() => onIdeaSelect(idea.title)}
+                  className="mt-2 text-[9px] font-bold px-2.5 py-1 rounded-full transition-all"
+                  style={{ background: "#fbbf2415", color: "#fbbf24", border: "1px solid #fbbf2440" }}
+                >
+                  이 아이디어로 시작 →
+                </button>
               )}
             </div>
             <Zap size={10} style={{ color: "#fbbf2460" }} className="shrink-0 mt-0.5" />

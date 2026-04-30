@@ -613,7 +613,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       if (!factPassed) {
         send({ type: "agent_message", agentId: "fact", message: `오류 ${fact.issues.length}건. 수정 후 재검토.` });
         send({ type: "agent_expression", agentId: "fact", expression: "err" });
-        send({ type: "agent_expression", agentId: writerAgentId, expression: "sad" });
+        send({ type: "agent_expression", agentId: writerAgentId, expression: writerAgentId === "over" ? "sad" : "err" });
         await delay(400);
         send({ type: "agent_message", agentId: writerAgentId, message: writerMessages[writerAgentId].retry });
         await delay(800);

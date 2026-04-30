@@ -47,6 +47,7 @@ export default function Home() {
   const [phase, setPhase] = useState<"idle" | "working" | "done">("idle");
   const [topic, setTopic] = useState("");
   const [showSetup, setShowSetup] = useState(false);
+  const [initialTopic, setInitialTopic] = useState("");
   const [reports, setReports] = useState<Report[]>([]);
   const [history, setHistory] = useState<ProjectRecord[]>([]);
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
@@ -506,13 +507,17 @@ export default function Home() {
         {tab === "dashboard" && (
           <div className="h-full grid grid-cols-2 grid-rows-2 gap-4 p-6">
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} onStop={stopResearch} />
+              <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <ReportBoard reports={reports} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <HistoryIdeaPanel projects={history} ideas={pingIdeas} />
+              <HistoryIdeaPanel
+              projects={history}
+              ideas={pingIdeas}
+              onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
+            />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <MemoWikiPanel />
@@ -551,8 +556,9 @@ export default function Home() {
       {showSetup && (
         <ProjectSetupModal
           onStart={runResearch}
-          onClose={() => setShowSetup(false)}
+          onClose={() => { setShowSetup(false); setInitialTopic(""); }}
           defaultSettings={agentSettings}
+          initialTopic={initialTopic}
         />
       )}
 

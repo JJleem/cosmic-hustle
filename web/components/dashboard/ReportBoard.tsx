@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -97,6 +97,13 @@ function downloadMarkdown(report: Report) {
   URL.revokeObjectURL(url);
 }
 
+const WRITER_AGENTS = [
+  { id: "over",  label: "오버" },
+  { id: "run",   label: "런" },
+  { id: "pixel", label: "픽셀" },
+  { id: "buzz",  label: "버즈" },
+];
+
 type Props = { reports: Report[] };
 
 export default function ReportBoard({ reports }: Props) {
@@ -106,6 +113,8 @@ export default function ReportBoard({ reports }: Props) {
   const [translated, setTranslated] = useState<string | null>(null);
   const [showTranslated, setShowTranslated] = useState(false);
   const [htmlViewMode, setHtmlViewMode] = useState<"preview" | "source">("preview");
+  const [search, setSearch] = useState("");
+  const [filterAgent, setFilterAgent] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelected(null); };
@@ -161,21 +170,83 @@ export default function ReportBoard({ reports }: Props) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const filteredReports = reports.filter((r) => {
+    if (filterAgent && r.agentId !== filterAgent) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return r.topic.toLowerCase().includes(q) || r.content.toLowerCase().includes(q);
+  });
+
   return (
     <>
       <div className="flex flex-col h-full">
-        <p className="text-[10px] text-slate-300 tracking-[0.2em] uppercase mb-4 font-bold">
+        <p className="text-[10px] text-slate-300 tracking-[0.2em] uppercase mb-3 font-bold">
           보고 현황
         </p>
 
-        {reports.length === 0 ? (
+        {/* 검색 + 필터 */}
+        <div className="shrink-0 flex flex-col gap-2 mb-3">
+          <div className="relative">
+            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="보고서 검색..."
+              className="w-full pl-7 pr-3 py-1.5 rounded-lg text-[11px] text-slate-300 placeholder:text-slate-700 focus:outline-none"
+              style={{ background: "#0c1220", border: "1px solid #1e2a3a" }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setFilterAgent(null)}
+              className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+              style={!filterAgent
+                ? { background: "#1e2a40", color: "#93c5fd", border: "1px solid #2a4a6a" }
+                : { color: "#475569", border: "1px solid #1a2235" }}
+            >
+              전체 {!filterAgent && reports.length > 0 && <span className="ml-0.5 opacity-60">{reports.length}</span>}
+            </button>
+            {WRITER_AGENTS.map(({ id, label }) => {
+              const agent = AGENT_MAP[id];
+              const count = reports.filter((r) => r.agentId === id).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setFilterAgent(filterAgent === id ? null : id)}
+                  className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+                  style={filterAgent === id
+                    ? { background: `${agent?.color}20`, color: agent?.color, border: `1px solid ${agent?.color}50` }
+                    : { color: "#475569", border: "1px solid #1a2235" }}
+                >
+                  {label} <span className="ml-0.5 opacity-60">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {filteredReports.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-slate-400 text-xs">접수된 보고서 없음</p>
+            <p className="text-slate-400 text-xs">
+              {reports.length === 0 ? "접수된 보고서 없음" : "검색 결과 없음"}
+            </p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2 scrollbar-hide">
-            {reports.map((r) => {
+            {filteredReports.map((r) => {
               const agent = AGENT_MAP[r.agentId];
+              const q = search.trim().toLowerCase();
+              const preview = stripMarkdown(r.content);
+              const matchIdx = q ? preview.toLowerCase().indexOf(q) : -1;
+              const highlightPreview = matchIdx !== -1
+                ? <>
+                    {preview.slice(0, matchIdx)}
+                    <mark className="bg-yellow-500/20 text-yellow-300 rounded">{preview.slice(matchIdx, matchIdx + q.length)}</mark>
+                    {preview.slice(matchIdx + q.length, matchIdx + q.length + 80)}
+                  </>
+                : preview;
               return (
                 <div
                   key={r.id}
@@ -200,7 +271,7 @@ export default function ReportBoard({ reports }: Props) {
                   </div>
                   <p className="text-xs text-white font-semibold truncate">{r.topic}</p>
                   <p className="text-[11px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">
-                    {stripMarkdown(r.content)}
+                    {highlightPreview}
                   </p>
                 </div>
               );
