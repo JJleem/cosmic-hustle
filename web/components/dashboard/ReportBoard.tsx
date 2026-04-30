@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -104,9 +104,9 @@ const WRITER_AGENTS = [
   { id: "buzz",  label: "버즈" },
 ];
 
-type Props = { reports: Report[]; drafts?: Record<string, string>; onDelete?: (id: string) => void };
+type Props = { reports: Report[]; drafts?: Record<string, string>; onDelete?: (id: string) => void; onUpdate?: (updated: Report) => void };
 
-export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
+export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }: Props) {
   const [selected, setSelected] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -117,6 +117,11 @@ export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editTopic, setEditTopic] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelected(null); };
@@ -180,6 +185,38 @@ export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
       if (selected?.id === id) setSelected(null);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const startEdit = () => {
+    if (!selected) return;
+    setEditTopic(selected.topic);
+    setEditContent(selected.content);
+    setEditing(true);
+    setTimeout(() => contentRef.current?.focus(), 50);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!selected || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/reports/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: editTopic, content: editContent }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json() as Report;
+      updated.createdAt = new Date(updated.createdAt);
+      setSelected(updated);
+      onUpdate?.(updated);
+      setEditing(false);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -339,7 +376,15 @@ export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
 
               <div className="w-px h-6 bg-slate-700 shrink-0" />
 
-              <p className="text-sm text-white font-semibold flex-1 min-w-0 truncate">{selected.topic}</p>
+              {editing ? (
+                <input
+                  value={editTopic}
+                  onChange={(e) => setEditTopic(e.target.value)}
+                  className="flex-1 min-w-0 text-sm text-white font-semibold bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500"
+                />
+              ) : (
+                <p className="text-sm text-white font-semibold flex-1 min-w-0 truncate">{selected.topic}</p>
+              )}
 
               <span className="text-[10px] text-slate-500 shrink-0">
                 {selected.createdAt.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
@@ -347,6 +392,39 @@ export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
 
               {/* 액션 버튼 */}
               <div className="flex items-center gap-1 shrink-0 ml-1">
+                {editing ? (
+                  <>
+                    <button
+                      onClick={() => void handleSave()}
+                      disabled={saving}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
+                      style={{ background: "#14321e", color: "#4ade80", border: "1px solid #166534" }}
+                    >
+                      {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                      <span>{saving ? "저장중..." : "저장"}</span>
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
+                    >
+                      <X size={12} />
+                      <span>취소</span>
+                    </button>
+                    <div className="w-px h-4 bg-slate-700" />
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={startEdit}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
+                    >
+                      <Pencil size={12} />
+                      <span>편집</span>
+                    </button>
+                    <div className="w-px h-4 bg-slate-700" />
+                  </>
+                )}
                 {drafts[selected.id] && (
                   <>
                     <button
@@ -440,7 +518,21 @@ export default function ReportBoard({ reports, drafts = {}, onDelete }: Props) {
             </div>
 
             {/* 본문 */}
-            {(() => {
+            {editing ? (
+              <div className="flex-1 overflow-hidden flex flex-col px-8 py-6 gap-2">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
+                  <Pencil size={10} className="text-blue-400" />
+                  <span className="text-[10px] text-blue-400 font-medium">편집 모드 — 마크다운 지원</span>
+                </div>
+                <textarea
+                  ref={contentRef}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="flex-1 w-full bg-slate-900/60 border border-slate-700 rounded-xl text-sm text-slate-200 leading-relaxed p-4 resize-none focus:outline-none focus:border-blue-500 font-mono scrollbar-hide"
+                  spellCheck={false}
+                />
+              </div>
+            ) : (() => {
               const activeContent = showDraft && drafts[selected.id] ? drafts[selected.id] : selected.content;
               const htmlContent = extractHtml(activeContent);
               if (showDraft && drafts[selected.id]) {

@@ -553,6 +553,7 @@ export default function Home() {
               reports={reports}
               drafts={reportDrafts}
               onDelete={(id) => setReports((prev) => prev.filter((r) => r.id !== id))}
+              onUpdate={(updated) => setReports((prev) => prev.map((r) => r.id === updated.id ? updated : r))}
             />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
