@@ -465,23 +465,30 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen bg-[#0b0f1e] text-white flex flex-col overflow-hidden">
+    <div className="h-screen cosmic-bg text-white flex flex-col overflow-hidden">
       {/* 헤더 */}
-      <header className="shrink-0 px-8 py-4 border-b border-slate-700/60 flex items-center gap-4">
-        <span className="text-base">🪐</span>
-        <h1 className="text-sm font-bold tracking-[0.25em] text-slate-100">COSMIC HUSTLE</h1>
+      <header className="shrink-0 px-8 py-3.5 flex items-center gap-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.055)", background: "rgba(7,9,26,0.7)", backdropFilter: "blur(20px)" }}>
+        <div className="flex items-center gap-2.5">
+          <span className="text-base animate-float" style={{ display: "inline-block" }}>🪐</span>
+          <h1
+            className="text-sm font-bold tracking-[0.28em]"
+            style={{ background: "linear-gradient(90deg, #c4b5fd 0%, #818cf8 50%, #93c5fd 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
+          >
+            COSMIC HUSTLE
+          </h1>
+        </div>
 
         {/* 탭 */}
-        <div className="flex items-center gap-1 ml-6 bg-slate-800 rounded-full p-1 border border-slate-700">
+        <div className="flex items-center gap-0.5 ml-6 p-1 rounded-full" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
           {(["dashboard", "office", "settings"] as PageTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="px-4 py-1.5 rounded-full text-xs font-medium tracking-wide transition-all"
+              className="px-4 py-1.5 rounded-full text-xs font-medium tracking-wide transition-all duration-200"
               style={
                 tab === t
-                  ? { background: "#1e3a5f", color: "#93c5fd" }
-                  : { color: "#94a3b8" }
+                  ? { background: "rgba(99,102,241,0.18)", color: "#a5b4fc", boxShadow: "0 0 12px rgba(99,102,241,0.15), inset 0 1px 0 rgba(255,255,255,0.08)", border: "1px solid rgba(99,102,241,0.25)" }
+                  : { color: "#64748b", border: "1px solid transparent" }
               }
             >
               {t === "dashboard" ? "대시보드" : t === "office" ? "사무실" : "설정"}
@@ -489,17 +496,18 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2.5">
           {phase === "working" && topic && (
-            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs" style={{ background: "#0d1222", border: "1px solid #1e2a40" }}>
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)" }}>
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-slate-300 max-w-48 truncate">{topic}</span>
+              <span className="text-emerald-300/80 max-w-48 truncate font-medium">{topic}</span>
             </div>
           )}
           {phase === "done" && (
             <button
               onClick={reset}
-              className="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-500 rounded-full px-4 py-1.5 transition-all"
+              className="text-xs text-slate-500 hover:text-slate-300 rounded-full px-4 py-1.5 transition-all duration-200"
+              style={{ border: "1px solid rgba(255,255,255,0.07)" }}
             >
               초기화
             </button>
@@ -507,11 +515,16 @@ export default function Home() {
           <button
             onClick={() => { if (phase !== "working") setShowSetup(true); }}
             disabled={phase === "working"}
-            className="text-xs font-bold px-5 py-1.5 rounded-full transition-all"
-            style={{
-              background: phase !== "working" ? "linear-gradient(135deg, #1e3a5f, #2a4f7c)" : "#1a2235",
-              color: phase !== "working" ? "#93c5fd" : "#334155",
-              border: `1px solid ${phase !== "working" ? "#2a5a9c" : "#1e2535"}`,
+            className="text-xs font-semibold px-5 py-1.5 rounded-full transition-all duration-200"
+            style={phase !== "working" ? {
+              background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)",
+              color: "#c4b5fd",
+              border: "1px solid rgba(139,92,246,0.35)",
+              boxShadow: "0 0 20px rgba(109,40,217,0.2), inset 0 1px 0 rgba(255,255,255,0.08)",
+            } : {
+              background: "rgba(255,255,255,0.03)",
+              color: "#334155",
+              border: "1px solid rgba(255,255,255,0.05)",
             }}
           >
             새 프로젝트 +
@@ -521,20 +534,20 @@ export default function Home() {
 
       {/* 이전 세션 resume 배너 */}
       {resumeInfo && (
-        <div className="shrink-0 px-8 py-2 flex items-center gap-3 text-xs" style={{ background: "#0d1a2e", borderBottom: "1px solid #1e3a5f" }}>
+        <div className="shrink-0 px-8 py-2 flex items-center gap-3 text-xs animate-fadeIn" style={{ background: "rgba(251,191,36,0.04)", borderBottom: "1px solid rgba(251,191,36,0.12)" }}>
           <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-          <span className="text-slate-400">이전 세션 발견:</span>
-          <span className="text-slate-200 font-medium max-w-xs truncate">{resumeInfo.topic}</span>
+          <span className="text-slate-500">이전 세션 발견:</span>
+          <span className="text-slate-300 font-medium max-w-xs truncate">{resumeInfo.topic}</span>
           <button
             onClick={() => void resumeSession(resumeInfo)}
             className="ml-2 px-3 py-1 rounded-full text-xs font-medium transition-all"
-            style={{ background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" }}
+            style={{ background: "rgba(251,191,36,0.08)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.2)" }}
           >
             이어서 보기
           </button>
           <button
             onClick={() => { setResumeInfo(null); localStorage.removeItem("cosmicHustleSession"); }}
-            className="text-slate-500 hover:text-slate-300 transition-colors"
+            className="text-slate-600 hover:text-slate-400 transition-colors"
           >
             ✕
           </button>
@@ -545,10 +558,10 @@ export default function Home() {
       <div className="flex-1 overflow-hidden">
         {tab === "dashboard" && (
           <div className="h-full grid grid-cols-2 grid-rows-2 gap-4 p-6">
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
               <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
               <ReportBoard
               reports={reports}
               drafts={reportDrafts}
@@ -556,7 +569,7 @@ export default function Home() {
               onUpdate={(updated) => setReports((prev) => prev.map((r) => r.id === updated.id ? updated : r))}
             />
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
               <HistoryIdeaPanel
               projects={history}
               ideas={pingIdeas}
@@ -565,7 +578,7 @@ export default function Home() {
               onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
             />
             </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
+            <div className="glass-panel rounded-2xl p-5 overflow-hidden">
               <MemoWikiPanel />
             </div>
           </div>

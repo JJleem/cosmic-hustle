@@ -58,13 +58,112 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ── Keyframes ─────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50%       { opacity: 0.8; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-3px); }
+}
+@keyframes glow-breathe {
+  0%, 100% { box-shadow: 0 0 8px 1px var(--glow-color, rgba(139,92,246,0.3)); }
+  50%       { box-shadow: 0 0 18px 3px var(--glow-color, rgba(139,92,246,0.5)); }
+}
 
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out forwards;
+/* ── Utility classes ────────────────────────────────────── */
+.animate-fadeIn   { animation: fadeIn   0.3s ease-out forwards; }
+.animate-shimmer  { animation: shimmer  2.4s linear infinite; }
+.animate-float    { animation: float    3s ease-in-out infinite; }
+.animate-twinkle  { animation: twinkle  3s ease-in-out infinite; }
+
+/* Shimmer gradient — active loading states */
+.shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.04) 40%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ── Cosmic background ──────────────────────────────────── */
+.cosmic-bg {
+  background-color: #07091a;
+  background-image:
+    /* Nebula — top-right violet */
+    radial-gradient(ellipse 55% 45% at 80% -10%, rgba(109,40,217,0.07) 0%, transparent 70%),
+    /* Nebula — bottom-left indigo */
+    radial-gradient(ellipse 50% 40% at -8% 90%, rgba(30,58,175,0.09) 0%, transparent 70%),
+    /* Nebula — center warmth */
+    radial-gradient(ellipse 70% 50% at 50% 60%, rgba(15,23,60,0.35) 0%, transparent 100%),
+    /* Stars — layer A (bright) */
+    radial-gradient(1.5px 1.5px at  8% 12%, rgba(255,255,255,0.28) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 22%  5%, rgba(255,255,255,0.18) 0%, transparent 100%),
+    radial-gradient(2px   2px   at 38% 19%, rgba(200,210,255,0.22) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 54%  8%, rgba(255,255,255,0.15) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 68% 14%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 83%  6%, rgba(200,210,255,0.18) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 92% 22%, rgba(255,255,255,0.12) 0%, transparent 100%),
+    /* Stars — layer B (mid) */
+    radial-gradient(1px   1px   at 12% 38%, rgba(255,255,255,0.12) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 28% 52%, rgba(210,220,255,0.2)  0%, transparent 100%),
+    radial-gradient(1px   1px   at 44% 65%, rgba(255,255,255,0.14) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 60% 44%, rgba(255,255,255,0.1)  0%, transparent 100%),
+    radial-gradient(2px   2px   at 76% 58%, rgba(200,210,255,0.18) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 88% 72%, rgba(255,255,255,0.12) 0%, transparent 100%),
+    /* Stars — layer C (deep) */
+    radial-gradient(1px   1px   at  5% 74%, rgba(255,255,255,0.1)  0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 88%, rgba(210,220,255,0.15) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 35% 82%, rgba(255,255,255,0.12) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 52% 91%, rgba(255,255,255,0.08) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 72% 85%, rgba(200,210,255,0.14) 0%, transparent 100%),
+    radial-gradient(1px   1px   at 90% 94%, rgba(255,255,255,0.1)  0%, transparent 100%);
+}
+
+/* ── Glass panel ────────────────────────────────────────── */
+.glass-panel {
+  position: relative;
+  background: rgba(255, 255, 255, 0.018);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(0, 0, 0, 0.3),
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(99, 102, 241, 0.04);
+}
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.18) 0%,
+    rgba(99, 102, 241, 0.10) 25%,
+    rgba(30, 58, 138, 0.06) 50%,
+    transparent 75%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }

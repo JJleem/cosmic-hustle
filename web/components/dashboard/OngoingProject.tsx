@@ -84,20 +84,24 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
 
           {/* 진행률 바 */}
           <div className="shrink-0">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[9px] text-slate-600 tracking-widest uppercase">Progress</span>
-              <span className="text-[9px] font-bold text-slate-400">{progressPct}%</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] tracking-widest uppercase font-medium" style={{ color: "rgba(148,163,184,0.4)" }}>Progress</span>
+              <span className="text-[9px] font-bold" style={{ color: isDone ? "#6ee7b7" : "#818cf8" }}>{progressPct}%</span>
             </div>
-            <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+            <div className="h-[3px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
               <div
-                className="h-full rounded-full transition-all duration-700"
+                className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
                 style={{
                   width: `${progressPct}%`,
                   background: isDone
                     ? "linear-gradient(90deg, #34d399, #6ee7b7)"
-                    : "linear-gradient(90deg, #3b82f6, #818cf8)",
+                    : "linear-gradient(90deg, #6366f1, #818cf8, #a78bfa)",
                 }}
-              />
+              >
+                {!isDone && progressPct > 0 && (
+                  <div className="absolute inset-0 shimmer-bar" />
+                )}
+              </div>
             </div>
           </div>
 
