@@ -70,6 +70,71 @@ function buildPrompt(
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// 작업 중 에이전트 혼잣말 — 일정 간격으로 캐릭터 메시지 발송
+function startMurmurs(agentId: string, lines: string[], send: (e: SSEEvent) => void, intervalMs = 9000): () => void {
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i < lines.length) {
+      send({ type: "agent_message", agentId, message: lines[i++] });
+    } else {
+      clearInterval(timer);
+    }
+  }, intervalMs);
+  return () => clearInterval(timer);
+}
+
+const MURMURS: Record<string, string[]> = {
+  pocke: [
+    "슉슉... 어디다 쑤셔넣지?",
+    "오 이거 건질 수 있겠다!",
+    "볼따구가 빵빵해지는 중...",
+    "검색 하나만 더!",
+    "이것도 챙겨야지.",
+  ],
+  ka: [
+    "흠... 이 패턴.",
+    "데이터 하나만 더 보고.",
+    "커피 한 모금.",
+    "연결고리가 보일 듯 말 듯...",
+    "이 수치... 뭔가 말하고 있어.",
+  ],
+  over: [
+    "이 문장... 너무 좋다.",
+    "서론 세 번 고쳐 씀.",
+    "독자가 이 부분에서 멈출 것 같아.",
+    "흑... 이 데이터 뒤에 이야기가.",
+    "마침표 하나가 세계를 바꾼다.",
+  ],
+  run: [
+    "이미 반쯤 짰어요.",
+    "빌드 통과.",
+    "타입 에러 하나 있는데 무시.",
+    "로직은 맞는 것 같은데...",
+    "커밋 예정.",
+  ],
+  pixel: [
+    "여백 조정 중.",
+    "이 폰트... 2pt 줄여야겠어.",
+    "레퍼런스랑 비교 중.",
+    "그리드 정렬 중.",
+    "컬러 팔레트 확정됐어요.",
+  ],
+  buzz: [
+    "훅 문장 세 번 바꿨어요.",
+    "이거 트위터에 올리면 터질 것 같은데.",
+    "타겟 다시 생각 중.",
+    "CTA가 핵심이야.",
+    "바이럴 각 잡혔어요.",
+  ],
+  fact: [
+    "빨간펜 들고 있어요.",
+    "...",
+    "출처 재확인.",
+    ".",
+    "논리 흐름 추적 중.",
+  ],
+};
+
 // 결과 텍스트를 작은 조각으로 나눠 딜레이와 함께 전송 — 클라이언트에서 타이핑 효과 가시화
 async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) => void): Promise<void> {
   if (!text.trim()) return;
@@ -246,6 +311,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     send({ type: "agent_start", agentId: "pocke", message: "볼따구에 정보 쑤셔넣는 중..." });
     try {
       let pockeStreamed = false;
+      const stopPockeMurmur = startMurmurs("pocke", MURMURS.pocke, send);
       pockeOutput = await runAgent(
         buildPrompt(agentConfigs, "pocke", {
           topic,
@@ -260,6 +326,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           if (chunk.trim()) { pockeStreamed = true; send({ type: "agent_stream", agentId: "pocke", chunk }); }
         },
       );
+      stopPockeMurmur();
       if (!pockeStreamed && pockeOutput.trim()) await streamChunked("pocke", pockeOutput, send);
       send({ type: "agent_done", agentId: "pocke", message: "볼따구 터질것같아! 카 과장한테 넘길게요." });
     } catch {
@@ -293,6 +360,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     send({ type: "agent_start", agentId: "ka", message: "패턴 분석 시작. 데이터 하나만 더..." });
     try {
       let kaStreamed = false;
+      const stopKaMurmur = startMurmurs("ka", MURMURS.ka, send, 10000);
       kaOutput = await runAgent(
         buildPrompt(agentConfigs, "ka", {
           topic,
@@ -303,6 +371,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         (chunk) => { if (chunk.trim()) { kaStreamed = true; send({ type: "agent_stream", agentId: "ka", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "ka", chunk: thinking }); },
       );
+      stopKaMurmur();
       if (!kaStreamed && kaOutput.trim()) await streamChunked("ka", kaOutput, send);
       await delay(1200);
       send({ type: "agent_done", agentId: "ka", message: `찾았다!!! 핵심 인사이트 잡음. ${writerAgentName}한테 넘길게.` });
@@ -400,6 +469,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       const styleNote = reportStyle
         ? `분량: ${lengthMap[reportStyle.length]}. 문체: ${toneMap[reportStyle.tone]}.\n`
         : "";
+      const stopWriterMurmur = startMurmurs(writerAgentId, MURMURS[writerAgentId] ?? [], send, 11000);
       overReport = await runAgent(
         buildPrompt(agentConfigs, writerAgentId, {
           ...writerVars,
@@ -409,6 +479,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         (chunk) => { if (chunk.trim()) { writerStreamed = true; send({ type: "agent_stream", agentId: writerAgentId, chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: writerAgentId, chunk: thinking }); },
       );
+      stopWriterMurmur();
       if (!writerStreamed && overReport.trim()) await streamChunked(writerAgentId, overReport, send);
       await delay(1800);
       const doneMsg = isDevTask ? "구현 완료. 팩트 부장님 리뷰 받을게요." : "완성. 팩트 부장님께.";
@@ -436,6 +507,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     send({ type: "agent_start", agentId: "fact", message: "..." });
     try {
       let factStreamed = false;
+      const stopFactMurmur = startMurmurs("fact", MURMURS.fact, send, 10000);
       const sourcesJson = JSON.stringify(pocke.sources.slice(0, 5));
       const factRaw = await runAgent(
         buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 3000), sources: sourcesJson }, promptVariants),
@@ -443,6 +515,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         (chunk) => { if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "fact", chunk: thinking }); },
       );
+      stopFactMurmur();
       if (!factStreamed && factRaw.trim()) await streamChunked("fact", factRaw, send);
       await delay(800);
 
