@@ -596,7 +596,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       let factStreamed = false;
       const sourcesJson = JSON.stringify(pocke.sources.slice(0, 5));
       const factRaw = await runAgent(
-        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 800), sources: sourcesJson }, promptVariants),
+        buildPrompt(agentConfigs, "fact", { report: overReport.slice(0, 3000), sources: sourcesJson }, promptVariants),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "fact") ?? 1 },
         (chunk) => { if (chunk.trim()) { factStreamed = true; send({ type: "agent_stream", agentId: "fact", chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: "fact", chunk: thinking }); },
@@ -719,9 +719,9 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       runAgent(
         buildPrompt(agentConfigs, "wiki", {
           topic,
-          conclusion: ka.conclusion.slice(0, 150),
+          conclusion: ka.conclusion.slice(0, 200),
           insights: ka.insights.map((i) => i.title).join(", "),
-        }, promptVariants) + `\nsources/ 요약 파일 생성, concepts/ 보강, index.md와 log.md 업데이트.`,
+        }, { ...promptVariants, wiki: "wiki_update" }),
         {
           allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
           addDirs: [WIKI_DIR],
