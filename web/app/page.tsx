@@ -61,6 +61,8 @@ export default function Home() {
   const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionIdRef = useRef("");
+  const pendingDraftsRef = useRef<Record<string, string>>({});
+  const [reportDrafts, setReportDrafts] = useState<Record<string, string>>({});
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
 
   // DB에서 초기 데이터 로드
@@ -185,10 +187,14 @@ export default function Home() {
         case "agent_expression":
           setAgentExpression((prev) => ({ ...prev, [event.agentId as string]: (event.expression as string | null) ?? null }));
           break;
-        case "report":
+        case "draft_report":
+          pendingDraftsRef.current[event.agentId as string] = event.content as string;
+          break;
+        case "report": {
+          const rId = (event.reportId as string) ?? uid();
           setReports((prev) => [
             {
-              id: (event.reportId as string) ?? uid(),
+              id: rId,
               agentId: event.agentId as string,
               topic: (event.topic as string) ?? inputTopic,
               content: event.content as string,
@@ -196,7 +202,13 @@ export default function Home() {
             },
             ...prev,
           ]);
+          const draft = pendingDraftsRef.current[event.agentId as string];
+          if (draft) {
+            setReportDrafts((prev) => ({ ...prev, [rId]: draft }));
+            delete pendingDraftsRef.current[event.agentId as string];
+          }
           break;
+        }
         case "ping_ideas":
           setPingIdeas((event.ideas as Idea[]) ?? []);
           break;
@@ -510,12 +522,13 @@ export default function Home() {
               <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
-              <ReportBoard reports={reports} />
+              <ReportBoard reports={reports} drafts={reportDrafts} />
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5 overflow-hidden">
               <HistoryIdeaPanel
               projects={history}
               ideas={pingIdeas}
+              reports={reports}
               onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
             />
             </div>

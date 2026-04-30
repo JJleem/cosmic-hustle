@@ -1,26 +1,37 @@
 "use client";
 
 import { useState } from "react";
-import { Zap } from "lucide-react";
+import { Zap, BarChart2 } from "lucide-react";
 import { ProjectRecord } from "./ProjectHistory";
 import { Idea } from "@/components/AgentWorkspace";
+import { AGENT_MAP } from "@/lib/agents";
 
-type Tab = "history" | "ideas";
+type Tab = "history" | "ideas" | "stats";
+
+type ReportStat = { id: string; agentId: string; content: string; topic: string };
 
 type Props = {
   projects: ProjectRecord[];
   ideas: Idea[];
+  reports?: ReportStat[];
   onIdeaSelect?: (topic: string) => void;
 };
 
-export default function HistoryIdeaPanel({ projects, ideas, onIdeaSelect }: Props) {
+const WRITERS = [
+  { id: "over",  label: "오버" },
+  { id: "run",   label: "런" },
+  { id: "pixel", label: "픽셀" },
+  { id: "buzz",  label: "버즈" },
+];
+
+export default function HistoryIdeaPanel({ projects, ideas, reports = [], onIdeaSelect }: Props) {
   const [tab, setTab] = useState<Tab>("history");
 
   return (
     <div className="flex flex-col h-full">
       {/* 탭 헤더 */}
       <div className="flex items-center gap-1 mb-4 shrink-0">
-        {(["history", "ideas"] as Tab[]).map((t) => (
+        {(["history", "ideas", "stats"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -31,7 +42,8 @@ export default function HistoryIdeaPanel({ projects, ideas, onIdeaSelect }: Prop
                 : { background: "transparent", color: "#475569", border: "1px solid transparent" }
             }
           >
-            {t === "history" ? "내역" : (
+            {t === "history" && "내역"}
+            {t === "ideas" && (
               <>
                 <Zap size={9} />
                 아이디어
@@ -45,16 +57,20 @@ export default function HistoryIdeaPanel({ projects, ideas, onIdeaSelect }: Prop
                 )}
               </>
             )}
+            {t === "stats" && (
+              <>
+                <BarChart2 size={9} />
+                통계
+              </>
+            )}
           </button>
         ))}
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        {tab === "history" ? (
-          <HistoryList projects={projects} />
-        ) : (
-          <IdeaBoard ideas={ideas} onIdeaSelect={onIdeaSelect} />
-        )}
+        {tab === "history" && <HistoryList projects={projects} />}
+        {tab === "ideas" && <IdeaBoard ideas={ideas} onIdeaSelect={onIdeaSelect} />}
+        {tab === "stats" && <StatsPanel projects={projects} reports={reports} />}
       </div>
     </div>
   );
@@ -87,6 +103,80 @@ function HistoryList({ projects }: { projects: ProjectRecord[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function StatsPanel({ projects, reports }: { projects: ProjectRecord[]; reports: ReportStat[] }) {
+  const totalChars = reports.reduce((s, r) => s + r.content.length, 0);
+  const avgChars = reports.length > 0 ? Math.round(totalChars / reports.length) : 0;
+  const maxCount = Math.max(...WRITERS.map(({ id }) => reports.filter((r) => r.agentId === id).length), 1);
+
+  return (
+    <div className="h-full overflow-y-auto space-y-4 scrollbar-hide">
+      {/* 요약 카드 3개 */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: "완료 프로젝트", value: projects.length, unit: "건" },
+          { label: "총 보고서", value: reports.length, unit: "건" },
+          { label: "평균 분량", value: avgChars.toLocaleString(), unit: "자" },
+        ].map(({ label, value, unit }) => (
+          <div
+            key={label}
+            className="rounded-xl px-3 py-2.5 flex flex-col gap-1"
+            style={{ background: "#0d1120", border: "1px solid #1a2235" }}
+          >
+            <p className="text-[8px] text-slate-600 tracking-widest uppercase">{label}</p>
+            <p className="text-lg font-bold text-slate-100 leading-none">
+              {value}<span className="text-[10px] text-slate-500 ml-0.5 font-normal">{unit}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* 에이전트별 보고서 수 */}
+      <div className="rounded-xl px-3 py-3" style={{ background: "#0d1120", border: "1px solid #1a2235" }}>
+        <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-3">에이전트별 작성</p>
+        <div className="flex flex-col gap-2.5">
+          {WRITERS.map(({ id, label }) => {
+            const agent = AGENT_MAP[id];
+            const count = reports.filter((r) => r.agentId === id).length;
+            const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+            if (count === 0) return null;
+            return (
+              <div key={id} className="flex items-center gap-2">
+                <span className="text-[10px] w-8 shrink-0 font-semibold" style={{ color: agent?.color }}>{label}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${pct}%`, background: agent?.color ?? "#94a3b8" }}
+                  />
+                </div>
+                <span className="text-[10px] text-slate-500 w-4 text-right shrink-0">{count}</span>
+              </div>
+            );
+          })}
+          {WRITERS.every(({ id }) => reports.filter((r) => r.agentId === id).length === 0) && (
+            <p className="text-[10px] text-slate-700 text-center py-2">보고서 없음</p>
+          )}
+        </div>
+      </div>
+
+      {/* 최근 완료 프로젝트 */}
+      {projects.length > 0 && (
+        <div className="rounded-xl px-3 py-3" style={{ background: "#0d1120", border: "1px solid #1a2235" }}>
+          <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">최근 완료</p>
+          <div className="flex flex-col gap-1.5">
+            {projects.slice(0, 3).map((p) => (
+              <div key={p.id} className="flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full bg-emerald-500/60 shrink-0" />
+                <p className="text-[10px] text-slate-400 truncate flex-1">{p.topic}</p>
+                <p className="text-[9px] text-slate-700 shrink-0">{p.completedAt.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

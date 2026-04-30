@@ -104,15 +104,16 @@ const WRITER_AGENTS = [
   { id: "buzz",  label: "버즈" },
 ];
 
-type Props = { reports: Report[] };
+type Props = { reports: Report[]; drafts?: Record<string, string> };
 
-export default function ReportBoard({ reports }: Props) {
+export default function ReportBoard({ reports, drafts = {} }: Props) {
   const [selected, setSelected] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [translated, setTranslated] = useState<string | null>(null);
   const [showTranslated, setShowTranslated] = useState(false);
   const [htmlViewMode, setHtmlViewMode] = useState<"preview" | "source">("preview");
+  const [showDraft, setShowDraft] = useState(false);
   const [search, setSearch] = useState("");
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
 
@@ -250,7 +251,7 @@ export default function ReportBoard({ reports }: Props) {
               return (
                 <div
                   key={r.id}
-                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); setHtmlViewMode("preview"); }}
+                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); setHtmlViewMode("preview"); setShowDraft(false); }}
                   className="rounded-xl border border-slate-500 bg-slate-700/50 p-3 hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1.5">
@@ -324,6 +325,23 @@ export default function ReportBoard({ reports }: Props) {
 
               {/* 액션 버튼 */}
               <div className="flex items-center gap-1 shrink-0 ml-1">
+                {drafts[selected.id] && (
+                  <>
+                    <button
+                      onClick={() => setShowDraft((v) => !v)}
+                      title={showDraft ? "최종본 보기" : "초안 보기"}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all"
+                      style={
+                        showDraft
+                          ? { background: "#2d1a00", color: "#fb923c", border: "1px solid #7c3a00" }
+                          : { color: "#94a3b8" }
+                      }
+                    >
+                      <span>{showDraft ? "v2 최종" : "v1 초안"}</span>
+                    </button>
+                    <div className="w-px h-4 bg-slate-700" />
+                  </>
+                )}
                 {extractHtml(selected.content) && (
                   <>
                     <button
@@ -393,7 +411,21 @@ export default function ReportBoard({ reports }: Props) {
 
             {/* 본문 */}
             {(() => {
-              const htmlContent = extractHtml(selected.content);
+              const activeContent = showDraft && drafts[selected.id] ? drafts[selected.id] : selected.content;
+              const htmlContent = extractHtml(activeContent);
+              if (showDraft && drafts[selected.id]) {
+                return (
+                  <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
+                      <span className="text-[10px] text-orange-400 font-bold px-2 py-0.5 rounded-full" style={{ background: "#2d1a0080", border: "1px solid #7c3a0060" }}>v1 초안</span>
+                      <span className="text-[10px] text-slate-600">팩트 검토 전 원본</span>
+                    </div>
+                    <div className="report-body text-sm text-slate-300 leading-relaxed">
+                      <ReactMarkdown>{drafts[selected.id]}</ReactMarkdown>
+                    </div>
+                  </div>
+                );
+              }
               if (htmlContent && !showTranslated) {
                 if (htmlViewMode === "preview") {
                   return (

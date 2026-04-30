@@ -30,13 +30,15 @@ export default function ProjectWorkView({
   const logRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [pinnedAgentId, setPinnedAgentId] = useState<string | null>(null);
 
-  // active → done 순서로 표시할 에이전트 결정 (state/effect 없이 순수 파생)
-  const displayAgent =
+  // 핀된 에이전트 > 현재 활성 > 마지막 완료 순서
+  const autoAgent =
     AGENTS.find((a) => agentStatus[a.id] === "active") ??
     [...AGENTS].reverse().find((a) => agentStatus[a.id] === "done") ??
     AGENTS.find((a) => agentStatus[a.id] !== "disabled") ??
     AGENTS[0];
+  const displayAgent = (pinnedAgentId ? AGENT_MAP[pinnedAgentId] : null) ?? autoAgent;
 
   // disabled 상태가 아닌 스테이지만 파이프라인에 표시
   const visiblePipeline = PIPELINE.filter((stage) =>
@@ -263,9 +265,47 @@ export default function ProjectWorkView({
 
         {/* 스트리밍 로그 */}
         <div className="flex-1 flex flex-col overflow-hidden border-r" style={{ borderColor: "#0f1520" }}>
+          {/* 에이전트 선택 썸네일 스트립 */}
+          <div
+            className="shrink-0 flex items-center gap-1.5 px-4 py-2 border-b overflow-x-auto scrollbar-hide"
+            style={{ borderColor: "#0f1520", background: "#060a10" }}
+          >
+            {AGENTS.filter((a) => agentStatus[a.id] !== "disabled" && agentStatus[a.id] !== "waiting").map((a) => {
+              const isActive = agentStatus[a.id] === "active";
+              const isDone = agentStatus[a.id] === "done";
+              const isPinned = pinnedAgentId === a.id;
+              const isAuto = !pinnedAgentId && a.id === autoAgent.id;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => setPinnedAgentId(isPinned ? null : a.id)}
+                  title={`${a.name} 로그 보기`}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 transition-all"
+                  style={
+                    isPinned || isAuto
+                      ? { background: `${a.color}18`, border: `1px solid ${a.color}50` }
+                      : { background: "transparent", border: "1px solid transparent", opacity: 0.5 }
+                  }
+                >
+                  <div
+                    className="w-4 h-4 rounded-full overflow-hidden shrink-0"
+                    style={{ outline: `1px solid ${a.color}${isActive ? "90" : "40"}` }}
+                  >
+                    <img src={a.image} alt={a.name} className="w-full h-full object-cover object-top" />
+                  </div>
+                  <span className="text-[9px] font-bold" style={{ color: isActive || isPinned || isAuto ? a.color : `${a.color}80` }}>
+                    {a.name}
+                  </span>
+                  {isActive && <div className="w-1 h-1 rounded-full animate-pulse" style={{ background: a.color }} />}
+                  {isDone && <span className="text-[8px]" style={{ color: `${a.color}60` }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+
           {/* 헤더 */}
           <div
-            className="shrink-0 px-6 py-4 flex items-center gap-3 border-b"
+            className="shrink-0 px-6 py-3 flex items-center gap-3 border-b"
             style={{ borderColor: "#0f1520" }}
           >
             <div
@@ -273,9 +313,17 @@ export default function ProjectWorkView({
               style={{ background: displayAgent.color }}
             />
             <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: displayAgent.color }}>
-              Live Output
+              {pinnedAgentId ? "Pinned" : "Live"} Output
             </span>
-            <span className="text-xs text-slate-600 ml-2">{displayAgent.name} 작업 중...</span>
+            <span className="text-xs text-slate-600 ml-1">— {displayAgent.name}</span>
+            {pinnedAgentId && (
+              <button
+                onClick={() => setPinnedAgentId(null)}
+                className="text-[10px] text-slate-700 hover:text-slate-400 transition-colors"
+              >
+                핀 해제
+              </button>
+            )}
             <button
               onClick={() => setConfirmStop(true)}
               className="ml-auto text-[11px] px-3 py-1.5 rounded-full border transition-all hover:bg-red-950/40"
@@ -322,29 +370,6 @@ export default function ProjectWorkView({
             )}
           </div>
 
-          {/* 완료된 에이전트 요약 */}
-          <div
-            className="shrink-0 border-t px-6 py-3 flex items-center gap-3 overflow-x-auto"
-            style={{ borderColor: "#0f1520" }}
-          >
-            <span className="text-[10px] text-slate-700 tracking-widest uppercase shrink-0">완료</span>
-            {AGENTS.filter((a) => agentStatus[a.id] === "done").map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full shrink-0"
-                style={{
-                  background: `${a.color}10`,
-                  border: `1px solid ${a.color}25`,
-                }}
-              >
-                <span className="text-[10px]" style={{ color: `${a.color}80` }}>✓</span>
-                <span className="text-[10px]" style={{ color: `${a.color}70` }}>{a.name}</span>
-              </div>
-            ))}
-            {AGENTS.filter((a) => agentStatus[a.id] === "done").length === 0 && (
-              <span className="text-[10px] text-slate-800">아직 없음</span>
-            )}
-          </div>
         </div>
 
         {/* 채팅 피드 — 직원 간 대화 */}

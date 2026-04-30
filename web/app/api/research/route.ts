@@ -50,6 +50,7 @@ type SSEEvent =
   | { type: "agent_done"; agentId: string; message: string }
   | { type: "agent_expression"; agentId: string; expression: string | null }
   | { type: "report"; agentId: string; topic: string; content: string; reportId: string }
+  | { type: "draft_report"; agentId: string; topic: string; content: string }
   | { type: "ping_ideas"; ideas: Array<{ title: string; spark: string }> }
   | { type: "clarify_request"; sessionId: string; questions: string[] }
   | { type: "ceo_checkin"; sessionId: string; agentId: string; summary: string; keyFacts: string[] }
@@ -611,6 +612,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       factFeedback = fact.feedback;
 
       if (!factPassed) {
+        send({ type: "draft_report", agentId: writerAgentId, topic, content: overReport });
         send({ type: "agent_message", agentId: "fact", message: `오류 ${fact.issues.length}건. 수정 후 재검토.` });
         send({ type: "agent_expression", agentId: "fact", expression: "err" });
         send({ type: "agent_expression", agentId: writerAgentId, expression: writerAgentId === "over" ? "sad" : "err" });
