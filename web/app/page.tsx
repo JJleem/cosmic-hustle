@@ -628,6 +628,8 @@ export default function Home() {
           agentStatus={agentStatus[selectedAgent.id] ?? "idle"}
           lastMessage={lastMessage[selectedAgent.id] ?? ""}
           agentSettings={agentSettings}
+          pingIdeas={pingIdeas}
+          onNewProject={() => { setSelectedAgent(null); setShowSetup(true); }}
           onClose={() => setSelectedAgent(null)}
         />
       )}
