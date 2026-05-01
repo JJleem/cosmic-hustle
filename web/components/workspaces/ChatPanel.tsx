@@ -21,12 +21,12 @@ const AGENT_CONFIG: Record<string, { greeting: string; actions: Array<{ label: s
 
 type Message = { id: string; role: "agent" | "user"; text: string; loading?: boolean };
 
-type Props = { agent: AgentDef; placeholder?: string; mono?: boolean };
+type Props = { agent: AgentDef; placeholder?: string; mono?: boolean; initialInput?: string };
 
-export default function ChatPanel({ agent, placeholder, mono = false }: Props) {
+export default function ChatPanel({ agent, placeholder, mono = false, initialInput }: Props) {
   const cfg = AGENT_CONFIG[agent.id] ?? { greeting: "무엇을 도와드릴까요?", actions: [] };
   const [messages, setMessages] = useState<Message[]>([{ id: "init", role: "agent", text: cfg.greeting }]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialInput ?? "");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 

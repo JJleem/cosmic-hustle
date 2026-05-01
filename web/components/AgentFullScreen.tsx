@@ -10,6 +10,12 @@ import WikiViewer from "./dashboard/WikiViewer";
 import WikiIngest from "./dashboard/WikiIngest";
 import ChatPanel from "./workspaces/ChatPanel";
 import PlanWorkspace from "./workspaces/PlanWorkspace";
+import OverWorkspace from "./workspaces/OverWorkspace";
+import PixelWorkspace from "./workspaces/PixelWorkspace";
+import PingWorkspace from "./workspaces/PingWorkspace";
+import FactWorkspace from "./workspaces/FactWorkspace";
+import RootWorkspace from "./workspaces/RootWorkspace";
+import BuzzWorkspace from "./workspaces/BuzzWorkspace";
 import React from "react";
 
 // ── 인사팀 패널 ───────────────────────────────────────
@@ -121,12 +127,18 @@ function WorkspaceRouter({
   onNewProject?: () => void;
 }) {
   switch (agent.id) {
-    case "wiki":
-      return <WikiWorkspace agent={agent} agentSettings={agentSettings} />;
-    case "plan":
-      return <PlanWorkspace agent={agent} onNewProject={onNewProject} />;
-    default:
-      return <ChatPanel agent={agent} />;
+    case "wiki":  return <WikiWorkspace agent={agent} agentSettings={agentSettings} />;
+    case "plan":  return <PlanWorkspace agent={agent} onNewProject={onNewProject} />;
+    case "over":  return <OverWorkspace agent={agent} />;
+    case "pixel": return <PixelWorkspace agent={agent} />;
+    case "ping":  return <PingWorkspace agent={agent} pingIdeas={pingIdeas} />;
+    case "fact":  return <FactWorkspace agent={agent} />;
+    case "root":  return <RootWorkspace agent={agent} />;
+    case "buzz":  return <BuzzWorkspace agent={agent} />;
+    case "run":   return <ChatPanel agent={agent} mono={true} />;
+    case "ka":    return <ChatPanel agent={agent} />;
+    case "pocke": return <ChatPanel agent={agent} />;
+    default:      return <ChatPanel agent={agent} />;
   }
 }
 
