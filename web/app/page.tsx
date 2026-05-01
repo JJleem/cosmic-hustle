@@ -601,6 +601,7 @@ export default function Home() {
             lastMessage={lastMessage}
             pingIdeas={pingIdeas}
             lastTopic={topic}
+            chatFeed={chatFeed}
           />
         )}
 
