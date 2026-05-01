@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -89,11 +89,27 @@ function downloadMarkdown(report: Report) {
   const filename = `${report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_")}_${report.agentId}.md`;
   const header = `# ${report.topic}\n\n> 작성: ${AGENT_MAP[report.agentId]?.name ?? report.agentId} · ${new Date(report.createdAt).toLocaleDateString("ko-KR")}\n\n---\n\n`;
   const blob = new Blob([header + report.content], { type: "text/markdown;charset=utf-8" });
+  triggerDownload(blob, filename);
+}
+
+function downloadHtml(report: Report) {
+  const html = extractHtml(report.content);
+  if (!html) return;
+  const filename = `${report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_")}.html`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  triggerDownload(blob, filename);
+}
+
+function downloadTxt(report: Report) {
+  const filename = `${report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_")}.txt`;
+  const blob = new Blob([stripMarkdown(report.content)], { type: "text/plain;charset=utf-8" });
+  triggerDownload(blob, filename);
+}
+
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
+  a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -130,7 +146,19 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
   const [editTopic, setEditTopic] = useState("");
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showExport) return;
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setShowExport(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showExport]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelected(null); };
@@ -521,30 +549,64 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
                   <span>{translating ? "번역중..." : showTranslated ? "한국어" : "EN"}</span>
                 </button>
                 <div className="w-px h-4 bg-slate-700" />
-                <button
-                  onClick={handleCopy}
-                  title="클립보드 복사"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
-                >
-                  {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                  <span>{copied ? "복사됨" : "복사"}</span>
-                </button>
-                <button
-                  onClick={() => downloadMarkdown(selected)}
-                  title="마크다운 다운로드"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
-                >
-                  <Download size={12} />
-                  <span>MD</span>
-                </button>
-                <button
-                  onClick={() => printReport(selected)}
-                  title="PDF로 인쇄/저장"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
-                >
-                  <Printer size={12} />
-                  <span>PDF</span>
-                </button>
+                {/* 내보내기 드롭다운 */}
+                <div ref={exportRef} className="relative">
+                  <button
+                    onClick={() => setShowExport(v => !v)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all"
+                    style={showExport
+                      ? { background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)" }
+                      : { color: "#94a3b8" }}
+                  >
+                    <Download size={12} />
+                    <span>내보내기</span>
+                    <ChevronDown size={10} className={`transition-transform ${showExport ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {showExport && (
+                    <div className="absolute right-0 top-full mt-1 z-10 rounded-xl py-1 min-w-[160px] animate-fadeIn"
+                      style={{ background: "#0d1525", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
+                      <p className="text-[9px] text-slate-700 px-3 py-1.5 tracking-wider uppercase font-bold">복사</p>
+                      <button onClick={() => { void handleCopy(); setShowExport(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                        {copied ? "복사됨!" : "마크다운 복사"}
+                      </button>
+                      <button onClick={async () => {
+                        await navigator.clipboard.writeText(stripMarkdown(selected.content));
+                        setCopiedText(true); setTimeout(() => setCopiedText(false), 2000);
+                        setShowExport(false);
+                      }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        {copiedText ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                        {copiedText ? "복사됨!" : "텍스트 복사"}
+                      </button>
+
+                      <div className="my-1 mx-3 border-t border-white/5" />
+                      <p className="text-[9px] text-slate-700 px-3 py-1.5 tracking-wider uppercase font-bold">다운로드</p>
+                      <button onClick={() => { downloadMarkdown(selected); setShowExport(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        <FileText size={11} />.md 마크다운
+                      </button>
+                      <button onClick={() => { downloadTxt(selected); setShowExport(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        <FileText size={11} />.txt 텍스트
+                      </button>
+                      {extractHtml(selected.content) && (
+                        <button onClick={() => { downloadHtml(selected); setShowExport(false); }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                          <FileCode size={11} />.html 파일
+                        </button>
+                      )}
+
+                      <div className="my-1 mx-3 border-t border-white/5" />
+                      <button onClick={() => { printReport(selected); setShowExport(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        <Printer size={11} />PDF로 인쇄
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="w-px h-4 bg-slate-700" />
                 <button
                   onClick={() => void handleDelete(selected.id)}
