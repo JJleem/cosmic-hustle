@@ -45,10 +45,20 @@ export default function ChatPanel({ agent, placeholder, mono = false, initialInp
     setLoading(true);
     const lid = addMsg("agent", "...", true);
     try {
+      // 위키 에이전트: index.md를 컨텍스트로 주입
+      let context: string | undefined;
+      if (agent.id === "wiki") {
+        try {
+          const r = await fetch("/api/wiki/content?path=index.md");
+          const d = await r.json() as { content?: string };
+          if (d.content) context = `현재 위키 인덱스:\n${d.content}`;
+        } catch { /* 실패 시 컨텍스트 없이 진행 */ }
+      }
+
       const res = await fetch(`/api/agent/${agent.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: prompt }),
+        body: JSON.stringify({ task: prompt, ...(context ? { context } : {}) }),
       });
       if (!res.ok || !res.body) throw new Error();
       const reader = res.body.getReader();
