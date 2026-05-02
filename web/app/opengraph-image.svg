@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#07091a"/>
+  <!-- stars -->
+  <circle cx="120" cy="80" r="1.5" fill="#a78bfa" opacity="0.6"/>
+  <circle cx="340" cy="150" r="1" fill="#67e8f9" opacity="0.5"/>
+  <circle cx="900" cy="60" r="2" fill="#c4b5fd" opacity="0.4"/>
+  <circle cx="1050" cy="200" r="1.5" fill="#a78bfa" opacity="0.5"/>
+  <circle cx="200" cy="500" r="1" fill="#67e8f9" opacity="0.4"/>
+  <circle cx="1100" cy="450" r="2" fill="#fcd34d" opacity="0.3"/>
+  <circle cx="600" cy="40" r="1" fill="#c4b5fd" opacity="0.5"/>
+  <circle cx="750" cy="580" r="1.5" fill="#a78bfa" opacity="0.4"/>
+  <!-- orbit ring -->
+  <ellipse cx="600" cy="315" rx="520" ry="140" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8 4" opacity="0.15"/>
+  <!-- planet -->
+  <circle cx="600" cy="315" r="90" fill="url(#pg)"/>
+  <!-- rocket -->
+  <path d="M600 210 C600 210 578 248 578 278 L600 285 L622 278 C622 248 600 210 600 210Z" fill="#c4b5fd"/>
+  <path d="M578 278 L564 295 L600 285 Z" fill="#a78bfa"/>
+  <path d="M622 278 L636 295 L600 285 Z" fill="#a78bfa"/>
+  <path d="M594 285 L600 308 L606 285 Z" fill="#fcd34d" opacity="0.9"/>
+  <!-- title -->
+  <text x="600" y="450" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="800" fill="white">Cosmic Hustle</text>
+  <!-- subtitle -->
+  <text x="600" y="510" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="28" fill="#64748b">AI 에이전트 11명과 함께하는 우주 리서치 회사</text>
+  <!-- agent count badge -->
+  <rect x="480" y="548" width="240" height="40" rx="20" fill="#a78bfa" fill-opacity="0.12" stroke="#a78bfa" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="600" y="573" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#a78bfa">Research · Creative · Operations</text>
+  <defs>
+    <radialGradient id="pg" cx="38%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </radialGradient>
+  </defs>
+</svg>
