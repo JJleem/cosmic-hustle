@@ -120,19 +120,20 @@ function WikiWorkspace({ agent, agentSettings }: { agent: AgentDef; agentSetting
 
 // ── 워크스페이스 라우터 ───────────────────────────────
 function WorkspaceRouter({
-  agent, agentSettings, pingIdeas, onNewProject,
+  agent, agentSettings, pingIdeas, onNewProject, onStartProject,
 }: {
   agent: AgentDef;
   agentSettings: AllAgentSettings;
   pingIdeas: Idea[];
   onNewProject?: () => void;
+  onStartProject?: (topic: string) => void;
 }) {
   switch (agent.id) {
     case "wiki":  return <WikiWorkspace agent={agent} agentSettings={agentSettings} />;
     case "plan":  return <PlanWorkspace agent={agent} onNewProject={onNewProject} />;
     case "over":  return <OverWorkspace agent={agent} />;
     case "pixel": return <PixelWorkspace agent={agent} />;
-    case "ping":  return <PingWorkspace agent={agent} pingIdeas={pingIdeas} />;
+    case "ping":  return <PingWorkspace agent={agent} pingIdeas={pingIdeas} onStartProject={onStartProject} />;
     case "fact":  return <FactWorkspace agent={agent} />;
     case "root":  return <RootWorkspace agent={agent} />;
     case "buzz":  return <BuzzWorkspace agent={agent} />;
@@ -151,10 +152,11 @@ type Props = {
   agentSettings: AllAgentSettings;
   pingIdeas: Idea[];
   onNewProject?: () => void;
+  onStartProject?: (topic: string) => void;
   onClose: () => void;
 };
 
-export default function AgentFullScreen({ agent, agentStatus, lastMessage, agentSettings, pingIdeas, onNewProject, onClose }: Props) {
+export default function AgentFullScreen({ agent, agentStatus, lastMessage, agentSettings, pingIdeas, onNewProject, onStartProject, onClose }: Props) {
   const dept = DEPT_MAP[agent.departmentId];
   const isActive = agentStatus === "active";
 
@@ -262,6 +264,7 @@ export default function AgentFullScreen({ agent, agentStatus, lastMessage, agent
             agentSettings={agentSettings}
             pingIdeas={pingIdeas}
             onNewProject={onNewProject}
+            onStartProject={onStartProject}
           />
         </main>
       </div>

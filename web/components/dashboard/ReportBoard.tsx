@@ -128,9 +128,9 @@ const DATE_FILTERS = [
 
 type DateFilter = "today" | "week" | "month";
 
-type Props = { reports: Report[]; drafts?: Record<string, string>; onDelete?: (id: string) => void; onUpdate?: (updated: Report) => void };
+type Props = { reports: Report[]; drafts?: Record<string, string>; onDelete?: (id: string) => void; onUpdate?: (updated: Report) => void; onDeepDive?: (topic: string) => void };
 
-export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }: Props) {
+export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, onDeepDive }: Props) {
   const [selected, setSelected] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -574,6 +574,21 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
                     >
                       {htmlViewMode === "preview" ? <Code size={12} /> : <Monitor size={12} />}
                       <span>{htmlViewMode === "preview" ? "소스" : "프리뷰"}</span>
+                    </button>
+                    <div className="w-px h-4 bg-slate-700" />
+                  </>
+                )}
+                {/* 더 파기 */}
+                {onDeepDive && (
+                  <>
+                    <button
+                      onClick={() => { onDeepDive(selected.topic); setSelected(null); }}
+                      title="이 주제로 더 깊게 리서치"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all hover:opacity-80"
+                      style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }}
+                    >
+                      <Search size={12} />
+                      <span>더 파기</span>
                     </button>
                     <div className="w-px h-4 bg-slate-700" />
                   </>

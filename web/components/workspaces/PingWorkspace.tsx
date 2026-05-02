@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, Sparkles, Zap } from "lucide-react";
+import { MessageCircle, Sparkles, Zap, Play } from "lucide-react";
 import { AgentDef } from "@/lib/agents";
 import { Idea } from "@/components/AgentWorkspace";
 import ChatPanel from "./ChatPanel";
 
 type Tab = "ideas" | "chat";
 
-export default function PingWorkspace({ agent, pingIdeas }: { agent: AgentDef; pingIdeas: Idea[] }) {
+export default function PingWorkspace({ agent, pingIdeas, onStartProject }: { agent: AgentDef; pingIdeas: Idea[]; onStartProject?: (topic: string) => void }) {
   const [tab, setTab] = useState<Tab>("ideas");
 
   const TABS = [
@@ -65,6 +65,15 @@ export default function PingWorkspace({ agent, pingIdeas }: { agent: AgentDef; p
                         <p className="text-sm text-slate-200 leading-relaxed font-medium">{idea.title}</p>
                         {idea.spark && (
                           <p className="text-xs text-slate-500 leading-relaxed mt-1.5">{idea.spark}</p>
+                        )}
+                        {onStartProject && (
+                          <button
+                            onClick={() => onStartProject(idea.title)}
+                            className="flex items-center gap-1 mt-2 text-[10px] px-2.5 py-1 rounded-full transition-all hover:opacity-80"
+                            style={{ background: `${agent.color}12`, color: agent.color, border: `1px solid ${agent.color}25` }}
+                          >
+                            <Play size={8} />리서치 시작
+                          </button>
                         )}
                       </div>
                     </div>

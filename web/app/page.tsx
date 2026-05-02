@@ -597,6 +597,7 @@ export default function Home() {
                 drafts={reportDrafts}
                 onDelete={(id) => setReports((prev) => prev.filter((r) => r.id !== id))}
                 onUpdate={(updated) => setReports((prev) => prev.map((r) => r.id === updated.id ? updated : r))}
+                onDeepDive={(topic) => { setInitialTopic(topic); setShowSetup(true); }}
               />
             </div>
           </div>
@@ -640,6 +641,7 @@ export default function Home() {
           agentSettings={agentSettings}
           pingIdeas={pingIdeas}
           onNewProject={() => { setSelectedAgent(null); setShowSetup(true); }}
+          onStartProject={(topic) => { setInitialTopic(topic); setSelectedAgent(null); setShowSetup(true); }}
           onClose={() => setSelectedAgent(null)}
         />
       )}
