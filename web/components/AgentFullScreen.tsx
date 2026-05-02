@@ -16,6 +16,7 @@ import PingWorkspace from "./workspaces/PingWorkspace";
 import FactWorkspace from "./workspaces/FactWorkspace";
 import RootWorkspace from "./workspaces/RootWorkspace";
 import BuzzWorkspace from "./workspaces/BuzzWorkspace";
+import PockeWorkspace from "./workspaces/PockeWorkspace";
 import React from "react";
 
 // ── 인사팀 패널 ───────────────────────────────────────
@@ -137,7 +138,7 @@ function WorkspaceRouter({
     case "buzz":  return <BuzzWorkspace agent={agent} />;
     case "run":   return <ChatPanel agent={agent} mono={true} />;
     case "ka":    return <ChatPanel agent={agent} />;
-    case "pocke": return <ChatPanel agent={agent} />;
+    case "pocke": return <PockeWorkspace agent={agent} />;
     default:      return <ChatPanel agent={agent} />;
   }
 }
