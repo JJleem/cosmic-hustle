@@ -252,6 +252,12 @@ export default function Home() {
           localStorage.removeItem("cosmicHustleSession");
           setPhase("done");
           speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
+          if (Notification.permission === "granted") {
+            new Notification("🪐 Cosmic Hustle", {
+              body: `"${inputTopic}" 리서치가 완료됐어요. 보고서를 확인하세요.`,
+              icon: "/favicon.ico",
+            });
+          }
           break;
         case "error":
           console.error("SSE error:", event.message);
@@ -264,6 +270,9 @@ export default function Home() {
 
   const runResearch = async (config: ProjectConfig) => {
     if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
     setShowSetup(false);
     setPhase("working");
     setCurrentMode(config.mode);
