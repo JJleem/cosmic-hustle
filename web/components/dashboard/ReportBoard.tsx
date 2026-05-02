@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -148,6 +148,9 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
   const [saving, setSaving] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
+  const [wikiSaving, setWikiSaving] = useState(false);
+  const [wikiSaved, setWikiSaved] = useState<string | null>(null); // reportId
+  const [wikiMsg, setWikiMsg] = useState("");
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -254,6 +257,47 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
       setEditing(false);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveToWiki = async (report: Report) => {
+    if (wikiSaving) return;
+    setWikiSaving(true);
+    setWikiMsg("위키 대리에게 전달 중...");
+    try {
+      const agent = AGENT_MAP[report.agentId];
+      const filename = `Report_${report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_")}`;
+      const content = `# ${report.topic}\n\n> 작성: ${agent?.name ?? report.agentId} · ${new Date(report.createdAt).toLocaleDateString("ko-KR")}\n\n---\n\n${report.content}`;
+      const res = await fetch("/api/wiki/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, filename }),
+      });
+      if (!res.ok || !res.body) throw new Error("ingest 실패");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n"); buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string };
+            if (ev.type === "agent_message" && ev.message) setWikiMsg(ev.message);
+            else if (ev.type === "complete") {
+              setWikiSaved(report.id);
+              setWikiMsg("위키에 저장됐어요!");
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      setWikiMsg("저장 실패. 다시 시도해줘요.");
+    } finally {
+      setWikiSaving(false);
     }
   };
 
@@ -608,6 +652,24 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
                   )}
                 </div>
                 <div className="w-px h-4 bg-slate-700" />
+                {/* 위키에 저장 */}
+                <button
+                  onClick={() => void saveToWiki(selected)}
+                  disabled={wikiSaving || wikiSaved === selected.id}
+                  title="위키 지식베이스에 저장"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
+                  style={wikiSaved === selected.id
+                    ? { background: "rgba(167,139,250,0.12)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }
+                    : { color: "#94a3b8" }}
+                >
+                  {wikiSaving
+                    ? <Loader2 size={12} className="animate-spin" />
+                    : wikiSaved === selected.id
+                    ? <Check size={12} />
+                    : <BookOpen size={12} />}
+                  <span>{wikiSaving ? "저장 중..." : wikiSaved === selected.id ? "위키 저장됨" : "위키에 저장"}</span>
+                </button>
+                <div className="w-px h-4 bg-slate-700" />
                 <button
                   onClick={() => void handleDelete(selected.id)}
                   disabled={deletingId === selected.id}
@@ -708,9 +770,16 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate }
 
             {/* 푸터 */}
             <div className="shrink-0 px-8 py-3 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] text-slate-600">
-                {selected.content.length.toLocaleString()}자
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-slate-600">{selected.content.length.toLocaleString()}자</span>
+                {(wikiSaving || wikiSaved === selected.id) && wikiMsg && (
+                  <span className="flex items-center gap-1.5 text-[10px]" style={{ color: wikiSaved === selected.id ? "#a78bfa" : "#64748b" }}>
+                    {wikiSaving && <Loader2 size={9} className="animate-spin" />}
+                    {wikiSaved === selected.id && <Check size={9} />}
+                    {wikiMsg}
+                  </span>
+                )}
+              </div>
               <button
                 onClick={() => setSelected(null)}
                 className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
