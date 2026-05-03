@@ -173,7 +173,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     try {
       let planStreamed = false;
       const planRaw = await runAgent(
-        buildPrompt(agentConfigs, "plan", { topic }, {}),
+        buildPrompt(agentConfigs, "plan", { topic, task_type: resolvedTaskType }, {}),
         { noTools: true, maxTurns: 1 },
         (chunk) => { if (chunk.trim()) { planStreamed = true; send({ type: "agent_stream", agentId: "plan", chunk }); } },
       );
@@ -197,9 +197,12 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         plan_note: "",
       });
 
-      // 플랜이 결정한 task_type으로 promptVariants + resolvedTaskType 교체
-      resolvedTaskType = plan.task_type ?? resolvedTaskType;
-      promptVariants = TASK_TYPE_MAP[resolvedTaskType]?.promptVariants ?? promptVariants;
+      // 사용자가 명시적으로 선택한 task_type은 플랜이 덮어쓸 수 없음
+      // 기본값(research)인 경우에만 plan의 판단을 반영
+      if (taskTypeId === DEFAULT_TASK_TYPE.id) {
+        resolvedTaskType = plan.task_type && TASK_TYPE_MAP[plan.task_type] ? plan.task_type : resolvedTaskType;
+        promptVariants = TASK_TYPE_MAP[resolvedTaskType]?.promptVariants ?? promptVariants;
+      }
 
       // topic을 플랜의 명확화된 objective로 보강
       if (plan.objective && plan.objective !== topic) {

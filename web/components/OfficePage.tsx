@@ -63,7 +63,11 @@ export default function OfficePage({
           {PIPELINE.map((stage, i) => {
             const isActive = i === activeStageIdx;
             const isDone   = activeStageIdx !== -1 && i < activeStageIdx;
-            const agent    = AGENT_MAP[stage.ids[0]];
+            const activeId = stage.ids.find(id => agentStatus[id] === "active")
+              ?? stage.ids.find(id => agentStatus[id] === "done")
+              ?? stage.ids.find(id => agentStatus[id] !== "disabled")
+              ?? stage.ids[0];
+            const agent    = AGENT_MAP[activeId];
             return (
               <div key={i} className="flex items-center gap-1 shrink-0">
                 {i > 0 && (

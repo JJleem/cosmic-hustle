@@ -115,7 +115,12 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
                   : stage.ids.every((id) => agentStatus[id] === "done");
               const isStagePending = !isStageActive && !isStageDone;
 
-              const primaryAgent = AGENT_MAP[stage.ids[0]];
+              // 다중 에이전트 스테이지는 활성/완료 에이전트를 우선 표시
+              const primaryId = stage.ids.find(id => agentStatus[id] === "active")
+                ?? stage.ids.find(id => agentStatus[id] === "done")
+                ?? stage.ids.find(id => agentStatus[id] !== "disabled")
+                ?? stage.ids[0];
+              const primaryAgent = AGENT_MAP[primaryId];
 
               return (
                 <div key={i} className="flex items-center">

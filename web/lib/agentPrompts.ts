@@ -10,15 +10,17 @@ export type PromptVars = {
   sources: string;
   ceo_notes: string;
   plan_note: string;
+  task_type: string;
 };
 
 // {변수명} 형태로 런타임에 대입됨
 export const DEFAULT_PROMPTS: Record<string, string> = {
   plan: `플랜 차장. 프로덕트 매니저.
+CEO 선택 태스크 타입: {task_type} — 이미 확정된 타입이므로 반드시 그대로 사용.
 CEO 요청: "{topic}"
 
 분석:
-1. 태스크 타입 결정: research(일반 리서치) / marketing(시장·경쟁사 분석) / blog(블로그 포스팅) / tech(기술 스택·아키텍처) / design_ux(UX 리서치) / design_ui(UI/HTML 결과물) / dev_plan(개발 기획서) / dev_spec(기능명세서) / dev(코드 구현)
+1. task_type은 CEO가 이미 선택했으므로 절대 변경 금지. 반드시 "{task_type}" 그대로 출력.
 2. 목표를 한 문장으로 명확화
 3. 범위 한정 (지역/기간/대상 등)
 4. 모호한 고유명사·지명·브랜드명 감지 → 질문 생성 (최대 2개, 없으면 빈 배열)
@@ -26,7 +28,7 @@ CEO 요청: "{topic}"
 반드시 JSON 코드블록으로:
 \`\`\`json
 {
-  "task_type": "research",
+  "task_type": "{task_type}",
   "objective": "명확한 목표 한 문장",
   "scope": "범위 한정 설명",
   "output_format": "리포트 | 전략 문서 | 기술 분석서",
