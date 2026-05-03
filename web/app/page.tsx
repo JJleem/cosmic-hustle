@@ -277,7 +277,7 @@ export default function Home() {
     setPhase("working");
     setCurrentMode(config.mode);
     setTopic(config.topic);
-    if (config.mode === "background") setTab("office");
+    if (config.mode !== "full") setTab("office");
     // 활성화된 에이전트만 waiting, 나머지는 idle 유지
     const enabledIds = new Set(config.agentConfigs.filter((c) => c.enabled).map((c) => c.agentId));
     setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "disabled"])));

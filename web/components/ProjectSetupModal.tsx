@@ -91,7 +91,7 @@ function initConfigs(taskTypeId: string, defaultSettings?: AllAgentSettings): Ag
 export default function ProjectSetupModal({ onStart, onClose, defaultSettings, initialTopic = "" }: Props) {
   const [topic, setTopic] = useState(initialTopic);
   const [selectedTypeId, setSelectedTypeId] = useState("auto");
-  const [mode, setMode] = useState<ProjectMode>("checkin");
+  const [mode, setMode] = useState<ProjectMode>("full");
   const [configs, setConfigs] = useState<AgentConfig[]>(() => initConfigs("auto", defaultSettings));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
