@@ -436,12 +436,12 @@ export default function Home() {
   };
 
   const handleCeoResponse = async (sessionId: string, response: string) => {
-    setCeoCheckin(null);
     await fetch(`/api/research/${sessionId}/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ response }),
     });
+    setCeoCheckin(null);
   };
 
   const stopResearch = () => {

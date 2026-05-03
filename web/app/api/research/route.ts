@@ -266,7 +266,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     try {
       let wikiStreamed = false;
       wikiContext = await runAgent(
-        buildPrompt(agentConfigs, "wiki", { topic }, promptVariants),
+        buildPrompt(agentConfigs, "wiki", { topic, context: "" }, promptVariants),
         {
           allowedTools: ["Read", "Glob"],
           addDirs: [WIKI_DIR],
@@ -404,7 +404,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     topic,
     insights: ka.insights.map((i) => `${i.title}: ${i.description}`).join("; "),
     conclusion: ka.conclusion,
-    facts: pocke.key_facts.slice(0, 4).join("; "),
+    facts: pocke.key_facts.slice(0, 8).join("; "),
   };
 
   // writer별 메시지 정의
@@ -458,7 +458,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     factPassed = true;
   }
 
-  while (!factPassed && attempt < 2) {
+  while (!factPassed && attempt < 3) {
     attempt++;
 
     const msgs = writerMessages[writerAgentId];
@@ -483,7 +483,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           facts: currentFacts,
           feedback: `${styleNote}${attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : ""}`,
         }, promptVariants),
-        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, writerAgentId) ?? 1 },
+        { noTools: true, maxTurns: agentMaxTurns(agentConfigs, writerAgentId) ?? 2 },
         (chunk) => { if (chunk.trim()) { writerStreamed = true; send({ type: "agent_stream", agentId: writerAgentId, chunk }); } },
         (thinking) => { if (thinking.trim()) send({ type: "agent_thinking", agentId: writerAgentId, chunk: thinking }); },
       );
@@ -649,7 +649,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
           const result = await runAgent(
             buildPrompt(agentConfigs, "ping", {
               topic,
-              conclusion: ka.conclusion.slice(0, 150),
+              conclusion: ka.conclusion.slice(0, 400),
             }, promptVariants),
             { noTools: true, maxTurns: agentMaxTurns(agentConfigs, "ping") ?? 1 },
           );
@@ -675,7 +675,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         buildPrompt(agentConfigs, "wiki", {
           topic,
           conclusion: ka.conclusion.slice(0, 200),
-          insights: ka.insights.map((i) => i.title).join(", "),
+          insights: ka.insights.map((i) => `${i.title}: ${i.description}`).join("; "),
         }, { ...promptVariants, wiki: "wiki_update" }),
         {
           allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
