@@ -420,6 +420,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
   let factPassed = false;
   let attempt = 0;
   let factFeedback = "";
+  // pocke 데이터는 팩트 재조사 후 업데이트될 수 있으므로 mutable 복사본 유지
+  let livePockeData = { ...pocke };
 
   const allWriters = ["run", "over", "pixel", "buzz"] as const;
 
@@ -473,9 +475,12 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         ? `분량: ${lengthMap[reportStyle.length]}. 문체: ${toneMap[reportStyle.tone]}.\n`
         : "";
       const stopWriterMurmur = startMurmurs(writerAgentId, MURMURS[writerAgentId] ?? [], send, 11000);
+      // writer에 전달할 facts는 재조사 후 업데이트된 데이터 사용
+      const currentFacts = livePockeData.key_facts.slice(0, 6).join("; ");
       overReport = await runAgent(
         buildPrompt(agentConfigs, writerAgentId, {
           ...writerVars,
+          facts: currentFacts,
           feedback: `${styleNote}${attempt > 1 && factFeedback ? `피드백: ${factFeedback}\n` : ""}`,
         }, promptVariants),
         { noTools: true, maxTurns: agentMaxTurns(agentConfigs, writerAgentId) ?? 1 },
@@ -522,9 +527,10 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
       if (!factStreamed && factRaw.trim()) await streamChunked("fact", factRaw, send);
       await delay(800);
 
-      const fact = parseJSON<{ passed: boolean; issues: string[]; feedback: string }>(
-        factRaw, { passed: true, issues: [], feedback: "" },
-      );
+      const fact = parseJSON<{
+        passed: boolean; issues: string[]; feedback: string;
+        needs_research?: boolean; research_queries?: string[];
+      }>(factRaw, { passed: true, issues: [], feedback: "" });
 
       factPassed = fact.passed;
       factFeedback = fact.feedback;
@@ -534,6 +540,37 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         send({ type: "agent_message", agentId: "fact", message: `오류 ${fact.issues.length}건. 수정 후 재검토.` });
         send({ type: "agent_expression", agentId: "fact", expression: "err" });
         send({ type: "agent_expression", agentId: writerAgentId, expression: writerAgentId === "over" ? "sad" : "err" });
+        send({ type: "agent_done", agentId: "fact", message: "재조사 요청." });
+
+        // 팩트가 재조사를 요청했고 포케가 활성화되어 있으면 포케 재실행
+        if (fact.needs_research && fact.research_queries?.length && agentEnabled(agentConfigs, "pocke") && attempt < 2) {
+          await delay(400);
+          send({ type: "agent_message", agentId: "pocke", message: "팩트 부장님 요청 받았어요. 다시 뒤져볼게요! 🐹" });
+          await delay(500);
+          send({ type: "agent_start", agentId: "pocke", message: "재조사 중..." });
+          try {
+            const recheckRaw = await runAgent(
+              buildPrompt(agentConfigs, "pocke", {
+                topic,
+                research_queries: fact.research_queries.join("\n"),
+              } as Parameters<typeof buildPrompt>[2], { pocke: "pocke_recheck" }),
+              { allowedTools: ["WebSearch"], maxTurns: agentMaxTurns(agentConfigs, "pocke") ?? 3 },
+              (chunk) => { if (chunk.trim()) send({ type: "agent_stream", agentId: "pocke", chunk }); },
+            );
+            const recheckData = parseJSON<{ sources: typeof pocke.sources; key_facts: string[] }>(
+              recheckRaw, { sources: [], key_facts: [] },
+            );
+            // 새 팩트를 기존에 병합
+            livePockeData = {
+              sources: [...livePockeData.sources, ...recheckData.sources].slice(0, 8),
+              key_facts: [...new Set([...recheckData.key_facts, ...livePockeData.key_facts])].slice(0, 10),
+            };
+            send({ type: "agent_done", agentId: "pocke", message: `재조사 완료. 팩트 ${recheckData.key_facts.length}개 추가됐어요.` });
+          } catch {
+            send({ type: "agent_done", agentId: "pocke", message: "재조사 완료." });
+          }
+        }
+
         await delay(400);
         send({ type: "agent_message", agentId: writerAgentId, message: writerMessages[writerAgentId].retry });
         await delay(800);

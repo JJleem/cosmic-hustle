@@ -465,7 +465,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
           onClick={() => setSelected(null)}
         >
           <div
-            className="relative w-full max-w-3xl max-h-[88vh] mx-6 rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col animate-fadeIn"
+            className="relative w-full max-w-3xl max-h-[88vh] mx-6 rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 헤더 */}
@@ -722,7 +722,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
               const htmlContent = extractHtml(activeContent);
               if (showDraft && drafts[selected.id]) {
                 return (
-                  <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
+                  <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 scrollbar-hide">
                     <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
                       <span className="text-[10px] text-orange-400 font-bold px-2 py-0.5 rounded-full" style={{ background: "#2d1a0080", border: "1px solid #7c3a0060" }}>v1 초안</span>
                       <span className="text-[10px] text-slate-600">팩트 검토 전 원본</span>
@@ -755,7 +755,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
                   );
                 }
                 return (
-                  <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-hide">
+                  <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 scrollbar-hide">
                     <pre className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap break-words font-mono">
                       {htmlContent}
                     </pre>
@@ -763,7 +763,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
                 );
               }
               return (
-                <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
+                <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 scrollbar-hide">
                   {showTranslated && translated ? (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
