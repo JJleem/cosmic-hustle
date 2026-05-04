@@ -496,7 +496,7 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen cosmic-bg text-white flex flex-col overflow-hidden" style={{ position: "relative" }}>
+    <div className="h-dvh cosmic-bg text-white flex flex-col overflow-hidden" style={{ position: "relative" }}>
       <StarField />
       {/* 헤더 */}
       <header className="shrink-0 px-8 py-3.5 flex items-center gap-4" style={{ position: "relative", zIndex: 10, borderBottom: "1px solid rgba(255,255,255,0.055)", background: "rgba(7,9,26,0.7)", backdropFilter: "blur(20px)" }}>
@@ -591,7 +591,7 @@ export default function Home() {
         {tab === "dashboard" && (
           <div className="h-full flex gap-4 p-5">
             {/* ── 왼쪽 aside ── */}
-            <div className="w-72 shrink-0 flex flex-col gap-4">
+            <div className="w-56 md:w-64 xl:w-72 shrink-0 flex flex-col gap-4">
               <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "5" }}>
                 <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
               </div>

@@ -20,7 +20,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
         className="shrink-0 px-6 py-3"
         style={{
           position: "relative",
-          zIndex: 10,
+          zIndex: 20,
           borderTop: "1px solid rgba(255,255,255,0.055)",
           background: "rgba(7,9,26,0.82)",
           backdropFilter: "blur(28px)",
