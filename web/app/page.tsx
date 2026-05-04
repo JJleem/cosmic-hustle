@@ -140,7 +140,10 @@ export default function Home() {
   }, [phase, speak]);
 
   const addChat = useCallback((agentId: string, text: string) => {
-    setChatFeed((prev) => [...prev, { id: crypto.randomUUID(), agentId, text, at: new Date() }].slice(-60));
+    setChatFeed((prev) => {
+      const next = [...prev, { id: crypto.randomUUID(), agentId, text, at: new Date() }];
+      return next.length > 60 ? next.slice(-60) : next;
+    });
   }, []);
 
   const handleSSE = useCallback(
