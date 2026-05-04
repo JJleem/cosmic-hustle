@@ -712,12 +712,17 @@ export async function POST(request: Request) {
   const sessionId = crypto.randomUUID();
   const now = new Date();
 
-  await db.insert(sessions).values({
-    id: sessionId,
-    topic,
-    status: "working",
-    createdAt: now,
-  });
+  try {
+    await db.insert(sessions).values({
+      id: sessionId,
+      topic,
+      status: "working",
+      createdAt: now,
+    });
+  } catch (err) {
+    console.error("[research] DB session insert failed:", err);
+    return Response.json({ error: "DB error" }, { status: 500 });
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -729,13 +734,13 @@ export async function POST(request: Request) {
             ? { ...event, ts: Date.now() }
             : event;
         const seq = ++seqCounter;
-        void db.insert(sessionEvents).values({
+        db.insert(sessionEvents).values({
           id: crypto.randomUUID(),
           sessionId,
           seq,
           payload: JSON.stringify(enriched),
           createdAt: new Date(),
-        });
+        }).catch((err: Error) => console.error("[research] sessionEvents insert failed:", err.message));
         try { controller.enqueue(encoder.encode(`id: ${seq}\ndata: ${JSON.stringify(enriched)}\n\n`)); } catch { /* closed */ }
       };
 
