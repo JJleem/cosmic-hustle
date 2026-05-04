@@ -384,6 +384,9 @@ export default function Home() {
         case "draft_report":
           // 재개 시 draft는 스킵 (이후 report 이벤트로 최종본 복원)
           break;
+        case "complete":
+          // done 상태 복원 시 히스토리 항목 추가
+          break;
         case "clarify_request":
           lastCheckin = { type: "clarify_request", sessionId, agentId: "plan", questions: e.questions as string[] };
           break;
@@ -404,6 +407,12 @@ export default function Home() {
 
     if (status !== "working") {
       localStorage.removeItem("cosmicHustleSession");
+      if (status === "done") {
+        setHistory((prev) => {
+          if (prev.some((h) => h.id === sessionId)) return prev;
+          return [{ id: sessionId, topic: resumeTopic, completedAt: new Date() }, ...prev];
+        });
+      }
       return;
     }
 
