@@ -145,7 +145,6 @@ export async function runAgent(
       if (code === 0 || result) resolve(result);
       else reject(new Error(`Agent process exited with code ${code}`));
     });
-    proc.on("error", reject);
   });
 }
 
