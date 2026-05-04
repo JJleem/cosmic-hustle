@@ -5,7 +5,10 @@ import { Zap, Loader2 } from "lucide-react";
 import { AGENT_MAP } from "@/lib/agents";
 import { AllAgentSettings } from "@/lib/agentSettings";
 import { TASK_TYPES } from "@/lib/taskTypes";
+import { ReportStyle } from "@/lib/types";
 import AgentImage from "./AgentImage";
+
+export type { ReportStyle };
 
 export type AgentConfig = {
   agentId: string;
@@ -16,11 +19,6 @@ export type AgentConfig = {
 };
 
 export type ProjectMode = "background" | "checkin" | "full";
-
-export type ReportStyle = {
-  length: "brief" | "standard" | "detailed";
-  tone: "formal" | "casual" | "analytical";
-};
 
 export type ProjectConfig = {
   topic: string;

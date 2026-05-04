@@ -3,6 +3,7 @@ import { sessions, reports, sessionEvents } from "@/db/schema";
 import { eq, lt } from "drizzle-orm";
 import { DEFAULT_PROMPTS, fillPrompt } from "@/lib/agentPrompts";
 import { TASK_TYPE_MAP, DEFAULT_TASK_TYPE } from "@/lib/taskTypes";
+import { ReportStyle } from "@/lib/types";
 import {
   runAgent,
   parseJSON,
@@ -148,8 +149,6 @@ async function streamChunked(agentId: string, text: string, send: (e: SSEEvent) 
 function isCancelled(sId: string): boolean {
   return cancelledSessions.has(sId);
 }
-
-type ReportStyle = { length: "brief" | "standard" | "detailed"; tone: "formal" | "casual" | "analytical" };
 
 async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research", mode: "background" | "checkin" | "full" = "checkin", reportStyle?: ReportStyle) {
   let topic = topicInput;
