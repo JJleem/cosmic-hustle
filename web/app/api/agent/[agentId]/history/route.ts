@@ -39,12 +39,18 @@ export async function GET(
   const topicMap = Object.fromEntries(sessionRows.map((s) => [s.id, s.topic]));
 
   const history = events.map((e) => {
-    const payload = JSON.parse(e.payload) as { message?: string };
+    let message = "";
+    try {
+      const payload = JSON.parse(e.payload) as { message?: string };
+      message = payload.message ?? "";
+    } catch {
+      console.error("[history] payload parse failed, sessionId:", e.sessionId);
+    }
     return {
       sessionId:   e.sessionId,
       topic:       topicMap[e.sessionId] ?? "알 수 없는 프로젝트",
-      message:     payload.message ?? "",
-      completedAt: (e.createdAt as unknown as number) * 1000,
+      message,
+      completedAt: e.createdAt instanceof Date ? e.createdAt.getTime() : Number(e.createdAt) * 1000,
     };
   });
 
