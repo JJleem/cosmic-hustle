@@ -41,7 +41,10 @@
       "Bash(python3 -c \"import sys,json; [print\\(x['name'], x['updated_at']\\) for x in json.load\\(sys.stdin\\)]\")",
       "Bash(xargs cat *)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
-      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\DonghaeChoi\\\\Desktop\\\\personal repository\\\\cosmic-hustle\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)"
     ]
   }
 }
