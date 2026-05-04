@@ -2,7 +2,11 @@
 
 <!-- 📸 사진 추천: 프로젝트 로고 또는 우주 테마 히어로 배너 이미지 (어두운 우주 배경에 "COSMIC HUSTLE" 텍스트, 별빛 효과) -->
 
+
 # 🚀 COSMIC HUSTLE
+
+<img width="2752" height="1536" alt="image" src="https://github.com/user-attachments/assets/b9e4911b-4d2a-4ad5-8dd4-b54f26056a9d" />
+
 
 ### _"이거, 바이럴 각이다."_ — 버즈 대리
 
@@ -19,6 +23,8 @@
 ---
 
 <!-- 📸 사진 추천: 앱 전체 대시보드 스크린샷 (다크 모드, 에이전트들이 작업 중인 실시간 화면) — 프로젝트의 첫인상을 결정짓는 핵심 사진 -->
+<img width="1469" height="796" alt="image" src="https://github.com/user-attachments/assets/3f24e459-3405-4a24-8045-7fa1bf03ee43" />
+
 
 ## 뭔데 이게?
 
@@ -43,38 +49,42 @@
 ## 직원 소개 — 이 팀, 진짜 개성 폭발
 
 <!-- 📸 사진 추천: 11명 에이전트 캐릭터 카드 그리드 (각 캐릭터 이미지 + 이름 + 직책) — 팀 소개 섹션에서 가장 임팩트 있는 사진 -->
+<img width="1163" height="539" alt="image" src="https://github.com/user-attachments/assets/61569fd5-3b5d-44a7-a9ca-62e6c6a012ac" />
+
 
 ### 🔬 Research 부서
 
 | 캐릭터 | 직책 | 한 줄 요약 |
 |--------|------|------------|
-| 🟡 **플랜** | 차장 · PM | 모호한 말 못 견딤. 5분 안에 티켓 10개 뽑아냄 |
-| 💜 **위키** | 대리 · 사서 | 말 없이 나타나서 딱 필요한 자료만 슥 건넴 |
-| 💚 **포케** | 대리 · 리서처 | 볼따구에 정보 쑤셔넣는 햄스터형 리서처 |
-| 🩵 **런** | 사원 · 개발자 | "이미 짰어요"가 첫 마디. 주석은 안 씀 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/4036d9da-5255-46b4-8012-94ce86780394" /> <br/> 🟡  **플랜** <br/> | 차장 · PM | 모호한 말 못 견딤. 5분 안에 티켓 10개 뽑아냄 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/00689804-a5d3-4bb7-ace9-528d7c3d40a4" /> <br/> 💜 **위키** <br/> | 대리 · 사서 | 말 없이 나타나서 딱 필요한 자료만 슥 건넴 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/1a7e5026-ce35-4a91-b02c-adf94f0e9467" /> <br/> 💚 **포케** <br/> | 대리 · 리서처 | 볼따구에 정보 쑤셔넣는 햄스터형 리서처 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/faa818ee-c1e1-42b3-af6b-647ea1ae242f" /> <br/> 🩵 **런** <br/> | 사원 · 개발자 | "이미 짰어요"가 첫 마디. 주석은 안 씀 |
 
 ### 🎨 Creative 부서
 
 | 캐릭터 | 직책 | 한 줄 요약 |
 |--------|------|------------|
-| 🟣 **카** (유레카) | 과장 · 분석가 | 평소엔 조용하다가 "찾았다!" 한마디에 모두 집중 |
-| 🩷 **오버** | 사원 · 작가 | 자기 글에 혼자 감동해서 울음. 보고서가 소설이 됨 |
-| 🟠 **픽셀** | 사원 · 디자이너 | 폰트 집착. 여백에 감정이입. 레퍼런스 수집 무한루프 |
-| 🌿 **핑** | 인턴 · 아이디어 | 전혀 관계없는 아이디어를 들고 옴. 나중엔 맞는 경우가 있음 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/ea17bf72-085d-4408-8609-b74f4a304706" /> <br/> 🟣 **카** (유레카) <br/> | 과장 · 분석가 | 평소엔 조용하다가 "찾았다!" 한마디에 모두 집중 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/eb97f3f2-20f5-4c7f-9de3-61f3a8659cef" /> <br/> 🩷 **오버** <br/> | 사원 · 작가 | 자기 글에 혼자 감동해서 울음. 보고서가 소설이 됨 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/e911cf76-5bad-4c3e-8ffe-49f074eee48a" /> <br/> 🟠 **픽셀** <br/> | 사원 · 디자이너 | 폰트 집착. 여백에 감정이입. 레퍼런스 수집 무한루프 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/9ff09385-20bd-488b-9c6f-f903605e4e06" /> <br/> 🌿 **핑** <br/> | 인턴 · 아이디어 | 전혀 관계없는 아이디어를 들고 옴. 나중엔 맞는 경우가 있음 |
 
 ### ⚙️ Operations 부서
 
 | 캐릭터 | 직책 | 한 줄 요약 |
 |--------|------|------------|
-| ⬜ **팩트** | 부장 · 검토자 | 무표정. 빨간펜. 감정 진화가 멈춘 행성 출신 |
-| 💚 **루트** | 사원 · DevOps | 수동 배포는 범죄. 사랑 고백도 스크립트로 |
-| 🟠 **버즈** | 대리 · 마케터 | "바이럴 각이다!"가 입버릇. 데이터보다 감각을 믿음 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/d0fb84da-5abd-4705-8bef-2e5482a26f52" /> <br/>⬜ **팩트** <br/> | 부장 · 검토자 | 무표정. 빨간펜. 감정 진화가 멈춘 행성 출신 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/a15c7aaf-dcd3-4e75-8034-e4083af1f55a" /> <br/> 💚 **루트** <br/> | 사원 · DevOps | 수동 배포는 범죄. 사랑 고백도 스크립트로 |
+| <img width="100" height="100" alt="image" src="https://github.com/user-attachments/assets/f12bcb9a-1df3-4054-88f4-ae7082ed7794" /> <br/> 🟠 **버즈** <br/>| 대리 · 마케터 | "바이럴 각이다!"가 입버릇. 데이터보다 감각을 믿음 |
 
 ---
 
 ## 실시간으로 이런 게 일어난다
 
 <!-- 📸 사진 추천: 파이프라인 실행 중 화면 캡처 — 에이전트 말풍선이 차례로 뜨고 진행 상태가 바뀌는 장면 (GIF로 만들면 최고) -->
+<img width="1467" height="792" alt="image" src="https://github.com/user-attachments/assets/bbec6e23-560d-4bdb-aa47-d9c2b4c56dd9" />
+
 
 ```
 CEO: "2025년 AI 에이전트 프레임워크 트렌드 분석해줘"
@@ -97,6 +107,9 @@ CEO: "2025년 AI 에이전트 프레임워크 트렌드 분석해줘"
 ## 주요 기능
 
 <!-- 📸 사진 추천: CEO 체크인 모달 클로즈업 — 에이전트가 중간 결과를 보고하고 CEO 승인을 기다리는 화면 -->
+
+<img width="1470" height="794" alt="image" src="https://github.com/user-attachments/assets/a16218b6-8ce8-4a01-988d-f224eef10db0" />
+
 
 ### 🧠 멀티 에이전트 오케스트레이션
 
@@ -122,11 +135,16 @@ Claude Code SDK 기반으로 11개 에이전트가 **구조화된 JSON 핸드오
 
 ### 🔍 CEO 체크인 시스템
 
+<img width="483" height="362" alt="image" src="https://github.com/user-attachments/assets/39e628c8-3f63-4726-9264-eaa5fd9e7008" />
+
 `checkin` 모드에서는 파이프라인 두 곳에서 CEO 승인을 기다린다. 방향이 이상하면 여기서 수정 가능. `background` 모드는 체크인 없이 자동 완주.
 
 <!-- 📸 사진 추천: 오피스 탭 화면 — 3D 공간에 3개 부서 룸이 보이고 에이전트들이 배치된 모습 -->
 
+
 ### 🏢 오피스 뷰
+
+<img width="1470" height="798" alt="image" src="https://github.com/user-attachments/assets/424b9589-01cf-4457-bcec-b76f66dc165a" />
 
 대시보드, 오피스, 설정 — 세 개 탭으로 구성. 오피스 탭에서는 Research/Creative/Operations 3개 부서를 시각적으로 탐색할 수 있다.
 
@@ -296,6 +314,8 @@ cosmic-hustle/
 ## 오케스트레이션 흐름 상세
 
 <!-- 📸 사진 추천: 파이프라인 흐름도 다이어그램 이미지 — 각 에이전트가 화살표로 연결된 시각적 플로우차트 (에이전트 아이콘/컬러 포함) -->
+<img width="740" height="91" alt="image" src="https://github.com/user-attachments/assets/d5958147-823e-43aa-a179-0fbcbada02f0" />
+<img width="747" height="76" alt="image" src="https://github.com/user-attachments/assets/665a205d-38b2-4cd7-bc44-dcb400013491" />
 
 ```
 CEO 입력
@@ -415,6 +435,8 @@ git push origin feat/your-feature
 <div align="center">
 
 <!-- 📸 사진 추천: 에이전트 캐릭터들이 다 같이 나오는 그룹 일러스트 — 11명이 각자 특징적인 포즈로 서 있는 팀 사진 (푸터용) -->
+<img width="2750" height="1536" alt="image" src="https://github.com/user-attachments/assets/977bd8fa-2800-4dbe-affa-ee73fcdc3295" />
+
 
 **Made with ☕ and 11 AI employees who never ask for vacation**
 
