@@ -5,6 +5,9 @@ import path from "path";
 
 const sqlite = new Database(path.join(process.cwd(), "cosmic-hustle.db"));
 
+sqlite.pragma("foreign_keys = ON");
+sqlite.pragma("journal_mode = WAL");
+
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS session_events (
     id TEXT PRIMARY KEY,
