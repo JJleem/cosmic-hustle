@@ -412,26 +412,28 @@ export default function Home() {
 
     // 새 이벤트 폴링 시작
     let lastSeq = events.length > 0 ? events[events.length - 1].seq : 0;
+    let isPolling = false;
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      try {
-        const pollRes = await fetch(`/api/research/${sessionId}/events?since=${lastSeq}`);
-        const { status: pollStatus, events: newEvents } = await pollRes.json() as {
-          status: string;
-          events: Array<{ seq: number; event: Record<string, unknown> }>;
-        };
-        for (const { seq, event } of newEvents) {
-          handleSSE(event, resumeTopic);
-          lastSeq = seq;
-        }
-        if (pollStatus !== "working") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
-          if (pollStatus === "done") {
-            localStorage.removeItem("cosmicHustleSession");
+    pollRef.current = setInterval(() => {
+      if (isPolling) return;
+      isPolling = true;
+      fetch(`/api/research/${sessionId}/events?since=${lastSeq}`)
+        .then((r) => r.json())
+        .then((data: { status: string; events: Array<{ seq: number; event: Record<string, unknown> }> }) => {
+          for (const { seq, event } of data.events) {
+            handleSSE(event, resumeTopic);
+            lastSeq = seq;
           }
-        }
-      } catch { /* 네트워크 오류 무시 */ }
+          if (data.status !== "working") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            if (data.status === "done") {
+              localStorage.removeItem("cosmicHustleSession");
+            }
+          }
+        })
+        .catch(() => { /* 네트워크 오류 무시 */ })
+        .finally(() => { isPolling = false; });
     }, 3000);
   };
 
