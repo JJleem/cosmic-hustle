@@ -763,7 +763,10 @@ export async function POST(request: Request) {
             .set({ status: "error" })
             .where(eq(sessions.id, sessionId));
         })
-        .finally(() => { try { controller.close(); } catch { /* ignore */ } });
+        .finally(() => {
+          cancelledSessions.delete(sessionId);
+          try { controller.close(); } catch { /* ignore */ }
+        });
     },
   });
 
