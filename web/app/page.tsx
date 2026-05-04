@@ -326,11 +326,19 @@ export default function Home() {
 
   const resumeSession = async ({ sessionId, topic: resumeTopic }: { sessionId: string; topic: string }) => {
     setResumeInfo(null);
-    const res = await fetch(`/api/research/${sessionId}/events`);
-    const { status, events } = await res.json() as {
-      status: string;
-      events: Array<{ seq: number; event: Record<string, unknown> }>;
-    };
+    let status: string;
+    let events: Array<{ seq: number; event: Record<string, unknown> }>;
+    try {
+      const res = await fetch(`/api/research/${sessionId}/events`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { status: string; events: Array<{ seq: number; event: Record<string, unknown> }> };
+      status = data.status;
+      events = data.events;
+    } catch (err) {
+      console.error("[resumeSession] fetch failed:", err);
+      localStorage.removeItem("cosmicHustleSession");
+      return;
+    }
 
     if (status === "cancelled" || status === "error") {
       localStorage.removeItem("cosmicHustleSession");
