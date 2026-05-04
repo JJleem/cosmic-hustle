@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { sessions, reports, sessionEvents } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { DEFAULT_PROMPTS, fillPrompt } from "@/lib/agentPrompts";
 import { TASK_TYPE_MAP, DEFAULT_TASK_TYPE } from "@/lib/taskTypes";
 import {
@@ -751,6 +751,11 @@ export async function POST(request: Request) {
           await db.update(sessions)
             .set({ status: "done", completedAt: new Date() })
             .where(eq(sessions.id, sessionId));
+          // 30일 지난 이벤트 정리 (비동기, 실패해도 무시)
+          const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          db.delete(sessionEvents)
+            .where(lt(sessionEvents.createdAt, cutoff))
+            .catch((err: Error) => console.error("[research] sessionEvents cleanup failed:", err.message));
         })
         .catch(async (err: Error) => {
           try { send({ type: "error", message: err.message }); } catch { /* ignore */ }
