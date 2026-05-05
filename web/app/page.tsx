@@ -594,11 +594,11 @@ export default function Home() {
         {tab === "dashboard" && (
           <div className="h-full flex gap-4 p-5">
             {/* ── 왼쪽 aside ── */}
-            <div className="w-56 md:w-64 xl:w-72 shrink-0 flex flex-col gap-4">
-              <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "5" }}>
+            <div className="w-56 md:w-64 xl:w-72 shrink-0 flex flex-col gap-4 min-h-0">
+              <div className="glass-panel rounded-2xl p-5 overflow-hidden min-h-0" style={{ flex: "5" }}>
                 <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
               </div>
-              <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "4" }}>
+              <div className="glass-panel rounded-2xl p-5 overflow-hidden min-h-0" style={{ flex: "4" }}>
                 <HistoryIdeaPanel
                   projects={history}
                   ideas={pingIdeas}
@@ -607,7 +607,7 @@ export default function Home() {
                   onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
                 />
               </div>
-              <div className="glass-panel rounded-2xl p-5 overflow-hidden" style={{ flex: "3" }}>
+              <div className="glass-panel rounded-2xl p-5 overflow-hidden min-h-0" style={{ flex: "3" }}>
                 <MemoWikiPanel />
               </div>
             </div>

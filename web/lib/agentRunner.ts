@@ -149,10 +149,18 @@ export async function runAgent(
 }
 
 export function parseJSON<T>(text: string, fallback: T): T {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? text.match(/(\{[\s\S]*\})/);
-  try {
-    return JSON.parse(match?.[1] ?? text) as T;
-  } catch {
-    return fallback;
+  // 마지막 JSON 코드블록 우선 (포케가 검색 중간에 코드블록 출력해도 마지막꺼 사용)
+  const blockMatches = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
+  if (blockMatches.length > 0) {
+    const last = blockMatches[blockMatches.length - 1];
+    try { return JSON.parse(last[1].trim()) as T; } catch { /* fall through */ }
   }
+  // 마지막 { 위치부터 시도 (trailing content 제거)
+  const lastBrace = text.lastIndexOf("{");
+  if (lastBrace !== -1) {
+    try { return JSON.parse(text.slice(lastBrace)) as T; } catch { /* fall through */ }
+  }
+  // 전체 텍스트에서 greedy로 {…} 추출
+  const match = text.match(/(\{[\s\S]*\})/);
+  try { return JSON.parse(match?.[1] ?? text) as T; } catch { return fallback; }
 }

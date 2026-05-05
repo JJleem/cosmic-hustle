@@ -151,7 +151,7 @@ export default function WikiViewer() {
 
   // ── 파일 목록 뷰
   return (
-    <div className="flex flex-col h-full gap-3">
+    <div className="flex flex-col h-full gap-2 min-h-0">
       <div className="flex items-center justify-between shrink-0">
         <p className="text-[10px] text-slate-300 tracking-[0.2em] uppercase font-bold">위키 지식 베이스</p>
         <div className="flex items-center gap-2">

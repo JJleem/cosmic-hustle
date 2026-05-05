@@ -152,8 +152,9 @@ function isCancelled(sId: string): boolean {
 
 async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send: (event: SSEEvent) => void, sessionId: string, taskTypeId = "research", mode: "background" | "checkin" | "full" = "checkin", reportStyle?: ReportStyle) {
   let topic = topicInput;
-  let resolvedTaskType = taskTypeId;
-  let promptVariants: Record<string, string> = TASK_TYPE_MAP[taskTypeId]?.promptVariants ?? {};
+  const isAutoMode = taskTypeId === "auto";
+  let resolvedTaskType = isAutoMode ? DEFAULT_TASK_TYPE.id : taskTypeId;
+  let promptVariants: Record<string, string> = TASK_TYPE_MAP[resolvedTaskType]?.promptVariants ?? {};
 
   // maybeCheckin은 plan 이전에 사용되므로 먼저 선언
   let ceoNotes = "";
@@ -172,7 +173,7 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
     try {
       let planStreamed = false;
       const planRaw = await runAgent(
-        buildPrompt(agentConfigs, "plan", { topic, task_type: resolvedTaskType }, {}),
+        buildPrompt(agentConfigs, "plan", { topic, task_type: resolvedTaskType }, isAutoMode ? { plan: "plan_auto" } : {}),
         { noTools: true, maxTurns: 1 },
         (chunk) => { if (chunk.trim()) { planStreamed = true; send({ type: "agent_stream", agentId: "plan", chunk }); } },
       );
@@ -196,9 +197,8 @@ async function orchestrate(topicInput: string, agentConfigs: AgentConfig[], send
         plan_note: "",
       });
 
-      // 사용자가 명시적으로 선택한 task_type은 플랜이 덮어쓸 수 없음
-      // 기본값(research)인 경우에만 plan의 판단을 반영
-      if (taskTypeId === DEFAULT_TASK_TYPE.id) {
+      // auto 또는 기본값(research)인 경우에만 plan의 판단을 반영
+      if (isAutoMode || taskTypeId === DEFAULT_TASK_TYPE.id) {
         resolvedTaskType = plan.task_type && TASK_TYPE_MAP[plan.task_type] ? plan.task_type : resolvedTaskType;
         promptVariants = TASK_TYPE_MAP[resolvedTaskType]?.promptVariants ?? promptVariants;
       }

@@ -106,7 +106,8 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
           </div>
 
           {/* 파이프라인 아바타 스테이지 */}
-          <div className="shrink-0 flex items-center justify-between px-1">
+          <div className="shrink-0 overflow-x-auto scrollbar-hide -mx-1">
+          <div className="flex items-center px-1" style={{ gap: "2px", minWidth: "max-content" }}>
             {visiblePipeline.map((stage, i) => {
               const isStageActive = i === activeStageIdx;
               const isStageDone =
@@ -126,7 +127,7 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
                 <div key={i} className="flex items-center">
                   {/* 연결선 */}
                   {i > 0 && (
-                    <div className="w-4 h-px mx-0.5 shrink-0 transition-all duration-700"
+                    <div className="w-2 h-px shrink-0 transition-all duration-700"
                       style={{
                         background: isStageDone
                           ? `${primaryAgent.color}70`
@@ -221,6 +222,7 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
                 </div>
               );
             })}
+          </div>
           </div>
 
           {/* 현재 활성 에이전트 상태 표시 */}

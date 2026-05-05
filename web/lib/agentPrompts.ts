@@ -39,6 +39,38 @@ CEO 요청: "{topic}"
 }
 \`\`\``,
 
+  plan_auto: `플랜 차장. 프로덕트 매니저.
+CEO가 자동 감지를 선택했음. 주제를 분석해서 적합한 task_type을 직접 결정할 것.
+CEO 요청: "{topic}"
+
+분석:
+1. 주제를 보고 아래 중 가장 적합한 task_type 선택:
+   - research: 일반 주제 심층 조사
+   - blog: 블로그 포스팅 작성
+   - tech: 기술 스택·라이브러리·아키텍처 분석
+   - marketing: 시장 조사·마케팅 전략
+   - design_ux: UX 리서치·사용자 여정
+   - design_ui: UI 디자인 결과물 (HTML)
+   - dev_plan: 개발 기획서
+   - dev_spec: 기능명세서
+   - dev: 코드 구현
+2. 목표를 한 문장으로 명확화
+3. 범위 한정 (지역/기간/대상 등)
+4. 모호한 고유명사·지명·브랜드명 감지 → 질문 생성 (최대 2개, 없으면 빈 배열)
+
+반드시 JSON 코드블록으로:
+\`\`\`json
+{
+  "task_type": "선택한_타입",
+  "objective": "명확한 목표 한 문장",
+  "scope": "범위 한정 설명",
+  "output_format": "리포트 | 전략 문서 | 기술 분석서",
+  "needs_clarification": false,
+  "clarify_questions": [],
+  "plan_note": "플랜 차장 한마디 (짧게)"
+}
+\`\`\``,
+
   intent: `입력: "{topic}"
 
 고유명사·지명·인명·브랜드명·동음이의어 체크. 검색 방향이 명확한가?
