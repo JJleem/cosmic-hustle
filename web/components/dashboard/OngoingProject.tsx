@@ -111,7 +111,9 @@ export default function OngoingProject({ topic, phase, agentStatus, handoffs, la
             {visiblePipeline.map((stage, i) => {
               const isStageActive = i === activeStageIdx;
               const isStageDone =
-                activeStageIdx !== -1
+                isDone
+                  ? true
+                  : activeStageIdx !== -1
                   ? i < activeStageIdx
                   : stage.ids.every((id) => agentStatus[id] === "done");
               const isStagePending = !isStageActive && !isStageDone;

@@ -34,8 +34,12 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function mdToHtml(md: string): string {
-  return md
+  return escapeHtml(md)
     .replace(/^# (.+)$/gm, "<h1>$1</h1>")
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
@@ -418,7 +422,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
               return (
                 <div
                   key={r.id}
-                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); setHtmlViewMode("preview"); setShowDraft(false); }}
+                  onClick={() => { setSelected(r); setCopied(false); setTranslated(null); setShowTranslated(false); setHtmlViewMode("preview"); setShowDraft(false); setWikiMsg(""); setWikiSaved(null); }}
                   className="rounded-xl border border-slate-500 bg-slate-700/50 p-3 hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1.5">
