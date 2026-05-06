@@ -62,6 +62,13 @@ export default function Home() {
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 언마운트 시 인터벌/타이머 전체 정리
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+    Object.values(speakTimers.current).forEach(clearTimeout);
+  }, []);
   const sessionIdRef = useRef("");
   const pendingDraftsRef = useRef<Record<string, string>>({});
   const [reportDrafts, setReportDrafts] = useState<Record<string, string>>({});
@@ -247,10 +254,11 @@ export default function Home() {
             keyFacts: event.keyFacts as string[],
           });
           break;
-        case "complete":
+        case "complete": {
+          const completedSid = sessionIdRef.current;
           setHistory((prev) => {
-            if (prev.some((h) => h.topic === inputTopic)) return prev;
-            return [{ id: uid(), topic: inputTopic, completedAt: new Date() }, ...prev];
+            if (prev.some((h) => h.id === completedSid)) return prev;
+            return [{ id: completedSid || uid(), topic: inputTopic, completedAt: new Date() }, ...prev];
           });
           localStorage.removeItem("cosmicHustleSession");
           setPhase("done");
@@ -262,6 +270,7 @@ export default function Home() {
             });
           }
           break;
+        }
         case "error":
           console.error("SSE error:", event.message);
           setPhase("done");
@@ -324,6 +333,8 @@ export default function Home() {
       setPhase("done");
     } finally {
       abortRef.current = null;
+      // complete 이벤트 미수신 시(네트워크 단절 등) working 상태 영구 고착 방지
+      setPhase((p) => p === "working" ? "done" : p);
     }
   };
 

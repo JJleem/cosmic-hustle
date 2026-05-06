@@ -168,10 +168,14 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
   }, [showExport]);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelected(null); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (editing) { cancelEdit(); return; }
+      setSelected(null);
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [editing]);
 
   const handleTranslate = async () => {
     if (!selected || translating) return;
@@ -254,10 +258,10 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
         body: JSON.stringify({ topic: editTopic, content: editContent }),
       });
       if (!res.ok) throw new Error();
-      const updated = await res.json() as Report;
-      updated.createdAt = new Date(updated.createdAt);
-      setSelected(updated);
-      onUpdate?.(updated);
+      const updated = await res.json() as Omit<Report, "createdAt"> & { createdAt: number | string };
+      const parsed: Report = { ...updated, createdAt: new Date(typeof updated.createdAt === "number" ? updated.createdAt * 1000 : updated.createdAt) };
+      setSelected(parsed);
+      onUpdate?.(parsed);
       setEditing(false);
     } finally {
       setSaving(false);
@@ -791,7 +795,7 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
             <div className="shrink-0 px-8 py-3 border-t border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] text-slate-600">{selected.content.length.toLocaleString()}자</span>
-                {(wikiSaving || wikiSaved === selected.id) && wikiMsg && (
+                {wikiMsg && (
                   <span className="flex items-center gap-1.5 text-[10px]" style={{ color: wikiSaved === selected.id ? "#a78bfa" : "#64748b" }}>
                     {wikiSaving && <Loader2 size={9} className="animate-spin" />}
                     {wikiSaved === selected.id && <Check size={9} />}

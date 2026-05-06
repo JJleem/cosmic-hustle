@@ -109,7 +109,7 @@ function WikiWorkspace({ agent, agentSettings }: { agent: AgentDef; agentSetting
         ))}
       </div>
       <div className="flex-1 overflow-hidden">
-        {tab === "knowledge" && <WikiViewer />}
+        {tab === "knowledge" && <div className="p-5 h-full overflow-hidden"><WikiViewer /></div>}
         {tab === "ingest"    && <div className="p-5 h-full overflow-y-auto scrollbar-hide"><WikiIngest /></div>}
         {tab === "chat"      && <ChatPanel agent={agent} />}
         {tab === "hr"        && <HRPanel agentSettings={agentSettings} />}
