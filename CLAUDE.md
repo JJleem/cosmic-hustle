@@ -22,68 +22,128 @@
 | AI | Claude Code SDK (`@anthropic-ai/claude-code`) | Claude Code 구독 토큰 사용 |
 | DB | PostgreSQL 16 + pgvector | 세션·리포트·위키 (벡터 검색 포함) |
 | Search | Tavily API | 포케 웹서칭 (기존 claude web search 대체) |
-| Hosting | AWS Lightsail (백엔드 + DB) | 월 $3.50, 프론트는 Vercel 유지 |
+| Hosting | AWS Lightsail (백엔드 + DB) | 프론트는 Vercel 유지 |
 
 ### 디렉토리 구조 (V2.0)
 
 ```
 cosmic-hustle/
-├── web/                  # Next.js 프론트엔드 (기존)
-│   └── app/api/         # → 점진적으로 FastAPI로 이전
-├── backend/              # Python FastAPI (신규)
-│   ├── main.py          # FastAPI 앱 진입점
-│   ├── orchestrator/    # 에이전트 파이프라인
-│   │   ├── pipeline.py  # 메인 오케스트레이션 (현 agentRunner.ts 대체)
-│   │   ├── agents.py    # 에이전트 정의
-│   │   └── prompts.py   # 프롬프트 템플릿
-│   ├── db/              # PostgreSQL + SQLAlchemy
-│   │   ├── models.py    # 테이블 정의
-│   │   └── connection.py
-│   └── routers/         # API 라우트
-│       ├── research.py  # POST /research, SSE 스트리밍
-│       ├── reports.py
-│       └── wiki.py
+├── web/                      # Next.js 프론트엔드
+│   ├── app/api/              # FastAPI 프록시 라우트 (thin wrapper) ✅
+│   ├── lib/backendProxy.ts   # proxySSE / proxyJson 헬퍼 ✅
+│   └── .env.local            # BACKEND_URL=http://localhost:8000
+├── backend/                  # Python FastAPI
+│   ├── main.py               # FastAPI 앱 진입점 ✅
+│   ├── run.py                # uvicorn 실행 진입점 ✅
+│   ├── requirements.txt      # 의존성 ✅
+│   ├── search.py             # Tavily API 웹 검색 헬퍼 ✅
+│   ├── .env                  # DATABASE_URL + TAVILY_API_KEY (gitignore됨, 직접 생성)
+│   ├── .env.example          # 키 양식 참고용 ✅
+│   ├── alembic.ini           # Alembic 설정 ✅
+│   ├── alembic/              # 스키마 마이그레이션 ✅
+│   │   └── versions/001_initial.py
+│   ├── migrate_sqlite.py     # SQLite → PostgreSQL 데이터 이전 스크립트 ✅
+│   ├── orchestrator/         # 에이전트 파이프라인
+│   │   ├── pipeline.py       # 메인 오케스트레이션 ✅
+│   │   ├── agent_runner.py   # Claude CLI 서브프로세스 실행기 ✅
+│   │   └── prompts.py        # 프롬프트 템플릿 ✅
+│   ├── db/                   # PostgreSQL + SQLAlchemy
+│   │   ├── models.py         # 테이블 정의 ✅
+│   │   └── connection.py     # DB 연결 ✅
+│   └── routers/              # API 라우트
+│       ├── health.py         # GET /health ✅
+│       ├── research.py       # POST /research, SSE 스트리밍 ✅
+│       ├── wiki.py           # GET/POST /api/wiki ✅
+│       └── memos.py          # GET/POST/DELETE /api/memos ✅
 └── CLAUDE.md
 ```
 
 ### 마이그레이션 단계
 
 ```
-Phase 1 (현재): 환경 세팅
-  - Railway 계정 + 서버 생성
-  - PostgreSQL DB 생성
-  - FastAPI 프로젝트 뼈대 구축
+Phase 1 ✅  FastAPI 뼈대 구축
+  - FastAPI 프로젝트 구조, DB 모델, 라우터 전체 구현
+  - Claude CLI 서브프로세스 기반 agent_runner 구현
 
-Phase 2: DB 이전
-  - SQLite 스키마 → PostgreSQL 마이그레이션
-  - pgvector 확장 추가 (위키 벡터 검색)
-  - 기존 데이터 마이그레이션
+Phase 2 🔶  DB 이전 (준비 완료, PostgreSQL 연결 대기)
+  - Alembic 마이그레이션 설정 완료 (alembic/versions/001_initial.py)
+  - SQLite → PostgreSQL 데이터 이전 스크립트 완료 (migrate_sqlite.py)
+  - 로컬: localhost:5432/cosmic_hustle
+  - 배포: AWS Lightsail RDS (나중에 .env DATABASE_URL만 교체)
+  - pgvector 추가는 Phase 5(LangGraph 전환) 때 같이 진행
 
-Phase 3: 오케스트레이션 이전
-  - agentRunner.ts + orchestrate() → pipeline.py
-  - 위키+포케 병렬 실행 구현
-  - SSE 스트리밍 FastAPI로 이전
+Phase 3 ✅  오케스트레이션 완성
+  - pipeline.py: asyncio.Queue 패턴, murmur 백그라운드 태스크, 타이핑 효과
+  - CEO 체크인 게이트: plan+fact (dev는 plan+root) 두 곳에서만 체크인
+  - 팩트 피드백 루프 최대 3회
+  - 리포트 스타일 3가지 프리셋 (standard/formal, detailed/analytical, brief/casual)
 
-Phase 4: Next.js API Routes 정리
-  - 프론트는 FastAPI 백엔드만 바라보도록 변경
-  - Next.js API Routes 제거
+Phase 4 ✅  Next.js → FastAPI 프록시 연결
+  - web/lib/backendProxy.ts: proxySSE / proxyJson 헬퍼
+  - web/app/api/ 모든 라우트가 FastAPI(localhost:8000)로 프록시
+  - memos 라우터 추가 (FastAPI + Next.js 양쪽)
 
-Phase 5 (향후): LangGraph + Anthropic API 전환
+Phase 4.5 ✅  Tavily API로 포케 웹 검색 교체
+  - backend/search.py: Tavily API 직접 HTTP 호출, 3쿼리 병렬 + URL 중복 제거
+  - 포케 프롬프트에 검색 결과 주입 방식 → claude WebSearch 도구 의존성 제거
+  - pocke_recheck도 동일 방식 적용
+
+Phase 5 ❌  LangGraph + Anthropic API 전환 (향후)
+  - pipeline.py → LangGraph StateGraph로 교체
+  - Claude Code SDK → Anthropic API 직접 호출
+  - pgvector 위키 벡터 검색 추가
+```
+
+### 새 컴퓨터에서 시작하는 법
+
+```bash
+# 1. 의존성 설치
+cd backend
+pip install -r requirements.txt
+
+# 2. .env 파일 생성 (backend/.env.example 참고)
+#    DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle
+#    TAVILY_API_KEY=tvly-xxxx   ← https://tavily.com 에서 발급 (무료 1000회/월)
+
+# 3. PostgreSQL 준비 (최초 1회)
+# psql -c "CREATE USER cosmic WITH PASSWORD 'cosmic1234';"
+# psql -c "CREATE DATABASE cosmic_hustle OWNER cosmic;"
+# alembic upgrade head
+
+# 4. 백엔드 서버 실행
+python run.py   # → http://localhost:8000
+
+# 5. 프론트엔드 (별도 터미널)
+# web/.env.local 에 BACKEND_URL=http://localhost:8000 있어야 함
+cd web && npm run dev   # → http://localhost:3000
+```
+
+### 다음 작업 TODO
+
+```
+[ ] Tavily API 키 발급 후 backend/.env에 TAVILY_API_KEY 입력하고 포케 동작 검증
+[ ] PostgreSQL 로컬 세팅 + alembic upgrade head 실행
+[ ] 엔드투엔드 파이프라인 테스트 (리포트 1개 실행해서 전 단계 정상 확인)
+[ ] Phase 5: LangGraph + Anthropic API 전환 (추후)
 ```
 
 ### API 계약 (Frontend ↔ Backend)
 
 ```
-POST   /api/research          # 리서치 시작 (SSE 스트림 반환)
+POST   /api/research                      # 리서치 시작 (SSE 스트림 반환)
 GET    /api/research/{id}/events?since=N  # 이벤트 재생
 POST   /api/research/{id}/respond         # CEO 체크인 응답
 POST   /api/research/{id}/cancel          # 취소
-GET    /api/reports           # 리포트 목록
-GET    /api/reports/{id}      # 리포트 상세
+GET    /api/reports                       # 리포트 목록
+GET    /api/reports/{id}                  # 리포트 상세
+PATCH  /api/reports/{id}                  # 리포트 수정 (topic, content)
 DELETE /api/reports/{id}
-GET    /api/sessions          # 세션 목록
-GET    /api/wiki/search       # 위키 검색
-POST   /api/wiki/ingest       # 위키 저장
+GET    /api/sessions                      # 세션 목록
+GET    /api/memos                         # 메모 목록
+POST   /api/memos                         # 메모 생성
+DELETE /api/memos/{id}                    # 메모 삭제
+GET    /api/wiki/search                   # 위키 검색
+POST   /api/wiki/ingest                   # 위키 저장
 ```
 
 ---
@@ -121,10 +181,10 @@ POST   /api/wiki/ingest       # 위키 저장
 CEO 입력
   → 플랜(요구사항·태스크타입 결정) → [CEO 확인 요청]
   → 위키(과거 지식)
-  → 포케(웹 리서치) → [CEO 체크인]
+  → 포케(Tavily 웹 검색 → 팩트 추출) → [CEO 체크인]
   → 카(분석)
   → run | over | pixel | buzz (태스크타입에 따라 1명 담당)
-  → 팩트(검토) → 피드백 루프 (최대 2회)
+  → 팩트(검토) → 피드백 루프 (최대 3회)
   → 루트(배포 계획, dev 태스크만)
   → 핑 + 위키 동시(아이디어 캡처 + 위키 업데이트)
   → CEO
@@ -147,7 +207,7 @@ CEO 입력
 ## 토큰 최적화 원칙
 
 - 에이전트 간 전체 컨텍스트 전달 X, 구조화된 JSON 핸드오프만
-- maxTurns 엄격하게 제한 (팩트 부장 1턴, 포케 3턴 등)
+- maxTurns 엄격하게 제한 (팩트 부장 1턴, 포케 1턴 등)
 - 병렬 실행 가능한 구간 묶기 (핑 + 위키 동시)
 
 ## 세션 지속성 구조

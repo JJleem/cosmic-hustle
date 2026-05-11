@@ -81,26 +81,53 @@ key_facts 빈 배열 금지 — 찾은 모든 구체적 정보를 반드시 넣�
 {{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["구체적팩트(수치·날짜 포함)", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
 ```""",
 
+    "pocke_preloaded": """포케 대리. 리서처.
+주제: "{topic}". 배경: {context}. 키워드: {keywords}.
+
+아래는 이미 수집된 웹 검색 결과다. 이 내용을 분석해서 핵심 팩트를 추출하라.
+
+검색 결과:
+{search_results}
+
+지시사항:
+- 위 검색 결과에서 구체적 수치·날짜·이름·통계·기록을 모두 추출
+- 확인된 것만 기록. 출처 URL 반드시 포함
+- key_facts: 최소 5개 이상. 구체적 수치나 날짜 포함된 팩트 우선
+- sources: 실제 사용한 출처만
+```json
+{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL"}}], "key_facts": ["구체적팩트(수치·날짜 포함)", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
+```""",
+
     "pocke_recheck": """포케 대리. 팩트 재조사 모드.
 주제: "{topic}". 팩트 부장이 검증을 요청한 항목:
 {research_queries}
 
-위 항목들을 중심으로 WebSearch 최소 3회 실행. 공식 보도자료·IR·신뢰할 수 있는 언론 기사 우선.
-찾을 수 없으면 "공식 확인 불가" 명시. 빈 배열 금지.
+아래는 재조사 검색 결과다:
+{search_results}
+
+위 검색 결과에서 요청된 항목들에 대한 팩트를 추출하라. 찾을 수 없으면 "공식 확인 불가" 명시. 빈 배열 금지.
 ```json
 {{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["재확인 팩트1 (출처명시)", "팩트2", "팩트3"], "unverified_count": 0}}
 ```""",
 
     "pocke_marketing": """포케 대리. 시장 조사 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-시장 규모·경쟁사·최신 트렌드·소비자 반응 중심으로 웹 검색 최대 3회. 각 소스 URL 필수.
+
+검색 결과:
+{search_results}
+
+시장 규모·경쟁사·트렌드·소비자 반응 관련 팩트를 위 결과에서 추출하라.
 ```json
 {{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
 ```""",
 
     "pocke_tech": """포케 대리. 기술 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-공식 문서·GitHub·기술 블로그 중심으로 웹 검색 최대 3회. 각 소스 URL 필수.
+
+검색 결과:
+{search_results}
+
+공식 문서·GitHub·기술 블로그 내용 기반으로 기술 팩트를 위 결과에서 추출하라.
 ```json
 {{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
 ```""",
@@ -218,6 +245,13 @@ needs_research: 재조사가 필요한 항목이 있으면 true.
 ```json
 {{"ideas": [{{"title": "아이디어 제목", "spark": "한 줄 설명"}}]}}
 ```""",
+
+    "root": """루트 사원. DevOps 엔지니어.
+주제: "{topic}".
+구현 결과:
+{report}
+
+CI/CD 파이프라인 설계 + 배포 단계 문서화. 마크다운 ## 구조. 자동화 스텝·환경변수·롤백 전략 포함. 400~600자.""",
 }
 
 
@@ -230,15 +264,15 @@ def build_prompt(key: str, **kwargs) -> str:
 
 # 태스크 타입별 에이전트 매핑
 TASK_CONFIG = {
-    "research":  {"pocke": "pocke",  "ka": "ka",          "writer": "over"},
-    "blog":      {"pocke": "pocke",  "ka": "ka",          "writer": "over_blog"},
-    "tech":      {"pocke": "pocke_tech", "ka": "ka_tech", "writer": "over_tech"},
-    "marketing": {"pocke": "pocke_marketing", "ka": "ka_marketing", "writer": "over_marketing"},
-    "design_ux": {"pocke": "pocke",  "ka": "ka",          "writer": "pixel"},
-    "design_ui": {"pocke": "pocke",  "ka": "ka",          "writer": "pixel"},
-    "dev":       {"pocke": "pocke_tech", "ka": "ka_tech", "writer": "run"},
-    "dev_plan":  {"pocke": "pocke",  "ka": "ka",          "writer": "over"},
-    "dev_spec":  {"pocke": "pocke",  "ka": "ka",          "writer": "over"},
+    "research":  {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over"},
+    "blog":      {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over_blog"},
+    "tech":      {"pocke": "pocke_tech",               "ka": "ka_tech",     "writer": "over_tech"},
+    "marketing": {"pocke": "pocke_marketing",          "ka": "ka_marketing","writer": "over_marketing"},
+    "design_ux": {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "pixel"},
+    "design_ui": {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "pixel"},
+    "dev":       {"pocke": "pocke_tech",               "ka": "ka_tech",     "writer": "run"},
+    "dev_plan":  {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over"},
+    "dev_spec":  {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over"},
 }
 
 WRITER_AGENT_ID = {

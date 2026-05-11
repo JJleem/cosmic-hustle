@@ -55,8 +55,13 @@ def _run_agent_sync(
         stderr=subprocess.PIPE,
         cwd=cwd,
     )
-    stdout_bytes, _ = proc.communicate(input=prompt.encode("utf-8"))
-    return stdout_bytes.decode("utf-8", errors="replace")
+    stdout_bytes, stderr_bytes = proc.communicate(input=prompt.encode("utf-8"))
+    raw = stdout_bytes.decode("utf-8", errors="replace")
+    if proc.returncode != 0 or not raw.strip():
+        agent_hint = next((a for a in args if a in ("pocke", "wiki", "ka", "fact", "plan")), "?")
+        print(f"[agent_runner] exit={proc.returncode} stdout_len={len(raw)} "
+              f"stderr={stderr_bytes.decode('utf-8', errors='replace')[:300]}")
+    return raw
 
 
 def _parse_output(raw: str) -> tuple[str, str]:
@@ -106,7 +111,7 @@ async def run_agent(
     max_turns: int | None = None,
     on_progress: Callable[[str], Awaitable[None]] | None = None,
     on_thinking: Callable[[str], Awaitable[None]] | None = None,
-) -> str:
+) -> tuple[str, str]:
     args = [
         CLAUDE_BIN, "-p",
         "--verbose",
@@ -128,8 +133,7 @@ async def run_agent(
 
     # 스레드풀에서 동기 subprocess 실행 (Windows asyncio 호환)
     raw = await asyncio.to_thread(_run_agent_sync, prompt, args, work_dir)
-    result, stream_text = _parse_output(raw)
-    return result
+    return _parse_output(raw)  # (result, stream_text)
 
 
 def parse_json(text: str, fallback):

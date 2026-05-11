@@ -57,16 +57,59 @@ const MODE_OPTIONS: { id: ProjectMode; label: string; desc: string; icon: string
   { id: "full",       label: "풀 모니터링", desc: "실시간 확인", icon: "👁" },
 ];
 
-const LENGTH_OPTIONS: { id: ReportStyle["length"]; label: string; desc: string }[] = [
-  { id: "brief",    label: "간결하게", desc: "~400자" },
-  { id: "standard", label: "보통",     desc: "~700자" },
-  { id: "detailed", label: "자세하게", desc: "~1200자" },
-];
+type StylePreset = {
+  id: string;
+  name: string;
+  desc: string;
+  style: ReportStyle;
+  preview: string[];
+  color: string;
+};
 
-const TONE_OPTIONS: { id: ReportStyle["tone"]; label: string }[] = [
-  { id: "formal",     label: "공식적" },
-  { id: "casual",     label: "친근하게" },
-  { id: "analytical", label: "분석적" },
+const STYLE_PRESETS: StylePreset[] = [
+  {
+    id: "standard",
+    name: "스탠다드",
+    desc: "균형잡힌 보고서 · ~700자 · 공식체",
+    style: { length: "standard", tone: "formal" },
+    preview: [
+      "## 핵심 요약",
+      "",
+      "이번 조사의 주요 발견은 세 가지입니다.",
+      "시장은 전년 대비 성장세를 유지하며",
+      "주요 플레이어들의 전략 변화가 감지됩니다.",
+    ],
+    color: "#93c5fd",
+  },
+  {
+    id: "deep",
+    name: "심층 분석",
+    desc: "데이터 중심 · ~1200자+ · 수치 포함",
+    style: { length: "detailed", tone: "analytical" },
+    preview: [
+      "## 시장 규모 분석",
+      "",
+      "2024년 기준 34.2% 성장, 1,847억 달러.",
+      "3사 점유율 72.4% — 상위 플레이어",
+      "집중도가 전년 대비 8.3%p 상승했다.",
+      "신흥 시장 진입 가속화가 핵심 변수.",
+    ],
+    color: "#c4b5fd",
+  },
+  {
+    id: "brief",
+    name: "간결 브리프",
+    desc: "핵심만 빠르게 · ~400자 · 친근한 문체",
+    style: { length: "brief", tone: "casual" },
+    preview: [
+      "**지금 알아야 할 것 딱 3개**",
+      "",
+      "→ 가장 중요한 포인트",
+      "→ 지금 당장 취할 액션",
+      "→ 다음에 주목할 트렌드",
+    ],
+    color: "#6ee7b7",
+  },
 ];
 
 // research 계열 태스크 타입 (리포트 설정 노출 조건)
@@ -94,7 +137,8 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
-  const [reportStyle, setReportStyle] = useState<ReportStyle>({ length: "standard", tone: "formal" });
+  const [selectedPresetId, setSelectedPresetId] = useState("standard");
+  const [reportStyle, setReportStyle] = useState<ReportStyle>(STYLE_PRESETS[0].style);
   const topicRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { topicRef.current?.focus(); }, []);
@@ -298,54 +342,65 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
               )}
             </div>
 
-            {/* 리포트 설정 (research 계열만) */}
+            {/* 리포트 스타일 (research 계열만) */}
             {showReportSettings && (
               <div>
-                <label className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold block mb-2">리포트 설정</label>
-                <div className="rounded-2xl p-4 flex flex-col gap-4" style={{ background: "#0d1222", border: "1px solid #1e2a40" }}>
-                  {/* 분량 */}
-                  <div>
-                    <p className="text-[9px] text-slate-600 mb-2">분량</p>
-                    <div className="flex gap-1.5">
-                      {LENGTH_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => setReportStyle((prev) => ({ ...prev, length: opt.id }))}
-                          className="flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl border text-center transition-all"
-                          style={
-                            reportStyle.length === opt.id
-                              ? { background: "#1e3a5f", borderColor: "#2a5a9c", color: "#93c5fd" }
-                              : { background: "#0a0f1a", borderColor: "#1e2535", color: "#475569" }
-                          }
+                <label className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold block mb-2">리포트 스타일</label>
+                <div className="flex flex-col gap-2">
+                  {STYLE_PRESETS.map((preset) => {
+                    const selected = selectedPresetId === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => { setSelectedPresetId(preset.id); setReportStyle(preset.style); }}
+                        className="w-full text-left rounded-2xl p-3 transition-all"
+                        style={{
+                          background: selected ? `${preset.color}08` : "#0d1222",
+                          border: `1.5px solid ${selected ? preset.color + "60" : "#1e2535"}`,
+                          boxShadow: selected ? `0 0 12px ${preset.color}15` : "none",
+                        }}
+                      >
+                        {/* 헤더 */}
+                        <div className="flex items-baseline gap-2 mb-2">
+                          <span className="text-[11px] font-bold" style={{ color: selected ? preset.color : "#64748b" }}>
+                            {preset.name}
+                          </span>
+                          {selected && (
+                            <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold"
+                              style={{ background: `${preset.color}20`, color: preset.color }}>
+                              선택됨
+                            </span>
+                          )}
+                          <span className="text-[8px] text-slate-600 ml-auto">{preset.desc}</span>
+                        </div>
+                        {/* 미리보기 박스 */}
+                        <div
+                          className="rounded-xl px-3 py-2.5 font-mono"
+                          style={{
+                            background: "#080c18",
+                            border: `1px solid ${selected ? preset.color + "20" : "#141c2e"}`,
+                          }}
                         >
-                          <span className="text-[10px] font-bold">{opt.label}</span>
-                          <span className="text-[8px] opacity-60">{opt.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* 문체 */}
-                  <div>
-                    <p className="text-[9px] text-slate-600 mb-2">문체</p>
-                    <div className="flex gap-1.5">
-                      {TONE_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => setReportStyle((prev) => ({ ...prev, tone: opt.id }))}
-                          className="flex-1 py-2 rounded-xl border text-[10px] font-bold transition-all"
-                          style={
-                            reportStyle.tone === opt.id
-                              ? { background: "#1e3a5f", borderColor: "#2a5a9c", color: "#93c5fd" }
-                              : { background: "#0a0f1a", borderColor: "#1e2535", color: "#475569" }
-                          }
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                          {preset.preview.map((line, i) => (
+                            <div key={i} className="leading-relaxed"
+                              style={{
+                                fontSize: "9px",
+                                color: line.startsWith("##") ? preset.color
+                                  : line.startsWith("**") ? "#e2e8f0"
+                                  : line.startsWith("→") ? "#94a3b8"
+                                  : line === "" ? undefined : "#64748b",
+                                fontWeight: line.startsWith("##") || line.startsWith("**") ? 700 : 400,
+                                height: line === "" ? "0.4em" : undefined,
+                              }}
+                            >
+                              {line}
+                            </div>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

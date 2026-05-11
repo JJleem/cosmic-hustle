@@ -7,7 +7,7 @@ if sys.platform == "win32":
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.connection import engine, Base
-from routers import health, research
+from routers import health, research, wiki, memos
 
 Base.metadata.create_all(bind=engine)
 
@@ -22,3 +22,5 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(research.router)
+app.include_router(wiki.router)
+app.include_router(memos.router)
