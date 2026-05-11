@@ -705,6 +705,7 @@ export default function Home() {
           streamLog={streamLog}
           chatFeed={chatFeed}
           liveDraft={liveDraft}
+          agentDurations={agentDurations}
           onStop={stopResearch}
         />
       )}

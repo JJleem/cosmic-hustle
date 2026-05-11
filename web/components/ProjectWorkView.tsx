@@ -15,8 +15,14 @@ type Props = {
   streamLog: Record<string, string>;
   chatFeed: ChatEntry[];
   liveDraft: { agentId: string; topic: string; content: string } | null;
+  agentDurations: Record<string, number>;
   onStop: () => void;
 };
+
+function fmtMs(ms: number): string {
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+}
 
 export default function ProjectWorkView({
   topic,
@@ -27,12 +33,15 @@ export default function ProjectWorkView({
   streamLog,
   chatFeed,
   liveDraft,
+  agentDurations,
   onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   const [pinnedAgentId, setPinnedAgentId] = useState<string | null>(null);
+  const [liveElapsed, setLiveElapsed] = useState(0);
+  const activeStartRef = useRef<number>(Date.now());
 
   // 핀된 에이전트 > 현재 활성 > 마지막 완료 순서
   const autoAgent =
@@ -100,6 +109,17 @@ export default function ProjectWorkView({
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [chatFeed]);
+
+  // 활성 에이전트 바뀔 때마다 live timer 리셋
+  useEffect(() => {
+    const activeAgent = AGENTS.find((a) => agentStatus[a.id] === "active");
+    if (!activeAgent) { setLiveElapsed(0); return; }
+    activeStartRef.current = Date.now();
+    setLiveElapsed(0);
+    const tick = setInterval(() => setLiveElapsed(Date.now() - activeStartRef.current), 1000);
+    return () => clearInterval(tick);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [AGENTS.find((a) => agentStatus[a.id] === "active")?.id]);
 
   return (
     <div
@@ -299,7 +319,11 @@ export default function ProjectWorkView({
                     {a.name}
                   </span>
                   {isActive && <div className="w-1 h-1 rounded-full animate-pulse" style={{ background: a.color }} />}
-                  {isDone && <span className="text-[8px]" style={{ color: `${a.color}60` }}>✓</span>}
+                  {isDone && (
+                    <span className="text-[8px] font-mono tabular-nums" style={{ color: `${a.color}60` }}>
+                      {agentDurations[a.id] ? fmtMs(agentDurations[a.id]) : "✓"}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -318,6 +342,17 @@ export default function ProjectWorkView({
               {pinnedAgentId ? "Pinned" : "Live"} Output
             </span>
             <span className="text-xs text-slate-600 ml-1">— {displayAgent.name}</span>
+            {/* 현재 에이전트 live 타이머 or 완료 소요 시간 */}
+            {agentStatus[displayAgent.id] === "active" && liveElapsed > 0 && (
+              <span className="text-[10px] font-mono tabular-nums" style={{ color: `${displayAgent.color}80` }}>
+                {fmtMs(liveElapsed)}
+              </span>
+            )}
+            {agentStatus[displayAgent.id] === "done" && agentDurations[displayAgent.id] && (
+              <span className="text-[10px] font-mono tabular-nums text-slate-600">
+                {fmtMs(agentDurations[displayAgent.id])}
+              </span>
+            )}
             {pinnedAgentId && (
               <button
                 onClick={() => setPinnedAgentId(null)}
