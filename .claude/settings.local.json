@@ -68,7 +68,12 @@
       "Bash(sed -n '395,420p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/page.tsx)",
       "Bash(sed -n '620,640p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/page.tsx)",
       "Bash(sed -n '1,30p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/ProjectWorkView.tsx)",
-      "Bash(sed -n '90,170p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/ProjectWorkView.tsx)"
+      "Bash(sed -n '90,170p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/ProjectWorkView.tsx)",
+      "Bash(sed -n '145,155p' /Users/molt/Desktop/molt_repository/cosmic-hustle/backend/orchestrator/pipeline.py)",
+      "Bash(sed -n '213,222p' /Users/molt/Desktop/molt_repository/cosmic-hustle/backend/orchestrator/pipeline.py)",
+      "Bash(sed -n '246,256p' /Users/molt/Desktop/molt_repository/cosmic-hustle/backend/orchestrator/pipeline.py)",
+      "Bash(sed -n '289,297p' /Users/molt/Desktop/molt_repository/cosmic-hustle/backend/orchestrator/pipeline.py)",
+      "Bash(sed -n '358,365p' /Users/molt/Desktop/molt_repository/cosmic-hustle/backend/orchestrator/pipeline.py)"
     ]
   }
 }

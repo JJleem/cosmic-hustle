@@ -16,6 +16,7 @@ type Props = {
   chatFeed: ChatEntry[];
   liveDraft: { agentId: string; topic: string; content: string } | null;
   agentDurations: Record<string, number>;
+  thinkingHint: Record<string, string>;
   onStop: () => void;
 };
 
@@ -34,6 +35,7 @@ export default function ProjectWorkView({
   chatFeed,
   liveDraft,
   agentDurations,
+  thinkingHint,
   onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
@@ -417,6 +419,11 @@ export default function ProjectWorkView({
                     {displayAgent.name} 처리 중...
                   </span>
                 </div>
+                {thinkingHint[displayAgent.id] && (
+                  <p className="text-[11px] italic" style={{ color: `${displayAgent.color}55` }}>
+                    💭 {thinkingHint[displayAgent.id]}
+                  </p>
+                )}
                 {msg && (
                   <p className="text-xs leading-relaxed italic" style={{ color: `${displayAgent.color}55` }}>
                     &ldquo;{msg}&rdquo;

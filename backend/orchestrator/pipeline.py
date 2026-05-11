@@ -145,6 +145,7 @@ async def _pipeline_inner(
         return
 
     emit("agent_start", agentId="plan", message="요구사항 파악 중. 티켓 열게요.")
+    send({"type": "agent_thinking", "agentId": "plan", "chunk": "태스크 타입 분류 중..."})
     plan_key = "plan_auto" if task_type == "auto" else "plan"
     plan_raw, plan_stream = await run_a(
         build_prompt(plan_key, topic=topic, task_type=task_type), no_tools=True, max_turns=1
@@ -213,6 +214,7 @@ async def _pipeline_inner(
     # ── 1. 위키 ───────────────────────────────────────────────────────────
     wiki_context = f'{{"context": "{topic}에 대한 배경", "keywords": ["{topic}"], "wiki_pages_found": []}}'
     emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
+    send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 페이지 탐색 중..."})
     try:
         wiki_raw, wiki_stream = await run_a(
             build_prompt("wiki", topic=topic), tools=["Read", "Glob"], max_turns=2
@@ -246,6 +248,7 @@ async def _pipeline_inner(
     # ── 2. 포케 ───────────────────────────────────────────────────────────
     pocke_output = '{"sources": [], "key_facts": []}'
     emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
+    send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
     try:
         stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
 
@@ -289,6 +292,7 @@ async def _pipeline_inner(
     ka_output = (f'{{"insights": [{{"title": "주요 동향", "description": "{topic}의 핵심 흐름"}}],'
                  f' "conclusion": "{topic}에 대한 분석 결과입니다.", "data_quality": "medium"}}')
     emit("agent_start", agentId="ka", message="패턴 분석 시작. 데이터 하나만 더...")
+    send({"type": "agent_thinking", "agentId": "ka", "chunk": "팩트 간 연결고리 탐색 중..."})
     try:
         stop_ka = _start_murmurs("ka", MURMURS["ka"], send, interval_sec=10.0)
         ka_raw, ka_stream = await run_a(
@@ -403,6 +407,7 @@ async def _pipeline_inner(
         await asyncio.sleep(0.5)
 
         emit("agent_start", agentId="fact", message="...")
+        send({"type": "agent_thinking", "agentId": "fact", "chunk": "초안 분석 중..."})
         try:
             stop_fact = _start_murmurs("fact", MURMURS["fact"], send, interval_sec=10.0)
             fact_prompt_key = "fact_dev" if is_dev_task else "fact"

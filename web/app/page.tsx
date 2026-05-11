@@ -73,6 +73,7 @@ export default function Home() {
   const pendingDraftsRef = useRef<Record<string, string>>({});
   const [reportDrafts, setReportDrafts] = useState<Record<string, string>>({});
   const [liveDraft, setLiveDraft] = useState<{ agentId: string; topic: string; content: string } | null>(null);
+  const [thinkingHint, setThinkingHint] = useState<Record<string, string>>({});
   // agentId → 소요 ms (agent_start ts 기록 후 agent_done 에서 계산)
   const agentStartTs = useRef<Record<string, number>>({});
   const [agentDurations, setAgentDurations] = useState<Record<string, number>>({});
@@ -167,6 +168,7 @@ export default function Home() {
         case "agent_start":
           setAgentStatus((prev) => ({ ...prev, [event.agentId as string]: "active" }));
           setStreamLog((prev) => ({ ...prev, [event.agentId as string]: "" }));
+          setThinkingHint((prev) => { const n = { ...prev }; delete n[event.agentId as string]; return n; });
           speak(event.agentId as string, event.message as string);
           addChat(event.agentId as string, `[시작] ${event.message as string}`);
           agentStartTs.current[event.agentId as string] = (event.ts as number | undefined) ?? Date.now();
@@ -183,6 +185,7 @@ export default function Home() {
           break;
         case "agent_thinking":
           speak(event.agentId as string, "...");
+          setThinkingHint((prev) => ({ ...prev, [event.agentId as string]: event.chunk as string }));
           break;
         case "agent_done": {
           const doneId = event.agentId as string;
@@ -507,6 +510,7 @@ export default function Home() {
     setCurrentMode("checkin");
     setReportDrafts({});
     setLiveDraft(null);
+    setThinkingHint({});
     pendingDraftsRef.current = {};
     agentStartTs.current = {};
     setAgentDurations({});
@@ -706,6 +710,7 @@ export default function Home() {
           chatFeed={chatFeed}
           liveDraft={liveDraft}
           agentDurations={agentDurations}
+          thinkingHint={thinkingHint}
           onStop={stopResearch}
         />
       )}
