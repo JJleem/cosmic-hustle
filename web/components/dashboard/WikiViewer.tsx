@@ -54,6 +54,8 @@ export default function WikiViewer() {
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
   // 검색어 디바운스 → 전문 검색
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);

@@ -250,7 +250,7 @@ export default function ProjectWorkView({
                     }
                   >
                     {stage.ids.length > 1
-                      ? stage.ids.map((id) => AGENT_MAP[id].name).join("+")
+                      ? stage.ids.map((id) => AGENT_MAP[id]?.name ?? id).join("+")
                       : stageAgent.name}
                   </div>
                 </div>

@@ -212,8 +212,10 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
           } catch { /* ignore */ }
         }
       }
-      const match = result.match(/\[[\s\S]*?\]/);
-      if (match) setSuggestions((JSON.parse(match[0]) as string[]).slice(0, 5));
+      const match = result.match(/\[[\s\S]*\]/);
+      if (match) {
+        try { setSuggestions((JSON.parse(match[0]) as string[]).slice(0, 5)); } catch { /* 파싱 실패 무시 */ }
+      }
     } catch {
       setSuggestions([]);
     } finally {

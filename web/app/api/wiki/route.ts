@@ -30,8 +30,10 @@ export async function GET() {
   for (const name of rootFiles) {
     if (!name.endsWith(".md") || name.startsWith(".")) continue;
     const fullPath = path.join(WIKI_PAGES_DIR, name);
-    const stat = fs.statSync(fullPath);
-    files.push({ name, path: name, category: "root", size: stat.size, updatedAt: Math.floor(stat.mtimeMs / 1000) });
+    try {
+      const stat = fs.statSync(fullPath);
+      files.push({ name, path: name, category: "root", size: stat.size, updatedAt: Math.floor(stat.mtimeMs / 1000) });
+    } catch { /* 파일 삭제/심볼릭링크 깨짐 등 무시 */ }
   }
 
   const subDirs = ["concepts", "sources"];
@@ -40,8 +42,10 @@ export async function GET() {
     for (const name of safeReadDir(dirPath)) {
       if (!name.endsWith(".md") || name.startsWith(".")) continue;
       const fullPath = path.join(dirPath, name);
-      const stat = fs.statSync(fullPath);
-      files.push({ name, path: `${dir}/${name}`, category: dir, size: stat.size, updatedAt: Math.floor(stat.mtimeMs / 1000) });
+      try {
+        const stat = fs.statSync(fullPath);
+        files.push({ name, path: `${dir}/${name}`, category: dir, size: stat.size, updatedAt: Math.floor(stat.mtimeMs / 1000) });
+      } catch { /* 파일 삭제/심볼릭링크 깨짐 등 무시 */ }
     }
   }
 

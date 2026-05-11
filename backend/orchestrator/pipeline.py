@@ -6,7 +6,6 @@ from typing import AsyncGenerator
 
 from .agent_runner import run_agent, parse_json, WIKI_DIR
 from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
-from search import search_topic, format_search_results
 
 # ── Global state ───────────────────────────────────────────────────────────
 pending_responses: dict[str, asyncio.Future] = {}
@@ -250,17 +249,11 @@ async def _pipeline_inner(
     try:
         stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
 
-        # Tavily로 웹 검색 → 결과를 pocke 프롬프트에 주입
-        send({"type": "agent_message", "agentId": "pocke", "message": "검색 중... 🔍"})
-        raw_results = await search_topic(topic, wiki.get("keywords", []))
-        search_text = format_search_results(raw_results)
-
         pocke_raw, pocke_stream = await run_a(
             build_prompt(config["pocke"], topic=topic,
                          context=wiki.get("context", ""),
-                         keywords=", ".join(wiki.get("keywords", [])),
-                         search_results=search_text),
-            no_tools=True, max_turns=1,
+                         keywords=", ".join(wiki.get("keywords", []))),
+            tools=["WebSearch", "WebFetch"], max_turns=5,
         )
         stop_pocke()
         if pocke_raw.strip():
@@ -452,26 +445,11 @@ async def _pipeline_inner(
                     emit("agent_start", agentId="pocke", message="재조사 중...")
                     try:
                         recheck_queries = fact["research_queries"]
-                        recheck_results = await asyncio.gather(
-                            *[search_topic(q) for q in recheck_queries[:2]],
-                            return_exceptions=True,
-                        )
-                        merged_recheck: list[dict] = []
-                        seen_urls: set[str] = set()
-                        for batch in recheck_results:
-                            if isinstance(batch, list):
-                                for r in batch:
-                                    url = r.get("url", "")
-                                    if url not in seen_urls:
-                                        seen_urls.add(url)
-                                        merged_recheck.append(r)
-                        recheck_search_text = format_search_results(merged_recheck[:8])
 
                         recheck_raw, _ = await run_a(
                             build_prompt("pocke_recheck", topic=topic,
-                                         research_queries="\n".join(recheck_queries),
-                                         search_results=recheck_search_text),
-                            no_tools=True, max_turns=1,
+                                         research_queries="\n".join(recheck_queries)),
+                            tools=["WebSearch", "WebFetch"], max_turns=3,
                         )
                         recheck = parse_json(recheck_raw, {"sources": [], "key_facts": []})
                         live_pocke["key_facts"] = list(dict.fromkeys(

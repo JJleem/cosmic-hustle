@@ -211,8 +211,9 @@ needs_research: 재조사가 필요한 항목이 있으면 true. research_querie
 {sources}
 
 체크: ① 보안 취약점 ② 로직 오류 ③ 성능 문제 ④ 미구현 항목.
+needs_research: 추가 조사가 필요하면 true. research_queries는 포케가 검색할 구체적 쿼리.
 \`\`\`json
-{"passed": true/false, "issues": ["문제1"], "feedback": "수정 지시사항", "unverified_claims": []}
+{"passed": true/false, "issues": ["문제1"], "feedback": "수정 지시사항", "unverified_claims": [], "needs_research": false, "research_queries": []}
 \`\`\``,
 
   over_tech: `오버 사원. 기술 문서 작가.

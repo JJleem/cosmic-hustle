@@ -42,9 +42,24 @@
       "Bash(xargs cat *)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\DonghaeChoi\\\\Desktop\\\\personal repository\\\\cosmic-hustle\" -Force)",
-      "Bash(Select-Object Name, PSIsContainer)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(node -e \"const path = require\\('path'\\); const fs = require\\('fs'\\); const pkgBin = path.join\\(process.cwd\\(\\), 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude'\\); const platformPkg = path.join\\(process.cwd\\(\\), 'node_modules', '@anthropic-ai', 'claude-code-darwin-arm64', 'claude'\\); for \\(const p of [pkgBin, platformPkg]\\) { if \\(fs.existsSync\\(p\\)\\) { console.log\\('found:', p\\); break; } }\")",
+      "Bash(brew list *)",
+      "Bash(pip3 --version)",
+      "Bash(brew --version)",
+      "Bash(python3.12 --version)",
+      "Bash(python3.11 --version)",
+      "Read(//usr/local/bin/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(brew install *)",
+      "Bash(brew services *)",
+      "Bash(/opt/homebrew/opt/postgresql@16/bin/psql --version)",
+      "Bash(python3.12 -m pip install -r requirements.txt)",
+      "Bash(python3.12 -m venv .venv)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/alembic upgrade *)",
+      "Bash(.venv/bin/python run.py)",
+      "Bash(.venv/bin/python *)",
+      "Bash(pkill -f \"run.py\")"
     ]
   }
 }
