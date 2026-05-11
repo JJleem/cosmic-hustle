@@ -138,7 +138,24 @@ cd web && npm run dev   # → http://localhost:3000
 ✅ 에러 복구 강화 — WikiViewer/MemoBoard 로드 실패 시 에러+재시도 버튼
 ✅ 프로젝트 설정 화면 모달 → 전체 페이지 전환
 
+✅ 고도화 #1: 에이전트 말하기 애니메이션
+  - AgentImage.tsx: active 상태에서 talk_0→1→2→1→0 프레임 싸이클 (110ms/frame)
+  - 입 닫힘 후 200~500ms 랜덤 pause로 자연스럽게
+
+✅ 고도화 #2: Draft Report 실시간 표시
+  - page.tsx: liveDraft state 추가, draft_report 이벤트 수신 시 set
+  - ProjectWorkView: 스트림 없을 때 초안 내용 + "팩트 검토 중" 표시
+
+✅ 고도화 #3: 에이전트 소요 시간 표시
+  - 썸네일 스트립: 완료된 에이전트 ✓ → 소요시간 (예: 45s)
+  - 스트림 로그 헤더: 현재 에이전트 live 경과 타이머 (1초 갱신)
+
+✅ 고도화 #4: agent_thinking 시각화
+  - pipeline.py: 플랜/위키/포케/카/팩트 agent_start 직후 thinking 힌트 발송
+  - ProjectWorkView: 스트림 비어있을 때 💭 힌트 텍스트 표시
+
 [ ] Phase 5: LangGraph + Anthropic API 전환 (추후)
+[ ] 다음 고도화 아이디어: 타임라인 뷰, 실시간 로그 검색/필터, expression 세트 확대
 ```
 
 ### API 계약 (Frontend ↔ Backend)
