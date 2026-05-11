@@ -155,7 +155,25 @@ cd web && npm run dev   # → http://localhost:3000
   - ProjectWorkView: 스트림 비어있을 때 💭 힌트 텍스트 표시
 
 [ ] Phase 5: LangGraph + Anthropic API 전환 (추후)
-[ ] 다음 고도화 아이디어: 타임라인 뷰, 실시간 로그 검색/필터, expression 세트 확대
+
+[ ] 고도화 로드맵 (우선순위 순)
+  #1 pgvector 위키 벡터 검색
+      - DB에 wiki 임베딩 컬럼 추가 (pgvector)
+      - 포케/카 실행 전 의미론적으로 유사한 과거 위키 자동 주입
+      - 위키가 쌓일수록 리서치 퀄리티가 올라가는 구조 (서비스 핵심 가치)
+  #2 에이전트 expression 시스템
+      - expression prop 이미 AgentImage에 존재, 이미지 파일만 추가하면 됨
+      - 팩트 부장 수정 요청 시 critical, 포케 검색 결과 多 시 surprised 등
+      - pipeline.py → agent_expression 이벤트 발송, page.tsx에서 수신
+  #3 병렬 실행 확대
+      - 카 분석 완료 후 writer(오버/버즈/픽셀)와 루트 준비를 overlap
+      - asyncio.gather 패턴 확대, 전체 소요시간 20~30% 단축 예상
+  #4 리포트 버전 관리
+      - 팩트 피드백 루프 각 회차(초안→수정1→수정2→최종) DB 저장
+      - 프론트에서 diff 뷰로 "팩트 부장이 뭘 고쳤는지" 확인 가능
+  #5 타임라인 간트 뷰
+      - agentDurations 데이터 이미 있음, SVG 간트 차트로 시각화
+      - 파이프라인 병목 구간 한눈에 파악
 ```
 
 ### API 계약 (Frontend ↔ Backend)
