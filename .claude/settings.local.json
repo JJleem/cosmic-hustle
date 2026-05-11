@@ -63,7 +63,12 @@
       "Bash(lsof -ti:3000)",
       "Bash(sed -n '185,220p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/AgentChat.tsx)",
       "Bash(sed -n '200,215p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/dashboard/ReportBoard.tsx)",
-      "Bash(sed -n '290,340p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/AgentWorkspace.tsx)"
+      "Bash(sed -n '290,340p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/AgentWorkspace.tsx)",
+      "Bash(sed -n '200,240p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/page.tsx)",
+      "Bash(sed -n '395,420p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/page.tsx)",
+      "Bash(sed -n '620,640p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/page.tsx)",
+      "Bash(sed -n '1,30p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/ProjectWorkView.tsx)",
+      "Bash(sed -n '90,170p' /Users/molt/Desktop/molt_repository/cosmic-hustle/web/components/ProjectWorkView.tsx)"
     ]
   }
 }

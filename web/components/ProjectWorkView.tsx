@@ -14,6 +14,7 @@ type Props = {
   lastMessage: Record<string, string>;
   streamLog: Record<string, string>;
   chatFeed: ChatEntry[];
+  liveDraft: { agentId: string; topic: string; content: string } | null;
   onStop: () => void;
 };
 
@@ -25,6 +26,7 @@ export default function ProjectWorkView({
   lastMessage,
   streamLog,
   chatFeed,
+  liveDraft,
   onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
@@ -341,6 +343,25 @@ export default function ProjectWorkView({
           >
             {displayedLog ? (
               <pre className="whitespace-pre-wrap break-words">{displayedLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
+            ) : liveDraft ? (
+              <div className="flex flex-col gap-3">
+                {/* 초안 헤더 */}
+                <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: "#1a2535" }}>
+                  <span className="text-[10px] tracking-widest uppercase font-bold" style={{ color: "#a78bfa" }}>
+                    📝 초안
+                  </span>
+                  <span className="text-[10px] text-slate-600">— {AGENT_MAP[liveDraft.agentId]?.name ?? liveDraft.agentId} 작성 · 팩트 검토 중</span>
+                  <div className="ml-auto flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="w-1 h-1 rounded-full animate-bounce" style={{ background: "#a78bfa", opacity: 0.6, animationDelay: `${i * 150}ms` }} />
+                    ))}
+                  </div>
+                </div>
+                {/* 초안 내용 */}
+                <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed" style={{ color: "#6b7d96", fontFamily: "inherit" }}>
+                  {liveDraft.content}
+                </pre>
+              </div>
             ) : (
               <div className="flex flex-col gap-3 mt-4">
                 <div className="flex items-center gap-2">
