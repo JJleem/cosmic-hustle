@@ -59,7 +59,8 @@
       "Bash(.venv/bin/alembic upgrade *)",
       "Bash(.venv/bin/python run.py)",
       "Bash(.venv/bin/python *)",
-      "Bash(pkill -f \"run.py\")"
+      "Bash(pkill -f \"run.py\")",
+      "Bash(lsof -ti:3000)"
     ]
   }
 }

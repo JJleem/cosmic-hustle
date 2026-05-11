@@ -229,28 +229,18 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-[60] flex flex-col overflow-hidden"
+      style={{ background: "#0b0f1e" }}
     >
-      <div
-        className="w-full flex flex-col rounded-3xl overflow-hidden"
-        style={{
-          background: "#0b0f1e",
-          border: "1px solid #1e2a40",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.8)",
-          maxWidth: 860,
-          maxHeight: "92vh",
-        }}
-      >
         {/* 헤더 */}
-        <div className="shrink-0 flex items-center justify-between px-7 pt-6 pb-4 border-b border-slate-800/60">
+        <div className="shrink-0 flex items-center justify-between px-10 pt-7 pb-5 border-b border-slate-800/60">
           <div className="flex items-center gap-2">
             <span className="text-base">🪐</span>
             <h2 className="text-sm font-bold tracking-[0.2em] text-slate-100">새 프로젝트</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-600 hover:text-slate-300 text-xs transition-colors w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-800"
+            className="text-slate-600 hover:text-slate-300 text-xs transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-800"
           >
             ✕
           </button>
@@ -260,7 +250,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
         <div className="flex-1 flex overflow-hidden min-h-0">
 
           {/* 왼쪽: 설정 */}
-          <div className="w-[380px] shrink-0 flex flex-col overflow-y-auto px-7 py-5 gap-5 border-r border-slate-800/60" style={{ scrollbarWidth: "none" }}>
+          <div className="flex-1 flex flex-col overflow-y-auto px-10 py-6 gap-5 border-r border-slate-800/60" style={{ scrollbarWidth: "none" }}>
 
             {/* 주제 */}
             <div>
@@ -348,7 +338,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
             {showReportSettings && (
               <div>
                 <label className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold block mb-2">리포트 스타일</label>
-                <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {STYLE_PRESETS.map((preset) => {
                     const selected = selectedPresetId === preset.id;
                     return (
@@ -363,37 +353,30 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
                           boxShadow: selected ? `0 0 12px ${preset.color}15` : "none",
                         }}
                       >
-                        {/* 헤더 */}
-                        <div className="flex items-baseline gap-2 mb-2">
-                          <span className="text-[11px] font-bold" style={{ color: selected ? preset.color : "#64748b" }}>
+                        <div className="flex items-baseline gap-1.5 mb-2">
+                          <span className="text-[10px] font-bold" style={{ color: selected ? preset.color : "#64748b" }}>
                             {preset.name}
                           </span>
-                          {selected && (
-                            <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold"
-                              style={{ background: `${preset.color}20`, color: preset.color }}>
-                              선택됨
-                            </span>
-                          )}
                           <span className="text-[8px] text-slate-600 ml-auto">{preset.desc}</span>
                         </div>
-                        {/* 미리보기 박스 */}
                         <div
-                          className="rounded-xl px-3 py-2.5 font-mono"
+                          className="rounded-lg px-2 py-2 font-mono"
                           style={{
                             background: "#080c18",
                             border: `1px solid ${selected ? preset.color + "20" : "#141c2e"}`,
                           }}
                         >
                           {preset.preview.map((line, i) => (
-                            <div key={i} className="leading-relaxed"
+                            <div key={i}
                               style={{
-                                fontSize: "9px",
+                                fontSize: "8px",
+                                lineHeight: "1.5",
                                 color: line.startsWith("##") ? preset.color
                                   : line.startsWith("**") ? "#e2e8f0"
                                   : line.startsWith("→") ? "#94a3b8"
                                   : line === "" ? undefined : "#64748b",
                                 fontWeight: line.startsWith("##") || line.startsWith("**") ? 700 : 400,
-                                height: line === "" ? "0.4em" : undefined,
+                                height: line === "" ? "0.3em" : undefined,
                               }}
                             >
                               {line}
@@ -433,8 +416,8 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
           </div>
 
           {/* 오른쪽: 파이프라인 */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-slate-800/40">
+          <div className="w-[360px] shrink-0 flex flex-col overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between px-10 py-4 border-b border-slate-800/40">
               <span className="text-[10px] text-slate-500 tracking-[0.2em] uppercase font-bold">파이프라인</span>
               <span className="text-[9px] text-slate-700">{enabledCount}명 참여</span>
             </div>
@@ -540,7 +523,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
         </div>
 
         {/* 푸터 */}
-        <div className="shrink-0 flex items-center justify-end gap-3 px-7 py-4 border-t border-slate-800/60">
+        <div className="shrink-0 flex items-center justify-end gap-3 px-10 py-5 border-t border-slate-800/60">
           <button
             onClick={onClose}
             className="text-xs text-slate-500 hover:text-slate-300 px-4 py-2 rounded-full transition-colors"
@@ -566,7 +549,6 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
             시작 →
           </button>
         </div>
-      </div>
     </div>
   );
 }
