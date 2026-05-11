@@ -25,6 +25,20 @@
 | 완료 | 슉 내밀고 다시 무표정 |
 | 과부하 | 볼따구 터질듯, 눈 살짝 돌아감 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 볼따구 기본 크기 |
+| `talk_1.png` | 살짝 벌림, 볼따구 살짝 움직임 |
+| `talk_2.png` | 크게 벌림, 볼따구 출렁 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_nap.png` | 볼따구 홀쭉, 눈 반쯤 감고 졸음 |
+| `daily_search.png` | 여기저기 두리번, 뭔가 찾는 중 |
+| `err.png` | 볼따구 터질듯, 눈 살짝 돌아감 (과부하) |
+
 ---
 
 ## 2. 카 과장 — 분석가
@@ -49,6 +63,21 @@
 | 유레카 | 눈 번쩍 커짐, 벌떡 일어나는 느낌 |
 | 더 봐야해 | 눈이 더 커지며 화면에 바짝 붙음 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 안경 너머로 화면 응시 |
+| `talk_1.png` | 살짝 벌림, 분석 결과 전달 중 |
+| `talk_2.png` | 크게 벌림, "찾았다!" 직전 흥분 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_coffee.png` | 커피 홀짝이며 멍하니 천장 보기 |
+| `eureka.png` | 눈 번쩍 커짐, 벌떡 일어나는 느낌 ("찾았다!") |
+| `daily_moreneed.png` | 화면 바짝 붙음, "데이터 하나만 더" |
+| `err.png` | 데이터 오류 발견, 안경 치켜올리며 눈 가늘어짐 |
+
 ---
 
 ## 3. 오버 사원 — 작가
@@ -70,6 +99,19 @@
 | 작업중 | 눈물 글썽, 깃털펜 빠르게 움직임 |
 | 완료 | 자기 글에 감동해서 눈물 한 방울 |
 | 비판받음 | 입술 삐죽, 상처받은 표정 |
+
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 눈 살짝 촉촉 |
+| `talk_1.png` | 살짝 벌림, 깃털펜 들고 낭독 중 |
+| `talk_2.png` | 크게 벌림, 감동적인 대목 읽는 중 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_selfmoved.png` | 자기 글 읽다가 혼자 울컥, 눈물 맺힘 |
+| `daily_sad.png` | 팩트한테 퇴짜맞고 입술 삐죽, 상처받은 표정 |
 
 ---
 
@@ -93,6 +135,19 @@
 | 통과 | 그냥 무표정 — 이게 칭찬 |
 | 당황 | 빨간펜 손이 0.5초 멈칫 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 무표정 (기본값) |
+| `talk_1.png` | 살짝 벌림, 지적 사항 전달 중 |
+| `talk_2.png` | 크게 벌림, "측정 불가. 삭제" |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_spin.png` | 무표정으로 빨간펜 손가락 돌리기 (유일한 취미) |
+| `daily_pause.png` | 빨간펜 손 0.5초 멈칫, "아마도" 감지 순간 |
+
 ---
 
 ## 5. 위키 대리 — 사서
@@ -115,6 +170,20 @@
 | 발견 | 작게 고개 끄덕, 은은한 미소 |
 | 없는 정보 | 눈썹 살짝 올라감, 정중하지만 단호함 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 조용한 미소 |
+| `talk_1.png` | 살짝 벌림, 자료 건네며 설명 중 |
+| `talk_2.png` | 크게 벌림, 중요한 출처 언급 중 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_reading.png` | 책 들고 조용히 읽는 중, 은은한 미소 |
+| `daily_notfound.png` | 눈썹 살짝 올라감, 정중하지만 단호 (출처 없음 거절) |
+| `err.png` | 정보 없음, 차분하게 首 젓는 표정 |
+
 ---
 
 ## 6. 핑 인턴 — 아이디어 수집가
@@ -136,6 +205,21 @@
 | 아이디어 | 안테나 반짝, 눈 최대로 커짐, 볼 빨개짐 |
 | 흥분 | 눈 최대, 볼 빨개짐, 안테나 빠르게 깜빡 |
 | 집중못함 | 눈이 두리번두리번, 안테나 축 처짐 |
+
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 안테나 은은히 빛남 |
+| `talk_1.png` | 살짝 벌림, 아이디어 설명 중 |
+| `talk_2.png` | 크게 벌림, 흥분해서 떠드는 중 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `idea.png` | 안테나 반짝, 눈 최대로 커짐, 볼 빨개짐 |
+| `daily_bored.png` | 의자에서 발 흔들흔들, 딴 생각 중 |
+| `daily_distracted.png` | 안테나 축 처짐, 눈 흐릿, 집중 못함 |
+| `err.png` | 아이디어 과부하, 안테나 과열, 뇌 멈춤 |
 
 ---
 
@@ -161,6 +245,19 @@
 | 완료 | 고개 끄덕, 짧은 만족 표정 |
 | 모호함 감지 | 눈썹 치켜올림, 포스트잇 꺼내 들음 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 포스트잇 정리 중 |
+| `talk_1.png` | 살짝 벌림, 요구사항 정리하며 설명 중 |
+| `talk_2.png` | 크게 벌림, 빠르게 브리핑 중 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_wall.png` | 포스트잇 벽 정리하며 혼자 흡족한 표정 |
+| `ambiguous.png` | 눈썹 치켜올림, 포스트잇 꺼내 들음 ("이게 무슨 말이에요?") |
+
 ---
 
 ## 8. 런 사원 — 개발자
@@ -182,6 +279,19 @@
 | 작업중 | 손가락 빠르게 움직임, 눈 화면 고정 |
 | 완료 | "이미 짰어요" 한마디, 무표정 |
 | 버그 | 눈썹 살짝 찡그림, 스택오버플로 검색 |
+
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 헤드폰 끼고 화면 응시 |
+| `talk_1.png` | 살짝 벌림, "이미 짰어요" 전달 중 |
+| `talk_2.png` | 크게 벌림, 코드 설명 중 (드문 상황) |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_groove.png` | 헤드폰 끼고 눈 감고 코딩 리듬 탐 |
+| `err.png` | 눈썹 살짝 찡그림, 버그 발견 (스택오버플로 검색 중) |
 
 ---
 
@@ -205,6 +315,19 @@
 | 완료 | 살짝 고개 기울여 감상, 은은한 만족감 |
 | 여백 문제 발견 | 눈 충혈, 스타일러스 멈춤 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 눈에 픽셀 격자 은은히 빛남 |
+| `talk_1.png` | 살짝 벌림, 디자인 설명 중 |
+| `talk_2.png` | 크게 벌림, 폰트 집착 토로 중 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_reference.png` | 레퍼런스 이미지 보며 눈 반짝반짝 |
+| `daily_angry.png` | 여백 문제 발견, 눈 충혈, 스타일러스 딱 멈춤 |
+
 ---
 
 ## 10. 버즈 대리 — 마케터
@@ -227,6 +350,19 @@
 | 완료 | "바이럴 각이다!" 표정, 엄지 업 |
 | 트렌드 발견 | 눈 최대로 커짐, 확성기 들어올림 |
 
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 폰 스크롤 중 |
+| `talk_1.png` | 살짝 벌림, 마케팅 피치 중 |
+| `talk_2.png` | 크게 벌림, "바이럴 각이다!" |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_scroll.png` | 폰 2개 동시에 탭탭, 트렌드 서핑 중 |
+| `trend.png` | 눈 최대로 커짐, 확성기 번쩍 들어올림 |
+
 ---
 
 ## 11. 루트 사원 — DevOps
@@ -248,6 +384,19 @@
 | 작업중 | 팔목 화면 빠르게 스크롤, 집중 |
 | 완료 | "자동화 완료" 한마디, 작은 고개 끄덕 |
 | 수동 배포 발견 | 눈 씰룩, 터미널 커서 빠르게 깜빡 |
+
+### Talk 프레임
+| 파일명 | 설명 |
+|--------|------|
+| `talk_0.png` | 입 다문, 팔목 대시보드 응시 |
+| `talk_1.png` | 살짝 벌림, 배포 계획 설명 중 |
+| `talk_2.png` | 크게 벌림, 파이프라인 강의 중 |
+
+### 일상 표정
+| 파일명 | 상황 |
+|--------|------|
+| `daily_monitor.png` | 대시보드 그래프 새벽에 혼자 흡족하게 바라보기 |
+| `horror.png` | 수동 배포 목격, 눈 씰룩, 터미널 커서 빠르게 깜빡 |
 
 ---
 
@@ -371,6 +520,267 @@ Change only the expression and pose:
 
 ---
 
+### Talk 프레임 Prompt 구조
+
+talk_0 / talk_1 / talk_2 를 **같은 프롬프트 세션에서 variation으로** 뽑아 일관성 유지.
+
+```
+This is the reference character. Keep everything identical —
+same [피부색 + 핵심 외형 특징 나열],
+same upper body portrait framing on pure white background,
+same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere on skin or image.
+
+Generate three mouth states for talking animation frames:
+talk_0: mouth gently closed, relaxed neutral expression, at rest between words
+talk_1: mouth slightly open, natural mid-speech shape, soft and relaxed jaw
+talk_2: mouth open wider, mid-sentence emphasis, energetic but not shouting
+Keep all other facial features and expression identical across all three frames.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+> **팁:** Midjourney에서 생성 후 V(variation) 버튼으로 같은 시드 기반 3장 추출 시 일관성 가장 높음
+
+> **사용법:** Midjourney 채팅창에 `default.png` 를 먼저 드래그해서 업로드 → 이미지 URL 복사 → 아래 프롬프트 맨 앞에 붙여넣기 후 전송
+
+---
+
+### Talk 프레임 캐릭터별 Prompts
+
+#### 포케 대리
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same mint green skin, same chubby round face with oversized puffed cheeks,
+same short stubby arms, same small antennae on top of head,
+same pockets visible on the body, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth gently closed, cheeks naturally puffed, relaxed between words
+talk_1: mouth slightly open, cheeks shift slightly as jaw drops, mid-speech
+talk_2: mouth open wider, cheeks puff out more with the effort of talking, energetic
+Keep everything else — eyes, pose, cheeks base size, antennae — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 카 과장
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same light purple skin, same stacked layered glasses, same heavy dark circles under eyes,
+same two small bumps on forehead, same large eyes relative to face,
+same coffee cup in hand, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth gently closed, tired but attentive, at rest between words
+talk_1: mouth slightly open, mid-explanation, glasses catching the light as she speaks
+talk_2: mouth open wider, leaning slightly forward, data point about to land
+Keep everything else — glasses, dark circles, forehead bumps, pose — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 오버 사원
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same peachy skin, same beret on head, same fluffy scarf around neck,
+same petal-shaped ear organs instead of normal ears, same feather pen in hand,
+same slightly glistening emotional eyes, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth gently closed, eyes still soft and moist, held breath before speaking
+talk_1: mouth slightly open, mid-sentence, deeply moved by own words
+talk_2: mouth open wider, dramatically reciting, feather pen held up for emphasis
+Keep everything else — beret, scarf, petal ears, feather pen, moist eyes — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 팩트 부장
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same grey-white skin, same sharp angular face, same red glowing eyes,
+same red pen tucked behind ear, same flat expressionless default face,
+same desaturated monochrome overall tone, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth flat closed line, completely neutral, no emotion
+talk_1: mouth opens minimally, jaw drops just enough to speak, still no expression
+talk_2: mouth opened a little more, delivering a verdict, expression remains blank
+Keep everything else — red eyes, red pen, angular face, flat affect — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 위키 대리
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same soft lavender skin, same neatly tied hair, same round circular glasses,
+same small leaf-shaped ear organs instead of normal ears, same cardigan,
+same quiet gentle smile as base expression, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth gently closed, soft restful smile, waiting quietly
+talk_1: mouth slightly open, speaking softly and precisely, calm delivery
+talk_2: mouth open a little more, citing an important source, still measured and calm
+Keep everything else — lavender skin, leaf ears, round glasses, cardigan — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 핑 인턴
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same lime green skin, same chubby round body, same big sparkling eyes,
+same small antenna on top of head, same oversized t-shirt,
+same naturally open grinning mouth as base expression, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth closed but corners pulled into a happy grin, buzzing with energy
+talk_1: mouth slightly open, words tumbling out fast, eyes bright
+talk_2: mouth wide open mid-excitement, antenna glowing slightly, idea spilling out
+Keep everything else — lime green skin, antenna, big eyes, oversized shirt — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 플랜 차장
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same warm yellow skin, same neat professional outfit, same small barcode marking on forehead,
+same stack of post-it notes in hand, same quick alert eyes,
+same brisk efficient posture, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth closed, jaw set, ready to brief, eyes already scanning
+talk_1: mouth slightly open, rapid-fire delivery, post-it notes gesturing
+talk_2: mouth open wider, presenting the full plan, confident and fast
+Keep everything else — yellow skin, barcode mark, post-its, alert eyes — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 런 사원
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same cyan-tinted skin, same hoodie, same headphones around neck or on ears,
+same faint dark circles under eyes, same understated low-energy default expression,
+same laptop nearby, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth closed, barely about to speak, deadpan and relaxed
+talk_1: mouth slightly open, "already done" delivery, minimal jaw movement
+talk_2: mouth open a little more, reluctantly explaining the code, still low energy
+Keep everything else — cyan skin, hoodie, headphones, dark circles — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 픽셀 사원
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same peachy-warm skin, same eyes that faintly glow with a pixel-grid pattern,
+same color palette pin in hair, same stylus in hand, same paint-smudged apron,
+same focused designer expression, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth gently closed, eyes scanning, stylus poised, composing thoughts
+talk_1: mouth slightly open, explaining a design choice, head tilted slightly
+talk_2: mouth open wider, passionately defending a font decision, stylus raised
+Keep everything else — pixel-grid eyes, palette pin, stylus, apron — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 버즈 대리
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same vivid warm orange skin, same fluffy pompom twin bunches hair,
+same TWO spring-coil antennae with glowing star tips, same FOUR eyes (large upper pair + smaller lower pair),
+same tiny star-shaped bioluminescent cheek patches, same cropped jacket,
+same phone in hand, same upper body portrait framing,
+same pure white background, same warm 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth across three frames:
+talk_0: mouth closed, all four eyes bright, ready to pitch
+talk_1: mouth slightly open, mid-sentence, one hand gesturing with the phone
+talk_2: mouth wide open, "바이럴 각이다!" moment, antennae perked forward
+Keep everything else — orange skin, four eyes, antennae, hair puffs — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald
+```
+
+---
+
+#### 루트 사원 ※ 특수 — 입이 바이저 디스플레이에 표시됨
+
+```
+[default.png URL]
+This is the reference character. Keep everything identical —
+same rounded astronaut helmet with dark visor, same emerald green accent stripe on helmet,
+same terminal-cursor block eyes displayed ON the visor surface (not inside),
+same deep navy space suit with emerald green panel accents,
+same left wrist monitoring display panel, same upper body portrait framing,
+same pure white background, same cool teal-tinted 3D Pixar render style.
+Absolutely no text, symbols, glyphs, or runes anywhere.
+
+Change only the mouth display on the visor across three frames:
+talk_0: mouth shown as a short flat horizontal line on the visor display, calm and idle
+talk_1: mouth display changes to a small open arc shape, mid-transmission
+talk_2: mouth display opens to a wider arc, active broadcast, cursor eyes steady
+All expressions are pixel/display-style rendered ON the visor surface — not a real mouth.
+Keep everything else — helmet, suit, wrist panel, cursor eyes — completely identical.
+--ar 1:1 --v 6 --no text symbols glyphs runes writing on skin bald full-body legs feet
+```
+
+---
+
 ### 완성된 Base Prompts
 
 #### 버즈 대리
@@ -475,8 +885,8 @@ no glyphs, runes, or writing on helmet or suit
 
 ### 미완성 Base Prompts (생성 필요)
 
-| 캐릭터 | 상태 | 비고 |
-|--------|------|------|
+| 캐릭터 | Base 상태 | 비고 |
+|--------|-----------|------|
 | 플랜 차장 | 재생성 필요 | 노란빛 피부, 안경, 포스트잇, 바코드 이마 문양 |
 | 런 사원 | 재생성 필요 | 시안빛 피부, 후드집업, 헤드폰, 다크서클 |
 | 픽셀 사원 | 재생성 필요 | 살구빛 피부, 여성, 색상 팔레트 핀, 스타일러스 |
@@ -486,3 +896,19 @@ no glyphs, runes, or writing on helmet or suit
 | 팩트 부장 | 미생성 | 회백색 피부, 빨간 눈, 무표정, 빨간펜 |
 | 위키 대리 | 미생성 | 라벤더 피부, 여성, 동그란 안경, 잎사귀 귀 |
 | 핑 인턴 | 미생성 | 라임 그린 피부, 안테나, 오버사이즈 티셔츠 |
+
+### 전체 이미지 체크리스트
+
+| 캐릭터 | default | idle | working | done | err | talk_0 | talk_1 | talk_2 | blink_half | blink | daily |
+|--------|:-------:|:----:|:-------:|:----:|:---:|:------:|:------:|:------:|:----------:|:-----:|:-----:|
+| 포케 | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 카 | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 오버 | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 팩트 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 위키 | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 핑 | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 플랜 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 런 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 픽셀 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 버즈 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 루트 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
