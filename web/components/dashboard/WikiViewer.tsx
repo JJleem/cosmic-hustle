@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, FileText, ChevronRight, ArrowLeft, Search, Copy, Check, Tag, Loader } from "lucide-react";
+import { RefreshCw, FileText, ChevronRight, ArrowLeft, Search, Copy, Check, Tag, Loader, AlertCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { WikiFile } from "@/app/api/wiki/route";
 import type { SearchMatch } from "@/app/api/wiki/search/route";
@@ -30,6 +30,7 @@ function highlight(text: string, query: string) {
 export default function WikiViewer() {
   const [files, setFiles] = useState<WikiFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [selected, setSelected] = useState<WikiFile | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
@@ -44,11 +45,13 @@ export default function WikiViewer() {
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
+    setFetchError(false);
     try {
       const res = await fetch("/api/wiki");
+      if (!res.ok) throw new Error();
       const data = await res.json() as { files: WikiFile[] };
       setFiles(data.files ?? []);
-    } catch { setFiles([]); }
+    } catch { setFetchError(true); }
     finally { setLoading(false); }
   }, []);
 
@@ -202,6 +205,14 @@ export default function WikiViewer() {
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+        </div>
+      ) : fetchError ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <AlertCircle size={16} className="text-red-400" />
+          <p className="text-xs text-slate-500">위키를 불러오지 못했어요</p>
+          <button onClick={fetchFiles} className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-full transition-colors" style={{ background: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <RefreshCw size={9} /> 다시 시도
+          </button>
         </div>
       ) : showFullResults ? (
         <div className="flex-1 overflow-y-auto space-y-1.5 scrollbar-hide">

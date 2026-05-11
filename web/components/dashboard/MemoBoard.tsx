@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, X, AlertCircle } from "lucide-react";
+import { Plus, X, AlertCircle, RefreshCw } from "lucide-react";
 
 type Memo = { id: string; text: string; createdAt: number };
 
@@ -9,15 +9,19 @@ export default function MemoBoard() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [input, setInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadMemos = () => {
+    setLoadError(false);
     fetch("/api/memos")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then((rows: Memo[]) => setMemos(rows))
-      .catch(() => {});
-  }, []);
+      .catch(() => setLoadError(true));
+  };
+
+  useEffect(() => { loadMemos(); }, []);
 
   const showError = (setter: (v: string | null) => void, msg: string) => {
     setter(msg);
@@ -94,7 +98,15 @@ export default function MemoBoard() {
         </div>
       )}
 
-      {memos.length === 0 ? (
+      {loadError ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <AlertCircle size={16} className="text-red-400" />
+          <p className="text-xs text-slate-500">메모를 불러오지 못했어요</p>
+          <button onClick={loadMemos} className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-full transition-colors" style={{ background: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <RefreshCw size={9} /> 다시 시도
+          </button>
+        </div>
+      ) : memos.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-slate-400 text-xs">메모 없음</p>
         </div>

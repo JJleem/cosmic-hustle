@@ -21,7 +21,7 @@
 | Orchestration | 직접 구현한 StateGraph (asyncio) | 추후 LangGraph로 교체 예정 |
 | AI | Claude Code SDK (`@anthropic-ai/claude-code`) | Claude Code 구독 토큰 사용 |
 | DB | PostgreSQL 16 + pgvector | 세션·리포트·위키 (벡터 검색 포함) |
-| Search | Tavily API | 포케 웹서칭 (기존 claude web search 대체) |
+| Search | Claude WebSearch 툴 | 포케가 직접 WebSearch 호출 (Tavily 미사용) |
 | Hosting | AWS Lightsail (백엔드 + DB) | 프론트는 Vercel 유지 |
 
 ### 디렉토리 구조 (V2.0)
@@ -36,8 +36,8 @@ cosmic-hustle/
 │   ├── main.py               # FastAPI 앱 진입점 ✅
 │   ├── run.py                # uvicorn 실행 진입점 ✅
 │   ├── requirements.txt      # 의존성 ✅
-│   ├── search.py             # Tavily API 웹 검색 헬퍼 ✅
-│   ├── .env                  # DATABASE_URL + TAVILY_API_KEY (gitignore됨, 직접 생성)
+│   ├── search.py             # (미사용) Tavily 웹 검색 헬퍼 — 포케가 WebSearch 직접 사용으로 대체
+│   ├── .env                  # DATABASE_URL (gitignore됨, 직접 생성)
 │   ├── .env.example          # 키 양식 참고용 ✅
 │   ├── alembic.ini           # Alembic 설정 ✅
 │   ├── alembic/              # 스키마 마이그레이션 ✅
@@ -83,10 +83,11 @@ Phase 4 ✅  Next.js → FastAPI 프록시 연결
   - web/app/api/ 모든 라우트가 FastAPI(localhost:8000)로 프록시
   - memos 라우터 추가 (FastAPI + Next.js 양쪽)
 
-Phase 4.5 ✅  Tavily API로 포케 웹 검색 교체
-  - backend/search.py: Tavily API 직접 HTTP 호출, 3쿼리 병렬 + URL 중복 제거
-  - 포케 프롬프트에 검색 결과 주입 방식 → claude WebSearch 도구 의존성 제거
-  - pocke_recheck도 동일 방식 적용
+Phase 4.5 ✅  포케 WebSearch 직접 사용으로 전환 (Tavily 제거)
+  - Tavily 의존성 완전 제거 (TAVILY_API_KEY 불필요)
+  - 포케: no_tools → WebSearch+WebFetch 허용, max_turns 1→5
+  - pocke_recheck: Tavily 수집 → WebSearch 직접 검색 (max_turns=3)
+  - 모든 pocke_* 프롬프트에서 {search_results} 주입 제거
 
 Phase 5 ❌  LangGraph + Anthropic API 전환 (향후)
   - pipeline.py → LangGraph StateGraph로 교체
@@ -97,33 +98,46 @@ Phase 5 ❌  LangGraph + Anthropic API 전환 (향후)
 ### 새 컴퓨터에서 시작하는 법
 
 ```bash
-# 1. 의존성 설치
+# 1. PostgreSQL 설치 및 실행 (macOS)
+brew install postgresql@16
+brew services start postgresql@16
+export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+
+# 2. DB/유저 생성 (최초 1회)
+psql postgres -c "CREATE USER cosmic WITH PASSWORD 'cosmic1234';"
+psql postgres -c "CREATE DATABASE cosmic_hustle OWNER cosmic;"
+
+# 3. Python 의존성 설치 (venv)
 cd backend
-pip install -r requirements.txt
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 
-# 2. .env 파일 생성 (backend/.env.example 참고)
-#    DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle
-#    TAVILY_API_KEY=tvly-xxxx   ← https://tavily.com 에서 발급 (무료 1000회/월)
+# 4. .env 파일 생성
+echo "DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle" > .env
 
-# 3. PostgreSQL 준비 (최초 1회)
-# psql -c "CREATE USER cosmic WITH PASSWORD 'cosmic1234';"
-# psql -c "CREATE DATABASE cosmic_hustle OWNER cosmic;"
-# alembic upgrade head
+# 5. DB 스키마 생성
+.venv/bin/alembic upgrade head
 
-# 4. 백엔드 서버 실행
-python run.py   # → http://localhost:8000
+# 6. 백엔드 서버 실행
+.venv/bin/python run.py   # → http://localhost:8000
 
-# 5. 프론트엔드 (별도 터미널)
-# web/.env.local 에 BACKEND_URL=http://localhost:8000 있어야 함
+# 7. 기존 SQLite 데이터 이전 (선택)
+.venv/bin/python migrate_sqlite.py
+
+# 8. 프론트엔드 (별도 터미널)
 cd web && npm run dev   # → http://localhost:3000
+# web/.env.local 에 BACKEND_URL=http://localhost:8000 있어야 함
 ```
 
-### 다음 작업 TODO
+### 현재 상태 (2026-05-11)
 
 ```
-[ ] Tavily API 키 발급 후 backend/.env에 TAVILY_API_KEY 입력하고 포케 동작 검증
-[ ] PostgreSQL 로컬 세팅 + alembic upgrade head 실행
-[ ] 엔드투엔드 파이프라인 테스트 (리포트 1개 실행해서 전 단계 정상 확인)
+✅ 로컬 환경 완전 세팅 (macOS, PostgreSQL 16, Python 3.12 venv)
+✅ 엔드투엔드 파이프라인 동작 확인
+✅ Tavily 제거 — 포케 WebSearch 직접 사용
+✅ 에러 복구 강화 — WikiViewer/MemoBoard 로드 실패 시 에러+재시도 버튼
+✅ 프로젝트 설정 화면 모달 → 전체 페이지 전환
+
 [ ] Phase 5: LangGraph + Anthropic API 전환 (추후)
 ```
 
@@ -181,7 +195,7 @@ POST   /api/wiki/ingest                   # 위키 저장
 CEO 입력
   → 플랜(요구사항·태스크타입 결정) → [CEO 확인 요청]
   → 위키(과거 지식)
-  → 포케(Tavily 웹 검색 → 팩트 추출) → [CEO 체크인]
+  → 포케(WebSearch 직접 검색 → 팩트 추출, max_turns=5) → [CEO 체크인]
   → 카(분석)
   → run | over | pixel | buzz (태스크타입에 따라 1명 담당)
   → 팩트(검토) → 피드백 루프 (최대 3회)
@@ -207,7 +221,7 @@ CEO 입력
 ## 토큰 최적화 원칙
 
 - 에이전트 간 전체 컨텍스트 전달 X, 구조화된 JSON 핸드오프만
-- maxTurns 엄격하게 제한 (팩트 부장 1턴, 포케 1턴 등)
+- maxTurns 제한 (팩트 부장 1턴, 포케 5턴, 포케 재조사 3턴)
 - 병렬 실행 가능한 구간 묶기 (핑 + 위키 동시)
 
 ## 세션 지속성 구조
