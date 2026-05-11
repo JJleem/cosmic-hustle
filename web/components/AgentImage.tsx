@@ -22,6 +22,7 @@ function getImageSrc(defaultSrc: string, status: AgentStatus, expression: string
 
 export default function AgentImage({ defaultSrc, size, status, expression = null }: Props) {
   const [blinkFrame, setBlinkFrame] = useState<string | null>(null);
+  const [talkFrame, setTalkFrame]   = useState<string | null>(null);
 
   const initial = getImageSrc(defaultSrc, status, expression);
   const [bottom, setBottom] = useState(initial);
@@ -57,8 +58,6 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
   };
 
   // 눈 깜빡임: idle 상태에서만, 2~5초마다 한 번
-  // default → blink_half(80ms) → blink(80ms) → blink_half(80ms) → default
-  // 크로스페이드를 거치지 않는 별도 오버레이로 처리
   useEffect(() => {
     if (status !== "idle" || expression) { setBlinkFrame(null); return; }
 
@@ -76,6 +75,27 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
     scheduleBlink();
     return () => clearTimeout(nextBlink);
   }, [status, expression]);
+
+  // 말하기 애니메이션: active 상태에서 talk_0→1→2→1→0 싸이클
+  useEffect(() => {
+    if (status !== "active") { setTalkFrame(null); return; }
+
+    const FRAMES = ["talk_0", "talk_1", "talk_2", "talk_1", "talk_0"];
+    let frameIdx = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    function nextFrame() {
+      setTalkFrame(FRAMES[frameIdx]);
+      frameIdx = (frameIdx + 1) % FRAMES.length;
+      // 마지막 프레임(입 닫힘) 후엔 200~500ms 쉬었다가 다음 사이클
+      const delay = frameIdx === 0 ? 200 + Math.random() * 300 : 110;
+      timer = setTimeout(nextFrame, delay);
+    }
+
+    // 첫 시작 전 약간의 랜덤 딜레이 (자연스럽게)
+    timer = setTimeout(nextFrame, Math.random() * 300);
+    return () => { clearTimeout(timer); setTalkFrame(null); };
+  }, [status]);
 
   useEffect(() => {
     doTransition.current(getImageSrc(defaultSrc, status, expression));
@@ -99,7 +119,11 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
         className="absolute inset-0"
         style={{ ...bg(top), opacity: topVisible ? 1 : 0, transition: "opacity 350ms ease" }}
       />
-      {/* 눈 깜빡임 오버레이 — 크로스페이드 없이 즉시 교체 */}
+      {/* 말하기 오버레이 — 크로스페이드 없이 즉시 교체 */}
+      {talkFrame && (
+        <div className="absolute inset-0" style={bg(`${base}${talkFrame}.png`)} />
+      )}
+      {/* 눈 깜빡임 오버레이 — talk 위에 올라옴 */}
       {blinkFrame && (
         <div className="absolute inset-0" style={bg(`${base}${blinkFrame}.png`)} />
       )}
