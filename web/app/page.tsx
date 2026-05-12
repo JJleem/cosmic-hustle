@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import AgentImage from "@/components/AgentImage";
 import BottomAgentBar from "@/components/BottomAgentBar";
 import AgentFullScreen from "@/components/AgentFullScreen";
 import StarField from "@/components/StarField";
@@ -82,6 +83,21 @@ export default function Home() {
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentDef | null>(null);
   const [researchError, setResearchError] = useState<{ title: string; detail: string } | null>(null);
+  const [errorTyped, setErrorTyped] = useState("");
+
+  // 에러 배너 타이핑 효과
+  useEffect(() => {
+    if (!researchError) { setErrorTyped(""); return; }
+    const full = researchError.detail ? `${researchError.title} — ${researchError.detail}` : researchError.title;
+    setErrorTyped("");
+    let i = 0;
+    const timer = setInterval(() => {
+      i++;
+      setErrorTyped(full.slice(0, i));
+      if (i >= full.length) clearInterval(timer);
+    }, 28);
+    return () => clearInterval(timer);
+  }, [researchError]);
 
   // DB에서 초기 데이터 로드
   useEffect(() => {
@@ -662,15 +678,19 @@ export default function Home() {
 
       {/* 에러 배너 */}
       {researchError && (
-        <div className="shrink-0 px-8 py-2.5 flex items-start gap-3 text-xs animate-fadeIn" style={{ background: "rgba(239,68,68,0.05)", borderBottom: "1px solid rgba(239,68,68,0.18)" }}>
-          <span className="text-red-400 shrink-0 mt-0.5">🚨</span>
-          <div className="flex-1 min-w-0">
-            <span className="text-red-300 font-semibold">{researchError.title}</span>
-            {researchError.detail && (
-              <span className="text-slate-500 ml-2">{researchError.detail}</span>
+        <div className="shrink-0 px-6 py-3 flex items-center gap-3 animate-fadeIn" style={{ background: "rgba(239,68,68,0.06)", borderBottom: "1px solid rgba(239,68,68,0.18)" }}>
+          {/* 루트 아바타 — talk 애니메이션 */}
+          <div className="shrink-0 rounded-full overflow-hidden" style={{ width: 36, height: 36, border: "1.5px solid rgba(239,68,68,0.35)" }}>
+            <AgentImage defaultSrc="/characters/root/default.png" size={36} status="active" />
+          </div>
+          {/* 타이핑 텍스트 */}
+          <div className="flex-1 min-w-0 text-xs">
+            <span className="text-red-300 font-medium">{errorTyped}</span>
+            {errorTyped.length < (researchError.detail ? `${researchError.title} — ${researchError.detail}` : researchError.title).length && (
+              <span className="inline-block w-0.5 h-3 bg-red-400 ml-0.5 animate-pulse align-middle" />
             )}
           </div>
-          <button onClick={() => setResearchError(null)} className="text-slate-600 hover:text-slate-400 transition-colors shrink-0">✕</button>
+          <button onClick={() => setResearchError(null)} className="text-slate-600 hover:text-slate-400 transition-colors shrink-0 text-xs">✕</button>
         </div>
       )}
 
