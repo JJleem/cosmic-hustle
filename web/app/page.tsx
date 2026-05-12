@@ -74,6 +74,7 @@ export default function Home() {
   const [reportDrafts, setReportDrafts] = useState<Record<string, string>>({});
   const [liveDraft, setLiveDraft] = useState<{ agentId: string; topic: string; content: string } | null>(null);
   const [thinkingHint, setThinkingHint] = useState<Record<string, string>>({});
+  const [draftVersions, setDraftVersions] = useState<Array<{ version: number; content: string; prevFeedback: string }>>([]);
   // agentId → 소요 ms (agent_start ts 기록 후 agent_done 에서 계산)
   const agentStartTs = useRef<Record<string, number>>({});
   const [agentDurations, setAgentDurations] = useState<Record<string, number>>({});
@@ -219,6 +220,13 @@ export default function Home() {
         case "draft_report":
           pendingDraftsRef.current[event.agentId as string] = event.content as string;
           setLiveDraft({ agentId: event.agentId as string, topic: event.topic as string, content: event.content as string });
+          break;
+        case "report_version":
+          setDraftVersions((prev) => {
+            const v = event.version as number;
+            const filtered = prev.filter((x) => x.version !== v);
+            return [...filtered, { version: v, content: event.content as string, prevFeedback: (event.prevFeedback as string) ?? "" }].sort((a, b) => a.version - b.version);
+          });
           break;
         case "report": {
           const rId = (event.reportId as string) ?? uid();
@@ -511,6 +519,7 @@ export default function Home() {
     setReportDrafts({});
     setLiveDraft(null);
     setThinkingHint({});
+    setDraftVersions([]);
     pendingDraftsRef.current = {};
     agentStartTs.current = {};
     setAgentDurations({});
@@ -711,6 +720,7 @@ export default function Home() {
           liveDraft={liveDraft}
           agentDurations={agentDurations}
           thinkingHint={thinkingHint}
+          draftVersions={draftVersions}
           onStop={stopResearch}
         />
       )}

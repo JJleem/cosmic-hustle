@@ -7,6 +7,8 @@ from typing import AsyncGenerator
 from .agent_runner import run_agent, parse_json, WIKI_DIR
 from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
 from db.wiki_store import semantic_search, sync_concepts_dir
+from db.connection import SessionLocal
+from db.models import ReportVersion
 
 # ── Global state ───────────────────────────────────────────────────────────
 pending_responses: dict[str, asyncio.Future] = {}
@@ -363,6 +365,7 @@ async def _pipeline_inner(
     draft = ""
     fact_passed = False
     fact_feedback = ""
+    draft_versions: list[tuple[int, str, str]] = []  # (version, content, feedback)
     live_pocke = {
         "sources": list(pocke.get("sources", [])),
         "key_facts": list(pocke.get("key_facts", [])),
@@ -409,6 +412,11 @@ async def _pipeline_inner(
         except Exception:
             draft = f"# {topic}\n\n{ka.get('conclusion', '')}\n\n" + "\n".join(live_pocke["key_facts"])
             emit("agent_done", agentId=writer_agent_id, message="초안 완성. 팩트 부장님께.")
+
+        # 버전 저장 + 이벤트 발송
+        draft_versions.append((attempt, draft, fact_feedback))
+        send({"type": "report_version", "version": attempt, "content": draft,
+              "prevFeedback": fact_feedback})
 
         if attempt == 1:
             draft_lines = [l.strip() for l in draft.splitlines() if l.strip()][:8]
@@ -537,6 +545,24 @@ async def _pipeline_inner(
     # ── 최종 리포트 ────────────────────────────────────────────────────────
     report_id = str(uuid.uuid4())
     emit("report", reportId=report_id, agentId=writer_agent_id, topic=topic, content=draft)
+
+    # 버전 히스토리 DB 저장
+    def _save_versions():
+        db = SessionLocal()
+        try:
+            for v, content, feedback in draft_versions:
+                db.add(ReportVersion(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    version=v,
+                    content=content,
+                    fact_feedback=feedback or None,
+                ))
+            db.commit()
+        finally:
+            db.close()
+
+    await asyncio.get_event_loop().run_in_executor(None, _save_versions)
 
     # ── 6. 핑 + 위키 동시 ────────────────────────────────────────────────
     await asyncio.sleep(0.3)

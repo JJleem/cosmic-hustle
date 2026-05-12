@@ -42,6 +42,17 @@ class Memo(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class ReportVersion(Base):
+    __tablename__ = "report_versions"
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
+    version = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    fact_feedback = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 

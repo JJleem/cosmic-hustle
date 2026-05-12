@@ -6,6 +6,8 @@ import AgentImage from "./AgentImage";
 
 type ChatEntry = { id: string; agentId: string; text: string; at: Date };
 
+type DraftVersion = { version: number; content: string; prevFeedback: string };
+
 type Props = {
   topic: string;
   agentStatus: Record<string, AgentStatus>;
@@ -17,8 +19,17 @@ type Props = {
   liveDraft: { agentId: string; topic: string; content: string } | null;
   agentDurations: Record<string, number>;
   thinkingHint: Record<string, string>;
+  draftVersions: DraftVersion[];
   onStop: () => void;
 };
+
+function lineDiff(oldText: string, newText: string): Array<{ text: string; type: "same" | "added" }> {
+  const oldSet = new Set(oldText.split("\n"));
+  return newText.split("\n").map((line) => ({
+    text: line,
+    type: oldSet.has(line) ? "same" : "added",
+  }));
+}
 
 function fmtMs(ms: number): string {
   if (ms < 60000) return `${Math.round(ms / 1000)}s`;
@@ -36,12 +47,14 @@ export default function ProjectWorkView({
   liveDraft,
   agentDurations,
   thinkingHint,
+  draftVersions,
   onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   const [pinnedAgentId, setPinnedAgentId] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [liveElapsed, setLiveElapsed] = useState(0);
   const activeStartRef = useRef<number>(Date.now());
 
@@ -331,6 +344,38 @@ export default function ProjectWorkView({
             })}
           </div>
 
+          {/* 버전 히스토리 탭 */}
+          {draftVersions.length > 0 && (
+            <div
+              className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b overflow-x-auto scrollbar-hide"
+              style={{ borderColor: "#0f1520", background: "#050810" }}
+            >
+              <span className="text-[9px] text-slate-700 tracking-widest uppercase shrink-0">버전</span>
+              <button
+                onClick={() => setSelectedVersion(null)}
+                className="text-[9px] px-2 py-0.5 rounded-full transition-all shrink-0"
+                style={selectedVersion === null
+                  ? { background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a78bfa" }
+                  : { background: "transparent", border: "1px solid #1a2030", color: "#3a4560" }}
+              >
+                Live
+              </button>
+              {draftVersions.map((v) => (
+                <button
+                  key={v.version}
+                  onClick={() => setSelectedVersion(v.version)}
+                  title={v.prevFeedback ? `이전 피드백: ${v.prevFeedback}` : undefined}
+                  className="text-[9px] px-2 py-0.5 rounded-full transition-all shrink-0"
+                  style={selectedVersion === v.version
+                    ? { background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a78bfa" }
+                    : { background: "transparent", border: "1px solid #1a2030", color: "#3a4560" }}
+                >
+                  v{v.version}{v.version === draftVersions[draftVersions.length - 1].version ? " ★" : ""}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* 헤더 */}
           <div
             className="shrink-0 px-6 py-3 flex items-center gap-3 border-b"
@@ -378,7 +423,41 @@ export default function ProjectWorkView({
             className="flex-1 overflow-y-auto px-6 py-5 font-mono text-xs leading-relaxed"
             style={{ color: "#8899aa" }}
           >
-            {displayedLog ? (
+            {selectedVersion !== null ? (() => {
+              const vData = draftVersions.find((v) => v.version === selectedVersion);
+              if (!vData) return null;
+              const prevData = draftVersions.find((v) => v.version === selectedVersion - 1);
+              const lines = prevData ? lineDiff(prevData.content, vData.content) : vData.content.split("\n").map((t) => ({ text: t, type: "same" as const }));
+              const addedCount = lines.filter((l) => l.type === "added").length;
+              return (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 pb-2 border-b mb-1" style={{ borderColor: "#1a2535" }}>
+                    <span className="text-[10px] tracking-widest uppercase font-bold" style={{ color: "#a78bfa" }}>v{selectedVersion}</span>
+                    {vData.prevFeedback && (
+                      <span className="text-[10px] text-slate-600 italic truncate max-w-xs">팩트 피드백: {vData.prevFeedback.slice(0, 80)}</span>
+                    )}
+                    {prevData && addedCount > 0 && (
+                      <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#4ade80" }}>
+                        +{addedCount}줄 변경
+                      </span>
+                    )}
+                  </div>
+                  <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed" style={{ fontFamily: "inherit" }}>
+                    {lines.map((line, i) => (
+                      <span
+                        key={i}
+                        className="block"
+                        style={line.type === "added"
+                          ? { color: "#86efac", background: "rgba(34,197,94,0.06)", borderLeft: "2px solid rgba(34,197,94,0.4)", paddingLeft: "6px", marginLeft: "-8px" }
+                          : { color: "#6b7d96" }}
+                      >
+                        {line.text || " "}
+                      </span>
+                    ))}
+                  </pre>
+                </div>
+              );
+            })() : displayedLog ? (
               <pre className="whitespace-pre-wrap break-words">{displayedLog}<span className="animate-pulse" style={{ color: displayAgent.color }}>▋</span></pre>
             ) : liveDraft ? (
               <div className="flex flex-col gap-3">
@@ -432,6 +511,7 @@ export default function ProjectWorkView({
               </div>
             )}
           </div>
+
 
         </div>
 
