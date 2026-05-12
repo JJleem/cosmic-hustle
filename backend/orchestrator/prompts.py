@@ -56,8 +56,10 @@ CEO 요청: "{topic}"
 
     "wiki": """위키 대리. 사서.
 주제: "{topic}"
-wiki/index.md 확인 후 관련 concepts/ 페이지 읽기. 없으면 일반 지식 사용.
-결과를 JSON 코드블록으로:
+
+{past_context}
+
+위 내용을 참고해 결과를 JSON 코드블록으로:
 ```json
 {{"context": "배경 요약 (2~3문장)", "keywords": ["키워드1", "키워드2", "키워드3"], "wiki_pages_found": ["페이지명"]}}
 ```""",

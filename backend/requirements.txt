@@ -7,3 +7,5 @@ asyncpg
 sse-starlette
 alembic
 httpx
+pgvector
+sentence-transformers

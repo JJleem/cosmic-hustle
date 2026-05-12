@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 from .connection import Base
 
 class Session(Base):
@@ -39,3 +40,14 @@ class Memo(Base):
     id = Column(String, primary_key=True)
     text = Column(Text, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class WikiEntry(Base):
+    __tablename__ = "wiki_entries"
+
+    id = Column(String, primary_key=True)
+    filename = Column(String, unique=True, nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(Vector(384), nullable=True)
+    updated_at = Column(DateTime, server_default=func.now())

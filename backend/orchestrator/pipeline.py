@@ -6,6 +6,7 @@ from typing import AsyncGenerator
 
 from .agent_runner import run_agent, parse_json, WIKI_DIR
 from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
+from db.wiki_store import semantic_search, sync_concepts_dir
 
 # ── Global state ───────────────────────────────────────────────────────────
 pending_responses: dict[str, asyncio.Future] = {}
@@ -214,10 +215,27 @@ async def _pipeline_inner(
     # ── 1. 위키 ───────────────────────────────────────────────────────────
     wiki_context = f'{{"context": "{topic}에 대한 배경", "keywords": ["{topic}"], "wiki_pages_found": []}}'
     emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
-    send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 페이지 탐색 중..."})
+    send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 시맨틱 서치 중..."})
+
+    # pgvector 시맨틱 서치: 과거 유사 리서치 주입
+    try:
+        past_entries = await asyncio.get_event_loop().run_in_executor(
+            None, semantic_search, topic, 3
+        )
+        if past_entries:
+            past_context = "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
+                f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
+                for e in past_entries
+            )
+        else:
+            past_context = "관련 과거 리서치 없음. 일반 지식 활용."
+    except Exception:
+        past_context = "관련 과거 리서치 없음. 일반 지식 활용."
+
     try:
         wiki_raw, wiki_stream = await run_a(
-            build_prompt("wiki", topic=topic), tools=["Read", "Glob"], max_turns=2
+            build_prompt("wiki", topic=topic, past_context=past_context),
+            no_tools=True, max_turns=1
         )
         if wiki_raw.strip():
             wiki_context = wiki_raw
@@ -558,7 +576,9 @@ async def _pipeline_inner(
                              insights=insights_str),
                 tools=["Read", "Write", "Edit", "Glob", "Grep"], max_turns=4,
             )
-            emit("agent_done", agentId="wiki", message="위키 업데이트 완료. 다음에 쓸 수 있어요.")
+            # 저장된 파일 → pgvector DB에 임베딩 동기화
+            synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
+            emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
         except Exception:
             emit("agent_done", agentId="wiki", message="기록 완료.")
 
