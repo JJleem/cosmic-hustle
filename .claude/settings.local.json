@@ -80,7 +80,8 @@
       "Read(//opt/homebrew/Cellar/pgvector/0.8.2/**)",
       "Read(//opt/homebrew/Cellar/pgvector/**)",
       "Bash(PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make)",
-      "Bash(PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make install)"
+      "Bash(PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make install)",
+      "Bash(echo \"PID: $!\")"
     ]
   }
 }

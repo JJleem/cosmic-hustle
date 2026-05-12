@@ -81,6 +81,7 @@ export default function Home() {
   const [agentDurations, setAgentDurations] = useState<Record<string, number>>({});
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentDef | null>(null);
+  const [researchError, setResearchError] = useState<{ title: string; detail: string } | null>(null);
 
   // DB에서 초기 데이터 로드
   useEffect(() => {
@@ -287,10 +288,14 @@ export default function Home() {
           }
           break;
         }
-        case "error":
-          console.error("SSE error:", event.message);
+        case "error": {
+          const errMsg = (event.message as string) ?? "파이프라인 오류가 발생했어요.";
+          speak("root", `🚨 ${errMsg}`);
+          addChat("root", `[오류] ${errMsg}`);
+          setResearchError({ title: "파이프라인 오류", detail: errMsg });
           setPhase("done");
           break;
+        }
       }
     },
     [speak, addChat],
@@ -314,14 +319,35 @@ export default function Home() {
     abortRef.current = abort;
 
     try {
-      const res = await fetch("/api/research", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode, reportStyle: config.reportStyle }),
-        signal: abort.signal,
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode, reportStyle: config.reportStyle }),
+          signal: abort.signal,
+        });
+      } catch (fetchErr) {
+        if ((fetchErr as Error).name === "AbortError") throw fetchErr;
+        const msg = "백엔드 서버에 연결할 수 없어요.";
+        const detail = "터미널에서 `cd backend && .venv/bin/python run.py` 로 서버를 켜주세요.";
+        speak("root", `🔌 ${msg}`);
+        addChat("root", `[연결 오류] ${msg} ${detail}`);
+        setResearchError({ title: msg, detail });
+        setPhase("done");
+        return;
+      }
 
-      if (!res.ok || !res.body) throw new Error("API error");
+      if (!res.ok || !res.body) {
+        let detail = `HTTP ${res.status}`;
+        try { const body = await res.json(); detail = body.detail ?? body.message ?? detail; } catch { /* ignore */ }
+        const title = res.status === 500 ? "서버 내부 오류가 발생했어요." : res.status === 422 ? "요청 형식이 올바르지 않아요." : `서버 오류 (${res.status})`;
+        speak("root", `🚨 ${title}`);
+        addChat("root", `[오류] ${title} — ${detail}`);
+        setResearchError({ title, detail });
+        setPhase("done");
+        return;
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -344,7 +370,8 @@ export default function Home() {
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        console.error("Research failed:", err);
+        speak("root", "⚠️ 예기치 않은 오류가 발생했어요.");
+        setResearchError({ title: "예기치 않은 오류", detail: (err as Error).message ?? "알 수 없는 오류" });
       }
       setPhase("done");
     } finally {
@@ -521,6 +548,7 @@ export default function Home() {
     setCurrentMode("checkin");
     setReportDrafts({});
     setLiveDraft(null);
+    setResearchError(null);
     setThinkingHint({});
     setDraftVersions([]);
     pendingDraftsRef.current = {};
@@ -617,6 +645,20 @@ export default function Home() {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* 에러 배너 */}
+      {researchError && (
+        <div className="shrink-0 px-8 py-2.5 flex items-start gap-3 text-xs animate-fadeIn" style={{ background: "rgba(239,68,68,0.05)", borderBottom: "1px solid rgba(239,68,68,0.18)" }}>
+          <span className="text-red-400 shrink-0 mt-0.5">🚨</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-red-300 font-semibold">{researchError.title}</span>
+            {researchError.detail && (
+              <span className="text-slate-500 ml-2">{researchError.detail}</span>
+            )}
+          </div>
+          <button onClick={() => setResearchError(null)} className="text-slate-600 hover:text-slate-400 transition-colors shrink-0">✕</button>
         </div>
       )}
 
