@@ -20,6 +20,8 @@ type Props = {
   agentDurations: Record<string, number>;
   thinkingHint: Record<string, string>;
   draftVersions: DraftVersion[];
+  agentStartTs: Record<string, number>;
+  sessionStartTs: number;
   onStop: () => void;
 };
 
@@ -48,6 +50,8 @@ export default function ProjectWorkView({
   agentDurations,
   thinkingHint,
   draftVersions,
+  agentStartTs,
+  sessionStartTs,
   onStop,
 }: Props) {
   const logRef = useRef<HTMLDivElement>(null);
@@ -55,6 +59,7 @@ export default function ProjectWorkView({
   const [confirmStop, setConfirmStop] = useState(false);
   const [pinnedAgentId, setPinnedAgentId] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [showGantt, setShowGantt] = useState(false);
   const [liveElapsed, setLiveElapsed] = useState(0);
   const activeStartRef = useRef<number>(Date.now());
 
@@ -344,17 +349,16 @@ export default function ProjectWorkView({
             })}
           </div>
 
-          {/* 버전 히스토리 탭 */}
-          {draftVersions.length > 0 && (
+          {/* 버전 히스토리 + 타임라인 탭 */}
+          {(draftVersions.length > 0 || Object.keys(agentStartTs).length > 0) && (
             <div
               className="shrink-0 flex items-center gap-2 px-4 py-1.5 border-b overflow-x-auto scrollbar-hide"
               style={{ borderColor: "#0f1520", background: "#050810" }}
             >
-              <span className="text-[9px] text-slate-700 tracking-widest uppercase shrink-0">버전</span>
               <button
-                onClick={() => setSelectedVersion(null)}
+                onClick={() => { setSelectedVersion(null); setShowGantt(false); }}
                 className="text-[9px] px-2 py-0.5 rounded-full transition-all shrink-0"
-                style={selectedVersion === null
+                style={selectedVersion === null && !showGantt
                   ? { background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a78bfa" }
                   : { background: "transparent", border: "1px solid #1a2030", color: "#3a4560" }}
               >
@@ -363,7 +367,7 @@ export default function ProjectWorkView({
               {draftVersions.map((v) => (
                 <button
                   key={v.version}
-                  onClick={() => setSelectedVersion(v.version)}
+                  onClick={() => { setSelectedVersion(v.version); setShowGantt(false); }}
                   title={v.prevFeedback ? `이전 피드백: ${v.prevFeedback}` : undefined}
                   className="text-[9px] px-2 py-0.5 rounded-full transition-all shrink-0"
                   style={selectedVersion === v.version
@@ -373,6 +377,16 @@ export default function ProjectWorkView({
                   v{v.version}{v.version === draftVersions[draftVersions.length - 1].version ? " ★" : ""}
                 </button>
               ))}
+              <div className="w-px h-3 shrink-0" style={{ background: "#1a2030" }} />
+              <button
+                onClick={() => { setShowGantt(!showGantt); setSelectedVersion(null); }}
+                className="text-[9px] px-2 py-0.5 rounded-full transition-all shrink-0"
+                style={showGantt
+                  ? { background: "rgba(16,185,129,0.2)", border: "1px solid rgba(16,185,129,0.4)", color: "#34d399" }
+                  : { background: "transparent", border: "1px solid #1a2030", color: "#3a4560" }}
+              >
+                📊 타임라인
+              </button>
             </div>
           )}
 
@@ -423,7 +437,87 @@ export default function ProjectWorkView({
             className="flex-1 overflow-y-auto px-6 py-5 font-mono text-xs leading-relaxed"
             style={{ color: "#8899aa" }}
           >
-            {selectedVersion !== null ? (() => {
+            {showGantt ? (() => {
+              const now = Date.now();
+              const ganttAgents = AGENTS.filter((a) => agentStartTs[a.id] && agentStatus[a.id] !== "disabled" && agentStatus[a.id] !== "waiting");
+              if (ganttAgents.length === 0) return <p className="text-slate-700 text-xs mt-4">아직 실행된 에이전트가 없어요.</p>;
+              const base = sessionStartTs || (Math.min(...ganttAgents.map((a) => agentStartTs[a.id])));
+              const ends = ganttAgents.map((a) => {
+                const start = agentStartTs[a.id] - base;
+                const dur = agentDurations[a.id] ?? Math.max(0, now - agentStartTs[a.id]);
+                return start + dur;
+              });
+              const totalMs = Math.max(...ends, 1);
+              const LABEL_W = 36;
+              const ROW_H = 26;
+              const BAR_H = 14;
+              const svgH = ganttAgents.length * ROW_H + 24;
+              return (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: "#1a2535" }}>
+                    <span className="text-[10px] tracking-widest uppercase font-bold" style={{ color: "#34d399" }}>📊 타임라인</span>
+                    <span className="text-[10px] text-slate-600">총 {fmtMs(totalMs)}</span>
+                  </div>
+                  <svg width="100%" height={svgH} style={{ overflow: "visible" }}>
+                    {ganttAgents.map((agent, i) => {
+                      const relStart = agentStartTs[agent.id] - base;
+                      const dur = agentDurations[agent.id] ?? Math.max(0, now - agentStartTs[agent.id]);
+                      const isActive = agentStatus[agent.id] === "active";
+                      const y = i * ROW_H + 4;
+                      return (
+                        <g key={agent.id}>
+                          <text x={LABEL_W - 2} y={y + BAR_H / 2 + 4} fill={`${agent.color}90`} fontSize={8} textAnchor="end" fontFamily="monospace">{agent.name}</text>
+                          {/* 배경 트랙 */}
+                          <rect x={`${LABEL_W}px`} y={y} width="calc(100% - 120px)" height={BAR_H} fill="#0a0f1a" rx={3} />
+                          {/* 실제 바 */}
+                          <rect
+                            x={`calc(${LABEL_W}px + (100% - 120px) * ${relStart / totalMs})`}
+                            y={y}
+                            width={`calc((100% - 120px) * ${Math.max(dur, totalMs * 0.005) / totalMs})`}
+                            height={BAR_H}
+                            fill={isActive ? `${agent.color}50` : `${agent.color}30`}
+                            stroke={agent.color}
+                            strokeWidth={1}
+                            rx={3}
+                          />
+                          {isActive && (
+                            <rect
+                              x={`calc(${LABEL_W}px + (100% - 120px) * ${relStart / totalMs})`}
+                              y={y}
+                              width={`calc((100% - 120px) * ${Math.max(dur, totalMs * 0.005) / totalMs})`}
+                              height={BAR_H}
+                              fill={`${agent.color}20`}
+                              rx={3}
+                              opacity="0.8"
+                            />
+                          )}
+                          <text x="calc(100% - 112px)" y={y + BAR_H / 2 + 4} fill={`${agent.color}70`} fontSize={8} fontFamily="monospace">
+                            {fmtMs(dur)}{isActive ? " ⏱" : ""}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    {/* 시간 눈금 */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((t) => (
+                      <g key={t}>
+                        <line
+                          x1={`calc(${LABEL_W}px + (100% - 120px) * ${t})`}
+                          y1={0}
+                          x2={`calc(${LABEL_W}px + (100% - 120px) * ${t})`}
+                          y2={svgH - 20}
+                          stroke="#1a2535"
+                          strokeWidth={1}
+                          strokeDasharray="3,3"
+                        />
+                        <text x={`calc(${LABEL_W}px + (100% - 120px) * ${t})`} y={svgH - 6} fill="#2a3a50" fontSize={7} textAnchor="middle" fontFamily="monospace">
+                          {fmtMs(totalMs * t)}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                </div>
+              );
+            })() : selectedVersion !== null ? (() => {
               const vData = draftVersions.find((v) => v.version === selectedVersion);
               if (!vData) return null;
               const prevData = draftVersions.find((v) => v.version === selectedVersion - 1);

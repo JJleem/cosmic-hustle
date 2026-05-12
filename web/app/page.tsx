@@ -70,6 +70,7 @@ export default function Home() {
     Object.values(speakTimers.current).forEach(clearTimeout);
   }, []);
   const sessionIdRef = useRef("");
+  const sessionStartTsRef = useRef(0);
   const pendingDraftsRef = useRef<Record<string, string>>({});
   const [reportDrafts, setReportDrafts] = useState<Record<string, string>>({});
   const [liveDraft, setLiveDraft] = useState<{ agentId: string; topic: string; content: string } | null>(null);
@@ -161,6 +162,7 @@ export default function Home() {
       switch (event.type) {
         case "session_start":
           sessionIdRef.current = event.sessionId as string;
+          sessionStartTsRef.current = Date.now();
           localStorage.setItem("cosmicHustleSession", JSON.stringify({
             sessionId: event.sessionId,
             topic: inputTopic,
@@ -522,6 +524,7 @@ export default function Home() {
     setDraftVersions([]);
     pendingDraftsRef.current = {};
     agentStartTs.current = {};
+    sessionStartTsRef.current = 0;
     setAgentDurations({});
   };
 
@@ -721,6 +724,8 @@ export default function Home() {
           agentDurations={agentDurations}
           thinkingHint={thinkingHint}
           draftVersions={draftVersions}
+          agentStartTs={agentStartTs.current}
+          sessionStartTs={sessionStartTsRef.current}
           onStop={stopResearch}
         />
       )}
