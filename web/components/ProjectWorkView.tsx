@@ -458,80 +458,64 @@ export default function ProjectWorkView({
               const now = Date.now();
               const ganttAgents = AGENTS.filter((a) => agentStartTs[a.id] && agentStatus[a.id] !== "disabled" && agentStatus[a.id] !== "waiting");
               if (ganttAgents.length === 0) return <p className="text-slate-700 text-xs mt-4">아직 실행된 에이전트가 없어요.</p>;
-              const base = sessionStartTs || (Math.min(...ganttAgents.map((a) => agentStartTs[a.id])));
+              const base = sessionStartTs || Math.min(...ganttAgents.map((a) => agentStartTs[a.id]));
               const ends = ganttAgents.map((a) => {
                 const start = agentStartTs[a.id] - base;
                 const dur = agentDurations[a.id] ?? Math.max(0, now - agentStartTs[a.id]);
                 return start + dur;
               });
               const totalMs = Math.max(...ends, 1);
-              const LABEL_W = 36;
-              const ROW_H = 26;
+              // 고정 SVG 너비로 calc() 없이 수치 계산
+              const SVG_W = 560;
+              const LABEL_W = 52;
+              const DUR_W = 48;
+              const BAR_AREA = SVG_W - LABEL_W - DUR_W;
+              const ROW_H = 28;
               const BAR_H = 14;
-              const svgH = ganttAgents.length * ROW_H + 24;
+              const svgH = ganttAgents.length * ROW_H + 28;
               return (
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: "#1a2535" }}>
                     <span className="text-[10px] tracking-widest uppercase font-bold" style={{ color: "#34d399" }}>📊 타임라인</span>
                     <span className="text-[10px] text-slate-600">총 {fmtMs(totalMs)}</span>
                   </div>
-                  <svg width="100%" height={svgH} style={{ overflow: "visible" }}>
+                  <div style={{ overflowX: "auto" }}>
+                  <svg width={SVG_W} height={svgH}>
+                    {/* 눈금선 */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+                      const gx = LABEL_W + BAR_AREA * t;
+                      return (
+                        <g key={t}>
+                          <line x1={gx} y1={0} x2={gx} y2={svgH - 18} stroke="#1a2535" strokeWidth={1} strokeDasharray="3,3" />
+                          <text x={gx} y={svgH - 4} fill="#2a3a50" fontSize={7} textAnchor="middle" fontFamily="monospace">{fmtMs(totalMs * t)}</text>
+                        </g>
+                      );
+                    })}
                     {ganttAgents.map((agent, i) => {
                       const relStart = agentStartTs[agent.id] - base;
                       const dur = agentDurations[agent.id] ?? Math.max(0, now - agentStartTs[agent.id]);
                       const isActive = agentStatus[agent.id] === "active";
                       const y = i * ROW_H + 4;
+                      const bx = LABEL_W + (relStart / totalMs) * BAR_AREA;
+                      const bw = Math.max((Math.max(dur, totalMs * 0.005) / totalMs) * BAR_AREA, 4);
                       return (
                         <g key={agent.id}>
-                          <text x={LABEL_W - 2} y={y + BAR_H / 2 + 4} fill={`${agent.color}90`} fontSize={8} textAnchor="end" fontFamily="monospace">{agent.name}</text>
+                          <text x={LABEL_W - 4} y={y + BAR_H / 2 + 4} fill={`${agent.color}90`} fontSize={8} textAnchor="end" fontFamily="monospace">{agent.name}</text>
                           {/* 배경 트랙 */}
-                          <rect x={`${LABEL_W}px`} y={y} width="calc(100% - 120px)" height={BAR_H} fill="#0a0f1a" rx={3} />
+                          <rect x={LABEL_W} y={y} width={BAR_AREA} height={BAR_H} fill="#0a0f1a" rx={3} />
                           {/* 실제 바 */}
-                          <rect
-                            x={`calc(${LABEL_W}px + (100% - 120px) * ${relStart / totalMs})`}
-                            y={y}
-                            width={`calc((100% - 120px) * ${Math.max(dur, totalMs * 0.005) / totalMs})`}
-                            height={BAR_H}
-                            fill={isActive ? `${agent.color}50` : `${agent.color}30`}
-                            stroke={agent.color}
-                            strokeWidth={1}
-                            rx={3}
-                          />
+                          <rect x={bx} y={y} width={bw} height={BAR_H} fill={isActive ? `${agent.color}50` : `${agent.color}30`} stroke={agent.color} strokeWidth={1} rx={3} />
                           {isActive && (
-                            <rect
-                              x={`calc(${LABEL_W}px + (100% - 120px) * ${relStart / totalMs})`}
-                              y={y}
-                              width={`calc((100% - 120px) * ${Math.max(dur, totalMs * 0.005) / totalMs})`}
-                              height={BAR_H}
-                              fill={`${agent.color}20`}
-                              rx={3}
-                              opacity="0.8"
-                            />
+                            <rect x={bx} y={y} width={bw} height={BAR_H} fill={`${agent.color}20`} rx={3} opacity={0.8} />
                           )}
-                          <text x="calc(100% - 112px)" y={y + BAR_H / 2 + 4} fill={`${agent.color}70`} fontSize={8} fontFamily="monospace">
-                            {fmtMs(dur)}{isActive ? " ⏱" : ""}
+                          <text x={LABEL_W + BAR_AREA + 4} y={y + BAR_H / 2 + 4} fill={`${agent.color}70`} fontSize={8} fontFamily="monospace">
+                            {fmtMs(dur)}{isActive ? "⏱" : ""}
                           </text>
                         </g>
                       );
                     })}
-                    {/* 시간 눈금 */}
-                    {[0, 0.25, 0.5, 0.75, 1].map((t) => (
-                      <g key={t}>
-                        <line
-                          x1={`calc(${LABEL_W}px + (100% - 120px) * ${t})`}
-                          y1={0}
-                          x2={`calc(${LABEL_W}px + (100% - 120px) * ${t})`}
-                          y2={svgH - 20}
-                          stroke="#1a2535"
-                          strokeWidth={1}
-                          strokeDasharray="3,3"
-                        />
-                        <text x={`calc(${LABEL_W}px + (100% - 120px) * ${t})`} y={svgH - 6} fill="#2a3a50" fontSize={7} textAnchor="middle" fontFamily="monospace">
-                          {fmtMs(totalMs * t)}
-                        </text>
-                      </g>
-                    ))}
                   </svg>
+                  </div>
                 </div>
               );
             })() : selectedVersion !== null ? (() => {
