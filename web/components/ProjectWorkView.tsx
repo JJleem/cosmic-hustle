@@ -63,8 +63,25 @@ export default function ProjectWorkView({
   const [liveElapsed, setLiveElapsed] = useState(0);
   const activeStartRef = useRef<number>(Date.now());
 
-  // 핀된 에이전트 > 현재 활성 > 마지막 완료 순서
+  // 가장 최근 스트림이 들어온 에이전트를 추적 — 병렬 실행 시 위키+포케 둘 다 표시 가능
+  const prevStreamLens = useRef<Record<string, number>>({});
+  const [lastStreamedId, setLastStreamedId] = useState<string | null>(null);
+  useEffect(() => {
+    for (const agentId of Object.keys(streamLog)) {
+      const cur = streamLog[agentId]?.length ?? 0;
+      const prev = prevStreamLens.current[agentId] ?? 0;
+      if (cur > prev && agentStatus[agentId] === "active") {
+        setLastStreamedId(agentId);
+      }
+    }
+    prevStreamLens.current = Object.fromEntries(
+      Object.keys(streamLog).map((id) => [id, streamLog[id]?.length ?? 0])
+    );
+  }, [streamLog, agentStatus]);
+
+  // 핀된 에이전트 > 가장 최근 스트림 에이전트 > 첫번째 활성 > 마지막 완료 순서
   const autoAgent =
+    (lastStreamedId && agentStatus[lastStreamedId] === "active" ? AGENT_MAP[lastStreamedId] : null) ??
     AGENTS.find((a) => agentStatus[a.id] === "active") ??
     [...AGENTS].reverse().find((a) => agentStatus[a.id] === "done") ??
     AGENTS.find((a) => agentStatus[a.id] !== "disabled") ??
