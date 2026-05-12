@@ -290,10 +290,15 @@ export default function Home() {
         }
         case "error": {
           const errMsg = (event.message as string) ?? "파이프라인 오류가 발생했어요.";
-          speak("root", `🚨 ${errMsg}`);
-          addChat("root", `[오류] ${errMsg}`);
           setResearchError({ title: "파이프라인 오류", detail: errMsg });
-          setPhase("done");
+          addChat("root", `[오류] ${errMsg}`);
+          setAgentStatus((prev) => ({ ...prev, root: "active" }));
+          speak("root", `🚨 ${errMsg}`);
+          setTimeout(() => {
+            setAgentStatus(initStatus());
+            setPhase("idle");
+            setTopic("");
+          }, 3000);
           break;
         }
       }
@@ -318,34 +323,40 @@ export default function Home() {
     const abort = new AbortController();
     abortRef.current = abort;
 
+    const showError = (title: string, detail: string) => {
+      setResearchError({ title, detail });
+      addChat("root", `[오류] ${title}${detail ? ` — ${detail}` : ""}`);
+      // 루트를 잠깐 active로 → talk 애니메이션 트리거
+      setAgentStatus((prev) => ({ ...prev, root: "active" }));
+      speak("root", `🚨 ${title}`);
+      setTimeout(() => {
+        setAgentStatus(initStatus());
+        setPhase("idle");
+        setTopic("");
+      }, 3000);
+    };
+
+    let errorHandled = false;
     try {
-      let res: Response;
-      try {
-        res = await fetch("/api/research", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode, reportStyle: config.reportStyle }),
-          signal: abort.signal,
-        });
-      } catch (fetchErr) {
-        if ((fetchErr as Error).name === "AbortError") throw fetchErr;
-        const msg = "백엔드 서버에 연결할 수 없어요.";
-        const detail = "터미널에서 `cd backend && .venv/bin/python run.py` 로 서버를 켜주세요.";
-        speak("root", `🔌 ${msg}`);
-        addChat("root", `[연결 오류] ${msg} ${detail}`);
-        setResearchError({ title: msg, detail });
-        setPhase("done");
-        return;
-      }
+      const res = await fetch("/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode, reportStyle: config.reportStyle }),
+        signal: abort.signal,
+      });
 
       if (!res.ok || !res.body) {
-        let detail = `HTTP ${res.status}`;
-        try { const body = await res.json(); detail = body.detail ?? body.message ?? detail; } catch { /* ignore */ }
-        const title = res.status === 500 ? "서버 내부 오류가 발생했어요." : res.status === 422 ? "요청 형식이 올바르지 않아요." : `서버 오류 (${res.status})`;
-        speak("root", `🚨 ${title}`);
-        addChat("root", `[오류] ${title} — ${detail}`);
-        setResearchError({ title, detail });
-        setPhase("done");
+        let title = `서버 오류 (${res.status})`;
+        let detail = "";
+        try {
+          const body = await res.json() as Record<string, unknown>;
+          if (res.status === 503) { title = "백엔드 서버에 연결할 수 없어요."; detail = "터미널에서 `cd backend && .venv/bin/python run.py` 로 서버를 켜주세요."; }
+          else if (res.status === 502) { title = "백엔드 오류가 발생했어요."; detail = String(body.upstreamStatus ?? ""); }
+          else if (res.status === 422) { title = "요청 형식이 올바르지 않아요."; }
+          else { detail = String(body.detail ?? body.message ?? `HTTP ${res.status}`); }
+        } catch { /* ignore */ }
+        errorHandled = true;
+        showError(title, detail);
         return;
       }
 
@@ -370,14 +381,15 @@ export default function Home() {
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        speak("root", "⚠️ 예기치 않은 오류가 발생했어요.");
-        setResearchError({ title: "예기치 않은 오류", detail: (err as Error).message ?? "알 수 없는 오류" });
+        errorHandled = true;
+        showError("예기치 않은 오류", (err as Error).message ?? "알 수 없는 오류");
       }
-      setPhase("done");
     } finally {
       abortRef.current = null;
-      // complete 이벤트 미수신 시(네트워크 단절 등) working 상태 영구 고착 방지
-      setPhase((p) => p === "working" ? "done" : p);
+      // showError가 호출됐으면 3초 타이머가 idle로 전환 — 여기서 override 금지
+      if (!errorHandled) {
+        setPhase((p) => p === "working" ? "done" : p);
+      }
     }
   };
 
