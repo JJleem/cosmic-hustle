@@ -16,11 +16,14 @@ function extractHtml(content: string): string | null {
 
 export type Report = {
   id: string;
+  sessionId?: string;
   agentId: string;
   topic: string;
   content: string;
   createdAt: Date;
 };
+
+type ReportVersion = { version: number; content: string; factFeedback: string | null; createdAt: string | null };
 
 function stripMarkdown(text: string): string {
   return text
@@ -155,8 +158,23 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
   const [wikiSaving, setWikiSaving] = useState(false);
   const [wikiSaved, setWikiSaved] = useState<string | null>(null); // reportId
   const [wikiMsg, setWikiMsg] = useState("");
+  const [versions, setVersions] = useState<ReportVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [showVersions, setShowVersions] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+
+  // 리포트 선택 시 버전 히스토리 fetch
+  useEffect(() => {
+    setVersions([]);
+    setSelectedVersion(null);
+    setShowVersions(false);
+    if (!selected?.sessionId) return;
+    fetch(`/api/sessions/${selected.sessionId}/versions`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: ReportVersion[]) => setVersions(data))
+      .catch(() => { /* 버전 없음 */ });
+  }, [selected?.id]);
 
   useEffect(() => {
     if (!showExport) return;
@@ -586,6 +604,22 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
                     <div className="w-px h-4 bg-slate-700" />
                   </>
                 )}
+                {/* 버전 히스토리 */}
+                {versions.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setShowVersions((v) => !v)}
+                      title="버전 히스토리 보기"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all"
+                      style={showVersions
+                        ? { background: "rgba(139,92,246,0.15)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.35)" }
+                        : { color: "#94a3b8" }}
+                    >
+                      <span>v{versions.length} 히스토리</span>
+                    </button>
+                    <div className="w-px h-4 bg-slate-700" />
+                  </>
+                )}
                 {/* 더 파기 */}
                 {onDeepDive && (
                   <>
@@ -724,6 +758,70 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
                   className="flex-1 w-full bg-slate-900/60 border border-slate-700 rounded-xl text-sm text-slate-200 leading-relaxed p-4 resize-none focus:outline-none focus:border-blue-500 font-mono scrollbar-hide"
                   spellCheck={false}
                 />
+              </div>
+            ) : showVersions && versions.length > 0 ? (
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {/* 버전 탭 */}
+                <div className="shrink-0 flex items-center gap-2 px-6 py-2 border-b border-slate-800/60" style={{ background: "#060a10" }}>
+                  <span className="text-[9px] text-slate-600 tracking-widest uppercase">버전 히스토리</span>
+                  <div className="flex gap-1.5 ml-2">
+                    {versions.map((v) => (
+                      <button
+                        key={v.version}
+                        onClick={() => setSelectedVersion(v.version)}
+                        className="text-[9px] px-2.5 py-1 rounded-full transition-all"
+                        style={selectedVersion === v.version
+                          ? { background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a78bfa" }
+                          : { background: "transparent", border: "1px solid #1a2030", color: "#3a4560" }}
+                      >
+                        v{v.version}{v.version === versions[versions.length - 1].version ? " ★" : ""}
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const vData = versions.find((v) => v.version === selectedVersion);
+                    const prevData = versions.find((v) => v.version === (selectedVersion ?? 0) - 1);
+                    if (!vData || !prevData) return null;
+                    const oldLines = new Set(prevData.content.split("\n"));
+                    const addedCount = vData.content.split("\n").filter((l) => !oldLines.has(l)).length;
+                    return addedCount > 0 ? (
+                      <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#4ade80" }}>
+                        +{addedCount}줄 변경
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                {/* 버전 내용 */}
+                <div className="flex-1 overflow-y-auto px-8 py-6 scrollbar-hide">
+                  {(() => {
+                    const vData = versions.find((v) => v.version === (selectedVersion ?? versions[versions.length - 1].version));
+                    const prevData = vData ? versions.find((v) => v.version === vData.version - 1) : null;
+                    if (!vData) return null;
+                    const oldLines = prevData ? new Set(prevData.content.split("\n")) : null;
+                    return (
+                      <div className="flex flex-col gap-3">
+                        {vData.factFeedback && (
+                          <div className="px-3 py-2 rounded-lg text-[10px] text-slate-400 italic" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}>
+                            팩트 피드백: {vData.factFeedback}
+                          </div>
+                        )}
+                        <div className="report-body text-sm text-slate-300 leading-relaxed">
+                          {oldLines ? (
+                            <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed font-sans">
+                              {vData.content.split("\n").map((line, i) => (
+                                <span key={i} className="block" style={!oldLines.has(line) ? { color: "#86efac", background: "rgba(34,197,94,0.05)", borderLeft: "2px solid rgba(34,197,94,0.35)", paddingLeft: "8px", marginLeft: "-10px" } : { color: "#94a3b8" }}>
+                                  {line || " "}
+                                </span>
+                              ))}
+                            </pre>
+                          ) : (
+                            <ReactMarkdown>{vData.content}</ReactMarkdown>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             ) : (() => {
               const activeContent = showDraft && drafts[selected.id] ? drafts[selected.id] : selected.content;

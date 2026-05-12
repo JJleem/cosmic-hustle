@@ -90,7 +90,7 @@ export default function Home() {
     ]).then(([dbReports, dbSessions]) => {
       if (Array.isArray(dbReports)) {
         setReports(
-          (dbReports as Array<{ id: string; agentId: string; topic: string; content: string; createdAt: number }>)
+          (dbReports as Array<{ id: string; sessionId?: string; agentId: string; topic: string; content: string; createdAt: number }>)
             .map((r) => ({ ...r, createdAt: new Date((typeof r.createdAt === "number" ? r.createdAt : 0) * 1000) }))
         );
       }
@@ -235,6 +235,7 @@ export default function Home() {
           setReports((prev) => [
             {
               id: rId,
+              sessionId: sessionIdRef.current || undefined,
               agentId: event.agentId as string,
               topic: (event.topic as string) ?? inputTopic,
               content: event.content as string,
