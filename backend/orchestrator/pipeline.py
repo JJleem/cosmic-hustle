@@ -141,6 +141,9 @@ async def _pipeline_inner(
     # ── session_start ──────────────────────────────────────────────────────
     emit("session_start", topic=topic)
 
+    # 플랜 실행 중 시맨틱 서치 미리 백그라운드 시작 (플랜 ~30s 동안 완료됨)
+    semantic_task = asyncio.get_event_loop().run_in_executor(None, semantic_search, topic, 3)
+
     # ── 0. 플랜 ───────────────────────────────────────────────────────────
     if _is_cancelled(session_id):
         return
@@ -212,90 +215,82 @@ async def _pipeline_inner(
             send({"type": "agent_done", "agentId": wid, "message": skip_msg,
                   "ts": int(time.time() * 1000)})
 
-    # ── 1. 위키 ───────────────────────────────────────────────────────────
+    # ── 1+2. 위키 + 포케 동시 실행 ────────────────────────────────────────
     wiki_context = f'{{"context": "{topic}에 대한 배경", "keywords": ["{topic}"], "wiki_pages_found": []}}'
+    pocke_output = '{"sources": [], "key_facts": []}'
+
     emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
+    emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
     send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 시맨틱 서치 중..."})
+    send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
 
-    # pgvector 시맨틱 서치: 과거 유사 리서치 주입
-    try:
-        past_entries = await asyncio.get_event_loop().run_in_executor(
-            None, semantic_search, topic, 3
-        )
-        if past_entries:
-            past_context = "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
-                f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
-                for e in past_entries
+    stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
+
+    async def _wiki_task():
+        try:
+            past_entries = await semantic_task  # 플랜 실행 중 이미 완료됨
+            if past_entries:
+                past_ctx = "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
+                    f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
+                    for e in past_entries
+                )
+            else:
+                past_ctx = "관련 과거 리서치 없음. 일반 지식 활용."
+        except Exception:
+            past_ctx = "관련 과거 리서치 없음. 일반 지식 활용."
+        try:
+            return await run_a(
+                build_prompt("wiki", topic=topic, past_context=past_ctx),
+                no_tools=True, max_turns=1,
             )
-        else:
-            past_context = "관련 과거 리서치 없음. 일반 지식 활용."
-    except Exception:
-        past_context = "관련 과거 리서치 없음. 일반 지식 활용."
+        except Exception:
+            return "", ""
 
-    try:
-        wiki_raw, wiki_stream = await run_a(
-            build_prompt("wiki", topic=topic, past_context=past_context),
-            no_tools=True, max_turns=1
-        )
-        if wiki_raw.strip():
-            wiki_context = wiki_raw
-        if wiki_stream.strip():
-            send({"type": "agent_stream", "agentId": "wiki", "chunk": wiki_stream[:300]})
-        elif wiki_raw.strip():
-            await _stream_chunked("wiki", wiki_raw, send)
-        emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요. 포케한테 넘길게요.")
-    except Exception:
-        emit("agent_done", agentId="wiki", message="기본 자료 준비됐어요.")
+    async def _pocke_task():
+        try:
+            return await run_a(
+                build_prompt(config["pocke"], topic=topic, context=topic, keywords=topic),
+                tools=["WebSearch", "WebFetch"], max_turns=5,
+            )
+        except Exception:
+            return "", ""
+
+    wiki_result, pocke_result = await asyncio.gather(_wiki_task(), _pocke_task())
+    stop_pocke()
+
+    # 위키 결과 처리
+    wiki_raw, wiki_stream = wiki_result
+    if wiki_raw.strip():
+        wiki_context = wiki_raw
+    if wiki_stream.strip():
+        send({"type": "agent_stream", "agentId": "wiki", "chunk": wiki_stream[:300]})
+    elif wiki_raw.strip():
+        await _stream_chunked("wiki", wiki_raw, send)
+    emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
+
+    # 포케 결과 처리
+    pocke_raw, pocke_stream = pocke_result
+    if pocke_raw.strip():
+        pocke_output = pocke_raw
+    if pocke_stream.strip():
+        send({"type": "agent_stream", "agentId": "pocke", "chunk": pocke_stream[:300]})
+    elif pocke_raw.strip():
+        await _stream_chunked("pocke", pocke_raw, send)
+    emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
 
     wiki = parse_json(wiki_context, {"context": "", "keywords": [], "wiki_pages_found": []})
+    pocke = parse_json(pocke_output, {"sources": [], "key_facts": []})
+    pocke_has_data = bool(pocke.get("key_facts"))
 
     wiki_checkin_lines = [
         *([f"맥락: {wiki['context'][:100]}"] if wiki.get("context") else []),
         *[f"🔑 키워드: {k}" for k in wiki.get("keywords", [])[:3]],
-        *[f"📄 {p}" for p in wiki.get("wiki_pages_found", [])[:3]],
     ]
-    await maybe_checkin("wiki", f"관련 지식 {len(wiki.get('wiki_pages_found', []))}페이지 연결됐어요.", wiki_checkin_lines)
-
-    if _is_cancelled(session_id):
-        return
-
-    await asyncio.sleep(0.4)
-    send({"type": "agent_message", "agentId": "pocke", "message": "위키야 고마워! 바로 달려갈게 🐹"})
-    await asyncio.sleep(0.6)
-
-    # ── 2. 포케 ───────────────────────────────────────────────────────────
-    pocke_output = '{"sources": [], "key_facts": []}'
-    emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
-    send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
-    try:
-        stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
-
-        pocke_raw, pocke_stream = await run_a(
-            build_prompt(config["pocke"], topic=topic,
-                         context=wiki.get("context", ""),
-                         keywords=", ".join(wiki.get("keywords", []))),
-            tools=["WebSearch", "WebFetch"], max_turns=5,
-        )
-        stop_pocke()
-        if pocke_raw.strip():
-            pocke_output = pocke_raw
-        if pocke_stream.strip():
-            send({"type": "agent_stream", "agentId": "pocke", "chunk": pocke_stream[:300]})
-        elif pocke_raw.strip():
-            await _stream_chunked("pocke", pocke_raw, send)
-        emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
-    except Exception:
-        emit("agent_done", agentId="pocke", message="수집 완료. 카 과장한테 넘길게요.")
-
-    pocke = parse_json(pocke_output, {"sources": [], "key_facts": []})
-    # 포케 실패 감지 — 팩트 루프에서 무한 재조사 방지
-    pocke_has_data = bool(pocke.get("key_facts"))
+    await maybe_checkin("wiki", "관련 지식 연결됐어요.", wiki_checkin_lines)
 
     pocke_summary = f"소스 {len(pocke.get('sources', []))}개, 팩트 {len(pocke.get('key_facts', []))}개 수집됐어요."
     pocke_fact_lines = [f"📌 {f}" for f in pocke.get("key_facts", [])[:4]]
-    pocke_src_lines = [
-        f"🔗 {s['title']}" for s in pocke.get("sources", [])[:3] if isinstance(s, dict)
-    ]
+    pocke_src_lines = [f"🔗 {s['title']}" for s in pocke.get("sources", [])[:3] if isinstance(s, dict)]
     await maybe_checkin("pocke", pocke_summary, pocke_fact_lines + pocke_src_lines)
 
     if _is_cancelled(session_id):
