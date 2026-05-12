@@ -14,7 +14,7 @@ function getImageSrc(defaultSrc: string, status: AgentStatus, expression: string
   const base = defaultSrc.replace("default.png", "");
   if (expression) return `${base}${expression}.png`;
   switch (status) {
-    case "active": return `${base}working.png`;
+    case "active": return defaultSrc; // talk 프레임이 위를 덮으므로 base는 default 유지
     case "done":   return `${base}done.png`;
     default:       return defaultSrc;
   }
@@ -92,8 +92,7 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
       timer = setTimeout(nextFrame, delay);
     }
 
-    // 첫 시작 전 약간의 랜덤 딜레이 (자연스럽게)
-    timer = setTimeout(nextFrame, Math.random() * 300);
+    nextFrame(); // 즉시 시작 — working.png 노출 방지
     return () => { clearTimeout(timer); setTalkFrame(null); };
   }, [status]);
 
