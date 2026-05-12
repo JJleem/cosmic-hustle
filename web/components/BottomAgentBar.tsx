@@ -87,7 +87,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                     </>
                   )}
                   <div
-                    className="relative rounded-full overflow-hidden transition-all duration-300 group-hover:scale-110"
+                    className="relative rounded-full overflow-hidden group-hover:scale-110"
                     style={{
                       width: 48,
                       height: 48,
@@ -97,8 +97,10 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                         ? `1px solid ${agent.color}35`
                         : `1px solid rgba(255,255,255,0.07)`,
                       outlineOffset: 2,
-                      opacity: isDisabled ? 0.12 : isWaiting ? 0.25 : 1,
-                      filter: isDisabled ? "grayscale(1)" : "none",
+                      opacity: isDisabled ? 0 : isWaiting ? 0.25 : 1,
+                      transition: isDisabled ? "none" : "all 0.3s",
+                      filter: "none",
+                      pointerEvents: isDisabled ? "none" : undefined,
                       boxShadow: isActive
                         ? `0 0 0 1px ${agent.color}20, inset 0 1px 0 rgba(255,255,255,0.08)`
                         : isDone
@@ -117,8 +119,11 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
 
                 {/* 이름 */}
                 <p
-                  className="text-[9px] font-semibold tracking-wide transition-all duration-300"
-                  style={{ color: isDisabled ? "rgba(255,255,255,0.08)" : isActive ? agent.color : "rgba(148,163,184,0.7)" }}
+                  className="text-[9px] font-semibold tracking-wide"
+                  style={{
+                    color: isDisabled ? "transparent" : isActive ? agent.color : "rgba(148,163,184,0.7)",
+                    transition: isDisabled ? "none" : "color 0.3s",
+                  }}
                 >
                   {agent.name}
                 </p>
@@ -126,8 +131,11 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                 {/* 부서 dot */}
                 {dept && (
                   <div
-                    className="w-1 h-1 rounded-full transition-all duration-300"
-                    style={{ background: isActive ? dept.color : `${dept.color}30` }}
+                    className="w-1 h-1 rounded-full"
+                    style={{
+                      background: isDisabled ? "transparent" : isActive ? dept.color : `${dept.color}30`,
+                      transition: isDisabled ? "none" : "background 0.3s",
+                    }}
                   />
                 )}
               </div>
