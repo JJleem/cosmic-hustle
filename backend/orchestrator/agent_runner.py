@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Callable, Awaitable
+from typing import Callable
 
 # claude.exe 위치 찾기 — web/node_modules 안에 있음
 def find_claude() -> str:
@@ -41,67 +41,6 @@ def format_tool_use(name: str, input_data: dict) -> str:
     return fn(input_data) if fn else f"\n⚙️ {name}\n"
 
 
-def _run_agent_sync(
-    prompt: str,
-    args: list[str],
-    cwd: str,
-) -> tuple[str, str]:
-    """동기 방식으로 claude.exe 실행 — 스레드풀에서 호출됨."""
-    import subprocess
-    proc = subprocess.Popen(
-        args,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=cwd,
-    )
-    stdout_bytes, stderr_bytes = proc.communicate(input=prompt.encode("utf-8"))
-    raw = stdout_bytes.decode("utf-8", errors="replace")
-    if proc.returncode != 0 or not raw.strip():
-        agent_hint = next((a for a in args if a in ("pocke", "wiki", "ka", "fact", "plan")), "?")
-        print(f"[agent_runner] exit={proc.returncode} stdout_len={len(raw)} "
-              f"stderr={stderr_bytes.decode('utf-8', errors='replace')[:300]}")
-    return raw
-
-
-def _parse_output(raw: str) -> tuple[str, str]:
-    """stdout JSON 스트림에서 최종 결과와 스트림 텍스트 추출."""
-    final_result = ""
-    last_text = ""
-    stream_chunks: list[str] = []
-
-    for line in raw.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-            etype = event.get("type")
-
-            if etype == "result" and event.get("subtype") == "success":
-                final_result = event.get("result", "")
-
-            elif etype == "stream_event":
-                se = event.get("event", {})
-                if se.get("type") == "content_block_delta":
-                    delta = se.get("delta", {})
-                    if delta.get("type") == "text_delta":
-                        stream_chunks.append(delta.get("text", ""))
-
-            elif etype == "assistant":
-                for block in event.get("message", {}).get("content", []):
-                    if block.get("type") == "text":
-                        last_text = block.get("text", "")
-                    elif block.get("type") == "tool_use":
-                        tool_line = format_tool_use(block.get("name", ""), block.get("input", {}))
-                        if tool_line:
-                            stream_chunks.append(tool_line)
-        except Exception:
-            pass
-
-    return final_result or last_text, "".join(stream_chunks)
-
-
 async def run_agent(
     prompt: str,
     allowed_tools: list[str] | None = None,
@@ -109,9 +48,9 @@ async def run_agent(
     add_dirs: list[str] | None = None,
     cwd: str | None = None,
     max_turns: int | None = None,
-    on_progress: Callable[[str], Awaitable[None]] | None = None,
-    on_thinking: Callable[[str], Awaitable[None]] | None = None,
+    on_stream: Callable[[str], None] | None = None,
 ) -> tuple[str, str]:
+    """Claude CLI를 asyncio 서브프로세스로 실행. stdout을 실시간 라인 단위로 읽어 on_stream 호출."""
     args = [
         CLAUDE_BIN, "-p",
         "--verbose",
@@ -131,9 +70,61 @@ async def run_agent(
 
     work_dir = cwd or str(Path(__file__).parent.parent)
 
-    # 스레드풀에서 동기 subprocess 실행 (Windows asyncio 호환)
-    raw = await asyncio.to_thread(_run_agent_sync, prompt, args, work_dir)
-    return _parse_output(raw)  # (result, stream_text)
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=work_dir,
+    )
+
+    assert proc.stdin is not None
+    proc.stdin.write(prompt.encode("utf-8"))
+    await proc.stdin.drain()
+    proc.stdin.close()
+
+    final_result = ""
+    last_text = ""
+    stream_chunks: list[str] = []
+
+    assert proc.stdout is not None
+    async for raw_line in proc.stdout:
+        line = raw_line.decode("utf-8", errors="replace").strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+            etype = event.get("type")
+
+            if etype == "result" and event.get("subtype") == "success":
+                final_result = event.get("result", "")
+
+            elif etype == "stream_event":
+                se = event.get("event", {})
+                if se.get("type") == "content_block_delta":
+                    delta = se.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        chunk = delta.get("text", "")
+                        if chunk:
+                            stream_chunks.append(chunk)
+                            if on_stream:
+                                on_stream(chunk)
+
+            elif etype == "assistant":
+                for block in event.get("message", {}).get("content", []):
+                    if block.get("type") == "text":
+                        last_text = block.get("text", "")
+                    elif block.get("type") == "tool_use":
+                        tool_line = format_tool_use(block.get("name", ""), block.get("input", {}))
+                        if tool_line:
+                            stream_chunks.append(tool_line)
+                            if on_stream:
+                                on_stream(tool_line)
+        except Exception:
+            pass
+
+    await proc.wait()
+    return final_result or last_text, "".join(stream_chunks)
 
 
 def parse_json(text: str, fallback):

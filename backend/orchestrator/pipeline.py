@@ -118,9 +118,15 @@ async def _pipeline_inner(
     def emit(etype: str, **kwargs):
         send(make_ts_event(etype, **kwargs))
 
-    async def run_a(prompt: str, tools=None, no_tools=False, max_turns=None):
-        return await run_agent(prompt, allowed_tools=tools, no_tools=no_tools,
-                               add_dirs=[WIKI_DIR], max_turns=max_turns)
+    async def run_a(prompt: str, tools=None, no_tools=False, max_turns=None, agent_id: str | None = None):
+        def _on_stream(chunk: str):
+            if agent_id:
+                send({"type": "agent_stream", "agentId": agent_id, "chunk": chunk})
+        return await run_agent(
+            prompt, allowed_tools=tools, no_tools=no_tools,
+            add_dirs=[WIKI_DIR], max_turns=max_turns,
+            on_stream=_on_stream if agent_id else None,
+        )
 
     async def maybe_checkin(agent_id: str, summary: str, key_facts: list[str]):
         nonlocal ceo_notes
@@ -154,13 +160,9 @@ async def _pipeline_inner(
     send({"type": "agent_thinking", "agentId": "plan", "chunk": "태스크 타입 분류 중..."})
     plan_key = "plan_auto" if task_type == "auto" else "plan"
     plan_raw, plan_stream = await run_a(
-        build_prompt(plan_key, topic=topic, task_type=task_type), no_tools=True, max_turns=1
+        build_prompt(plan_key, topic=topic, task_type=task_type),
+        no_tools=True, max_turns=1, agent_id="plan",
     )
-
-    if plan_stream.strip():
-        send({"type": "agent_stream", "agentId": "plan", "chunk": plan_stream[:300]})
-    elif plan_raw.strip():
-        await _stream_chunked("plan", plan_raw, send)
 
     plan = parse_json(plan_raw, {
         "task_type": task_type, "objective": topic, "scope": "",
@@ -243,7 +245,7 @@ async def _pipeline_inner(
         try:
             return await run_a(
                 build_prompt("wiki", topic=topic, past_context=past_ctx),
-                no_tools=True, max_turns=1,
+                no_tools=True, max_turns=1, agent_id="wiki",
             )
         except Exception:
             return "", ""
@@ -252,7 +254,7 @@ async def _pipeline_inner(
         try:
             return await run_a(
                 build_prompt(config["pocke"], topic=topic, context=topic, keywords=topic),
-                tools=["WebSearch", "WebFetch"], max_turns=5,
+                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
             )
         except Exception:
             return "", ""
@@ -260,24 +262,14 @@ async def _pipeline_inner(
     wiki_result, pocke_result = await asyncio.gather(_wiki_task(), _pocke_task())
     stop_pocke()
 
-    # 위키 결과 처리
     wiki_raw, wiki_stream = wiki_result
     if wiki_raw.strip():
         wiki_context = wiki_raw
-    if wiki_stream.strip():
-        send({"type": "agent_stream", "agentId": "wiki", "chunk": wiki_stream[:300]})
-    elif wiki_raw.strip():
-        await _stream_chunked("wiki", wiki_raw, send)
     emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
 
-    # 포케 결과 처리
     pocke_raw, pocke_stream = pocke_result
     if pocke_raw.strip():
         pocke_output = pocke_raw
-    if pocke_stream.strip():
-        send({"type": "agent_stream", "agentId": "pocke", "chunk": pocke_stream[:300]})
-    elif pocke_raw.strip():
-        await _stream_chunked("pocke", pocke_raw, send)
     emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
 
     wiki = parse_json(wiki_context, {"context": "", "keywords": [], "wiki_pages_found": []})
@@ -314,15 +306,11 @@ async def _pipeline_inner(
             build_prompt(config["ka"], topic=topic,
                          facts=" / ".join(pocke.get("key_facts", [])),
                          ceo_notes=ceo_notes),
-            no_tools=True, max_turns=1,
+            no_tools=True, max_turns=1, agent_id="ka",
         )
         stop_ka()
         if ka_raw.strip():
             ka_output = ka_raw
-        if ka_stream.strip():
-            send({"type": "agent_stream", "agentId": "ka", "chunk": ka_stream[:300]})
-        elif ka_raw.strip():
-            await _stream_chunked("ka", ka_raw, send)
         await asyncio.sleep(1.2)
         emit("agent_done", agentId="ka",
              message=f"찾았다!!! 핵심 인사이트 잡음. {writer_agent_id}한테 넘길게.")
@@ -397,15 +385,11 @@ async def _pipeline_inner(
                              conclusion=ka.get("conclusion", ""),
                              facts="; ".join(live_pocke["key_facts"][:6]),
                              feedback="\n".join(_feedback_parts) + "\n" if _feedback_parts else ""),
-                no_tools=True, max_turns=2,
+                no_tools=True, max_turns=2, agent_id=writer_agent_id,
             )
             stop_writer()
             if writer_raw.strip():
                 draft = writer_raw
-            if writer_stream.strip():
-                send({"type": "agent_stream", "agentId": writer_agent_id, "chunk": writer_stream[:300]})
-            elif writer_raw.strip():
-                await _stream_chunked(writer_agent_id, writer_raw, send)
             await asyncio.sleep(1.8)
             done_msg = "구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께."
             emit("agent_done", agentId=writer_agent_id, message=done_msg)
@@ -436,13 +420,9 @@ async def _pipeline_inner(
                 build_prompt(fact_prompt_key,
                              report=draft[:3000],
                              sources=json.dumps(pocke.get("sources", [])[:5], ensure_ascii=False)),
-                no_tools=True, max_turns=1,
+                no_tools=True, max_turns=1, agent_id="fact",
             )
             stop_fact()
-            if fact_stream.strip():
-                send({"type": "agent_stream", "agentId": "fact", "chunk": fact_stream[:300]})
-            elif fact_raw.strip():
-                await _stream_chunked("fact", fact_raw, send)
             await asyncio.sleep(0.8)
 
             fact = parse_json(fact_raw, {
@@ -475,7 +455,7 @@ async def _pipeline_inner(
                         recheck_raw, _ = await run_a(
                             build_prompt("pocke_recheck", topic=topic,
                                          research_queries="\n".join(recheck_queries)),
-                            tools=["WebSearch", "WebFetch"], max_turns=3,
+                            tools=["WebSearch", "WebFetch"], max_turns=3, agent_id="pocke",
                         )
                         recheck = parse_json(recheck_raw, {"sources": [], "key_facts": []})
                         live_pocke["key_facts"] = list(dict.fromkeys(
@@ -524,12 +504,9 @@ async def _pipeline_inner(
         emit("agent_start", agentId="root", message="CI/CD 설계 중...")
         try:
             root_raw, root_stream = await run_a(
-                build_prompt("root", topic=topic, report=draft[:600]), no_tools=True, max_turns=1,
+                build_prompt("root", topic=topic, report=draft[:600]),
+                no_tools=True, max_turns=1, agent_id="root",
             )
-            if root_stream.strip():
-                send({"type": "agent_stream", "agentId": "root", "chunk": root_stream[:300]})
-            elif root_raw.strip():
-                await _stream_chunked("root", root_raw, send)
             if root_raw.strip():
                 draft += f"\n\n---\n\n{root_raw}"
             emit("agent_done", agentId="root", message="파이프라인 준비됐어요. 자동화 완료.")
@@ -573,9 +550,8 @@ async def _pipeline_inner(
         try:
             ping_raw, _ = await run_a(
                 build_prompt("ping", topic=topic, conclusion=ka.get("conclusion", "")[:400]),
-                no_tools=True, max_turns=1,
+                no_tools=True, max_turns=1, agent_id="ping",
             )
-            await _stream_chunked("ping", ping_raw, send)
             await asyncio.sleep(0.6)
             ping_data = parse_json(ping_raw, {"ideas": []})
             if ping_data.get("ideas"):
@@ -595,7 +571,7 @@ async def _pipeline_inner(
                 build_prompt("wiki_update", topic=topic,
                              conclusion=ka.get("conclusion", "")[:200],
                              insights=insights_str),
-                tools=["Read", "Write", "Edit", "Glob", "Grep"], max_turns=4,
+                tools=["Read", "Write", "Edit", "Glob", "Grep"], max_turns=4, agent_id="wiki",
             )
             # 저장된 파일 → pgvector DB에 임베딩 동기화
             synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
