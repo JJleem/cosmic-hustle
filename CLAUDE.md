@@ -4,7 +4,7 @@
 
 ---
 
-## V2.0 아키텍처 (진행 중)
+## V2.0 아키텍처
 
 ### 목표
 - 에이전트 오케스트레이션을 Python FastAPI 백엔드로 분리
@@ -16,45 +16,54 @@
 
 | 레이어 | 기술 | 역할 |
 |--------|------|------|
-| Frontend | Next.js 15 + TypeScript | UI, SSE 수신 (기존 유지) |
+| Frontend | Next.js 15 + TypeScript | UI, SSE 수신 |
 | Backend | Python 3.12 + FastAPI | 에이전트 오케스트레이션, SSE 발신 |
-| Orchestration | 직접 구현한 StateGraph (asyncio) | 추후 LangGraph로 교체 예정 |
+| Orchestration | 직접 구현한 asyncio 파이프라인 | 추후 LangGraph로 교체 예정 |
 | AI | Claude Code SDK (`@anthropic-ai/claude-code`) | Claude Code 구독 토큰 사용 |
-| DB | PostgreSQL 16 + pgvector | 세션·리포트·위키 (벡터 검색 포함) |
+| DB | PostgreSQL 16 + pgvector | 세션·리포트·위키 벡터 검색 |
+| Embeddings | sentence-transformers `all-MiniLM-L6-v2` | 384차원, 로컬, API키 불필요 |
 | Search | Claude WebSearch 툴 | 포케가 직접 WebSearch 호출 (Tavily 미사용) |
 | Hosting | AWS Lightsail (백엔드 + DB) | 프론트는 Vercel 유지 |
 
-### 디렉토리 구조 (V2.0)
+### 디렉토리 구조
 
 ```
 cosmic-hustle/
-├── web/                      # Next.js 프론트엔드
-│   ├── app/api/              # FastAPI 프록시 라우트 (thin wrapper) ✅
-│   ├── lib/backendProxy.ts   # proxySSE / proxyJson 헬퍼 ✅
-│   └── .env.local            # BACKEND_URL=http://localhost:8000
-├── backend/                  # Python FastAPI
-│   ├── main.py               # FastAPI 앱 진입점 ✅
-│   ├── run.py                # uvicorn 실행 진입점 ✅
-│   ├── requirements.txt      # 의존성 ✅
-│   ├── search.py             # (미사용) Tavily 웹 검색 헬퍼 — 포케가 WebSearch 직접 사용으로 대체
-│   ├── .env                  # DATABASE_URL (gitignore됨, 직접 생성)
-│   ├── .env.example          # 키 양식 참고용 ✅
-│   ├── alembic.ini           # Alembic 설정 ✅
-│   ├── alembic/              # 스키마 마이그레이션 ✅
-│   │   └── versions/001_initial.py
-│   ├── migrate_sqlite.py     # SQLite → PostgreSQL 데이터 이전 스크립트 ✅
-│   ├── orchestrator/         # 에이전트 파이프라인
-│   │   ├── pipeline.py       # 메인 오케스트레이션 ✅
-│   │   ├── agent_runner.py   # Claude CLI 서브프로세스 실행기 ✅
-│   │   └── prompts.py        # 프롬프트 템플릿 ✅
-│   ├── db/                   # PostgreSQL + SQLAlchemy
-│   │   ├── models.py         # 테이블 정의 ✅
-│   │   └── connection.py     # DB 연결 ✅
-│   └── routers/              # API 라우트
-│       ├── health.py         # GET /health ✅
-│       ├── research.py       # POST /research, SSE 스트리밍 ✅
-│       ├── wiki.py           # GET/POST /api/wiki ✅
-│       └── memos.py          # GET/POST/DELETE /api/memos ✅
+├── web/                          # Next.js 프론트엔드
+│   ├── app/api/                  # FastAPI 프록시 라우트 (thin wrapper) ✅
+│   ├── lib/backendProxy.ts       # proxySSE / proxyJson 헬퍼 ✅
+│   ├── components/
+│   │   ├── AgentImage.tsx        # talk_0~2 프레임 애니메이션 (working.png 미사용) ✅
+│   │   ├── ProjectWorkView.tsx   # 실시간 스트림 뷰 + 간트 차트 + 버전 diff ✅
+│   │   └── BottomAgentBar.tsx    # disabled 에이전트 즉시 숨김 ✅
+│   └── .env.local                # BACKEND_URL=http://localhost:8000
+├── backend/                      # Python FastAPI
+│   ├── main.py                   # FastAPI 앱 진입점 ✅
+│   ├── run.py                    # uvicorn 실행 진입점 ✅
+│   ├── requirements.txt          # 의존성 (pgvector, sentence-transformers 포함) ✅
+│   ├── .env                      # DATABASE_URL (gitignore됨, 직접 생성)
+│   ├── .env.example              # 키 양식 참고용 ✅
+│   ├── alembic.ini               # Alembic 설정 ✅
+│   ├── alembic/versions/
+│   │   ├── 001_initial.py        # 기본 스키마 ✅
+│   │   ├── 002_wiki_pgvector.py  # wiki_entries + vector 컬럼 ✅
+│   │   └── 003_report_versions.py# report_versions 테이블 ✅
+│   ├── migrate_sqlite.py         # SQLite → PostgreSQL 데이터 이전 스크립트 ✅
+│   ├── orchestrator/
+│   │   ├── pipeline.py           # 메인 오케스트레이션 ✅
+│   │   ├── agent_runner.py       # asyncio.create_subprocess_exec 실시간 스트리밍 ✅
+│   │   └── prompts.py            # 프롬프트 템플릿 ✅
+│   ├── db/
+│   │   ├── models.py             # 테이블 정의 (WikiEntry, ReportVersion 포함) ✅
+│   │   ├── connection.py         # DB 연결 ✅
+│   │   ├── embedder.py           # SentenceTransformer 싱글톤 ✅
+│   │   └── wiki_store.py         # semantic_search / upsert_wiki_entry ✅
+│   └── routers/
+│       ├── health.py             # GET /health ✅
+│       ├── research.py           # POST /research, SSE 스트리밍 ✅
+│       ├── wiki.py               # GET/POST /api/wiki (시맨틱 서치 포함) ✅
+│       ├── memos.py              # GET/POST/DELETE /api/memos ✅
+│       └── versions.py           # GET /api/sessions/{id}/versions ✅
 └── CLAUDE.md
 ```
 
@@ -62,37 +71,20 @@ cosmic-hustle/
 
 ```
 Phase 1 ✅  FastAPI 뼈대 구축
-  - FastAPI 프로젝트 구조, DB 모델, 라우터 전체 구현
-  - Claude CLI 서브프로세스 기반 agent_runner 구현
-
-Phase 2 🔶  DB 이전 (준비 완료, PostgreSQL 연결 대기)
-  - Alembic 마이그레이션 설정 완료 (alembic/versions/001_initial.py)
-  - SQLite → PostgreSQL 데이터 이전 스크립트 완료 (migrate_sqlite.py)
-  - 로컬: localhost:5432/cosmic_hustle
-  - 배포: AWS Lightsail RDS (나중에 .env DATABASE_URL만 교체)
-  - pgvector 추가는 Phase 5(LangGraph 전환) 때 같이 진행
-
+Phase 2 ✅  PostgreSQL + pgvector 전환
+  - pgvector는 brew로 설치 불가 (postgresql@16 지원 안 함) → 소스 빌드 필요
+  - wiki_entries 테이블에 Vector(384) 컬럼 추가
+  - sentence-transformers all-MiniLM-L6-v2 로컬 임베딩
 Phase 3 ✅  오케스트레이션 완성
-  - pipeline.py: asyncio.Queue 패턴, murmur 백그라운드 태스크, 타이핑 효과
-  - CEO 체크인 게이트: plan+fact (dev는 plan+root) 두 곳에서만 체크인
-  - 팩트 피드백 루프 최대 3회
-  - 리포트 스타일 3가지 프리셋 (standard/formal, detailed/analytical, brief/casual)
-
+  - 위키+포케 asyncio.gather 병렬 실행
+  - 팩트 피드백 루프 최대 3회 + 버전 히스토리 DB 저장
+  - 리포트 스타일 3가지 프리셋
 Phase 4 ✅  Next.js → FastAPI 프록시 연결
-  - web/lib/backendProxy.ts: proxySSE / proxyJson 헬퍼
-  - web/app/api/ 모든 라우트가 FastAPI(localhost:8000)로 프록시
-  - memos 라우터 추가 (FastAPI + Next.js 양쪽)
-
-Phase 4.5 ✅  포케 WebSearch 직접 사용으로 전환 (Tavily 제거)
-  - Tavily 의존성 완전 제거 (TAVILY_API_KEY 불필요)
-  - 포케: no_tools → WebSearch+WebFetch 허용, max_turns 1→5
-  - pocke_recheck: Tavily 수집 → WebSearch 직접 검색 (max_turns=3)
-  - 모든 pocke_* 프롬프트에서 {search_results} 주입 제거
-
+Phase 4.5 ✅  포케 WebSearch 직접 사용 (Tavily 제거)
+Phase 4.6 ✅  SSE 실시간 스트리밍
+  - agent_runner: asyncio.to_thread + communicate() → asyncio.create_subprocess_exec
+  - 청크 도착 즉시 on_stream 콜백 → agent_stream 이벤트 실시간 발송
 Phase 5 ❌  LangGraph + Anthropic API 전환 (향후)
-  - pipeline.py → LangGraph StateGraph로 교체
-  - Claude Code SDK → Anthropic API 직접 호출
-  - pgvector 위키 벡터 검색 추가
 ```
 
 ### 새 컴퓨터에서 시작하는 법
@@ -107,92 +99,137 @@ export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
 psql postgres -c "CREATE USER cosmic WITH PASSWORD 'cosmic1234';"
 psql postgres -c "CREATE DATABASE cosmic_hustle OWNER cosmic;"
 
-# 3. Python 의존성 설치 (venv)
-cd backend
+# 3. pgvector 소스 빌드 (brew pgvector는 postgresql@16 미지원)
+git clone --branch v0.8.2 https://github.com/pgvector/pgvector.git /tmp/pgvector
+cd /tmp/pgvector
+PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make
+PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make install
+# vector extension 활성화 (superuser 필요)
+psql -U $(whoami) -d cosmic_hustle -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+# 4. Python 의존성 설치 (venv)
+cd /path/to/cosmic-hustle/backend
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+# sentence-transformers 첫 실행 시 모델 자동 다운로드 (~90MB)
 
-# 4. .env 파일 생성
+# 5. .env 파일 생성
 echo "DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle" > .env
 
-# 5. DB 스키마 생성
+# 6. DB 스키마 생성
 .venv/bin/alembic upgrade head
 
-# 6. 백엔드 서버 실행
+# 7. 백엔드 서버 실행
 .venv/bin/python run.py   # → http://localhost:8000
 
-# 7. 기존 SQLite 데이터 이전 (선택)
+# 8. 기존 SQLite 데이터 이전 (선택)
 .venv/bin/python migrate_sqlite.py
 
-# 8. 프론트엔드 (별도 터미널)
-cd web && npm run dev   # → http://localhost:3000
+# 9. 프론트엔드 (별도 터미널)
+cd web && npm install && npm run dev   # → http://localhost:3000
 # web/.env.local 에 BACKEND_URL=http://localhost:8000 있어야 함
 ```
 
-### 현재 상태 (2026-05-11)
+### 현재 상태 (2026-05-12)
 
 ```
 ✅ 로컬 환경 완전 세팅 (macOS, PostgreSQL 16, Python 3.12 venv)
 ✅ 엔드투엔드 파이프라인 동작 확인
 ✅ Tavily 제거 — 포케 WebSearch 직접 사용
-✅ 에러 복구 강화 — WikiViewer/MemoBoard 로드 실패 시 에러+재시도 버튼
-✅ 프로젝트 설정 화면 모달 → 전체 페이지 전환
 
 ✅ 고도화 #1: 에이전트 말하기 애니메이션
   - AgentImage.tsx: active 상태에서 talk_0→1→2→1→0 프레임 싸이클 (110ms/frame)
-  - 입 닫힘 후 200~500ms 랜덤 pause로 자연스럽게
+  - base 이미지를 default.png 유지 (working.png 미사용 — talk 프레임이 완전히 덮음)
+  - 초기 랜덤 딜레이 제거 → 즉시 시작, working.png flash 없음
 
 ✅ 고도화 #2: Draft Report 실시간 표시
-  - page.tsx: liveDraft state 추가, draft_report 이벤트 수신 시 set
+  - liveDraft state, draft_report 이벤트 수신 시 초안 표시
   - ProjectWorkView: 스트림 없을 때 초안 내용 + "팩트 검토 중" 표시
 
 ✅ 고도화 #3: 에이전트 소요 시간 표시
-  - 썸네일 스트립: 완료된 에이전트 ✓ → 소요시간 (예: 45s)
-  - 스트림 로그 헤더: 현재 에이전트 live 경과 타이머 (1초 갱신)
+  - 썸네일 스트립: 완료된 에이전트 소요시간 (예: 45s)
+  - 스트림 로그 헤더: live 경과 타이머
 
 ✅ 고도화 #4: agent_thinking 시각화
-  - pipeline.py: 플랜/위키/포케/카/팩트 agent_start 직후 thinking 힌트 발송
-  - ProjectWorkView: 스트림 비어있을 때 💭 힌트 텍스트 표시
+  - pipeline.py: agent_start 직후 thinking 힌트 발송
+  - ProjectWorkView: 스트림 비어있을 때 💭 힌트 표시
+
+✅ 고도화 #5: pgvector 위키 시맨틱 서치
+  - WikiEntry 테이블에 Vector(384) 컬럼 (pgvector)
+  - sentence-transformers all-MiniLM-L6-v2 로컬 임베딩
+  - 플랜 실행 중 semantic_search 백그라운드 실행 → 위키에 과거 컨텍스트 주입
+  - wiki/search?q= 엔드포인트가 시맨틱 서치로 동작
+
+✅ 고도화 #6: 위키+포케 병렬 실행
+  - asyncio.gather(_wiki_task(), _pocke_task()) 동시 실행
+  - ProjectWorkView: lastStreamedId 추적 → 가장 최근 스트림 에이전트 자동 표시
+
+✅ 고도화 #7: SSE 실시간 스트리밍
+  - agent_runner: asyncio.create_subprocess_exec + 라인 단위 실시간 읽기
+  - on_stream 콜백으로 청크 도착 즉시 agent_stream 이벤트 발송
+  - post-hoc batch send 완전 제거
+
+✅ 고도화 #8: 리포트 버전 관리 + diff 뷰
+  - report_versions 테이블: 팩트 루프 회차별 저장
+  - ProjectWorkView: v1/v2/v3 탭 + 이전 버전 대비 추가 줄 green 하이라이트
+  - ReportBoard: 버전 히스토리 패널
+
+✅ 고도화 #9: 타임라인 간트 뷰
+  - SVG 고정 너비(560px) 수치 좌표 계산 (calc() 제거)
+  - 위키+포케 병렬 바가 같은 x에서 시작하는 것 확인 가능
+
+✅ 에러 처리 강화
+  - backendProxy: 503 (연결 불가) / 502 (백엔드 오류) 구분
+  - 에러 배너: 루트 아바타 talk 애니메이션 + 타이핑 효과 (28ms/글자)
+  - 에러 후 3초 뒤 idle 복귀 (진행 중 프로젝트 UI 초기화)
+  - disabled 에이전트: opacity 0 + transition none (0.1초 flash 제거)
 
 [ ] Phase 5: LangGraph + Anthropic API 전환 (추후)
 
-[ ] 고도화 로드맵 (우선순위 순)
-  #1 pgvector 위키 벡터 검색
-      - DB에 wiki 임베딩 컬럼 추가 (pgvector)
-      - 포케/카 실행 전 의미론적으로 유사한 과거 위키 자동 주입
-      - 위키가 쌓일수록 리서치 퀄리티가 올라가는 구조 (서비스 핵심 가치)
-  #2 에이전트 expression 시스템
-      - expression prop 이미 AgentImage에 존재, 이미지 파일만 추가하면 됨
-      - 팩트 부장 수정 요청 시 critical, 포케 검색 결과 多 시 surprised 등
-      - pipeline.py → agent_expression 이벤트 발송, page.tsx에서 수신
-  #3 병렬 실행 확대
-      - 카 분석 완료 후 writer(오버/버즈/픽셀)와 루트 준비를 overlap
-      - asyncio.gather 패턴 확대, 전체 소요시간 20~30% 단축 예상
-  #4 리포트 버전 관리
-      - 팩트 피드백 루프 각 회차(초안→수정1→수정2→최종) DB 저장
-      - 프론트에서 diff 뷰로 "팩트 부장이 뭘 고쳤는지" 확인 가능
-  #5 타임라인 간트 뷰
-      - agentDurations 데이터 이미 있음, SVG 간트 차트로 시각화
-      - 파이프라인 병목 구간 한눈에 파악
+[ ] 남은 고도화 로드맵
+  - 병렬 실행 확대: 카 완료 후 writer+루트 준비 overlap
+  - 에이전트 expression 시스템: expression 이미지 파일 추가
+  - AWS Lightsail 배포 세팅
 ```
 
 ### API 계약 (Frontend ↔ Backend)
 
 ```
-POST   /api/research                      # 리서치 시작 (SSE 스트림 반환)
-GET    /api/research/{id}/events?since=N  # 이벤트 재생
-POST   /api/research/{id}/respond         # CEO 체크인 응답
-POST   /api/research/{id}/cancel          # 취소
-GET    /api/reports                       # 리포트 목록
-GET    /api/reports/{id}                  # 리포트 상세
-PATCH  /api/reports/{id}                  # 리포트 수정 (topic, content)
+POST   /api/research                        # 리서치 시작 (SSE 스트림 반환)
+GET    /api/research/{id}/events?since=N    # 이벤트 재생
+POST   /api/research/{id}/respond           # CEO 체크인 응답
+POST   /api/research/{id}/cancel            # 취소
+GET    /api/reports                         # 리포트 목록
+GET    /api/reports/{id}                    # 리포트 상세
+PATCH  /api/reports/{id}                    # 리포트 수정
 DELETE /api/reports/{id}
-GET    /api/sessions                      # 세션 목록
-GET    /api/memos                         # 메모 목록
-POST   /api/memos                         # 메모 생성
-DELETE /api/memos/{id}                    # 메모 삭제
-GET    /api/wiki/search                   # 위키 검색
-POST   /api/wiki/ingest                   # 위키 저장
+GET    /api/sessions                        # 세션 목록
+GET    /api/sessions/{id}/versions          # 리포트 버전 히스토리
+GET    /api/memos                           # 메모 목록
+POST   /api/memos                           # 메모 생성
+DELETE /api/memos/{id}                      # 메모 삭제
+GET    /api/wiki/search?q=                  # 위키 시맨틱 서치
+POST   /api/wiki/ingest                     # 위키 저장 + 임베딩
+```
+
+### SSE 이벤트 타입
+
+```
+session_start   — 세션 시작 { sessionId }
+agent_start     — 에이전트 시작 { agentId, message, ts }
+agent_done      — 에이전트 완료 { agentId, message, ts }
+agent_stream    — 실시간 텍스트 청크 { agentId, chunk }
+agent_message   — 말풍선 메시지 { agentId, message }
+agent_thinking  — thinking 힌트 { agentId, chunk }
+agent_expression— 표정 변경 { agentId, expression }
+draft_report    — 초안 완성 { agentId, topic, content }
+report_version  — 버전 저장 { version, content, prevFeedback }
+report          — 최종 리포트 { reportId, agentId, topic, content }
+ping_ideas      — 핑 아이디어 { ideas }
+clarify_request — 명확화 요청 { questions }
+ceo_checkin     — CEO 체크인 { agentId, summary, keyFacts }
+complete        — 완료 { reportId, topic }
+error           — 오류 { message }
 ```
 
 ---
@@ -228,14 +265,16 @@ POST   /api/wiki/ingest                   # 위키 저장
 
 ```
 CEO 입력
-  → 플랜(요구사항·태스크타입 결정) → [CEO 확인 요청]
-  → 위키(과거 지식)
-  → 포케(WebSearch 직접 검색 → 팩트 추출, max_turns=5) → [CEO 체크인]
+  → 플랜(요구사항·태스크타입 결정) + [시맨틱 서치 백그라운드 시작]
+  → [CEO 확인 요청]
+  → 위키(과거 지식) ──┐ asyncio.gather 병렬
+  → 포케(WebSearch)  ──┘
+  → [CEO 체크인]
   → 카(분석)
   → run | over | pixel | buzz (태스크타입에 따라 1명 담당)
-  → 팩트(검토) → 피드백 루프 (최대 3회)
+  → 팩트(검토) → 피드백 루프 (최대 3회, 각 버전 DB 저장)
   → 루트(배포 계획, dev 태스크만)
-  → 핑 + 위키 동시(아이디어 캡처 + 위키 업데이트)
+  → 핑 + 위키 동시(아이디어 캡처 + 위키 업데이트 + pgvector 동기화)
   → CEO
 ```
 
@@ -257,7 +296,7 @@ CEO 입력
 
 - 에이전트 간 전체 컨텍스트 전달 X, 구조화된 JSON 핸드오프만
 - maxTurns 제한 (팩트 부장 1턴, 포케 5턴, 포케 재조사 3턴)
-- 병렬 실행 가능한 구간 묶기 (핑 + 위키 동시)
+- 병렬 실행 가능한 구간 묶기 (위키+포케 동시, 핑+위키업데이트 동시)
 
 ## 세션 지속성 구조
 
