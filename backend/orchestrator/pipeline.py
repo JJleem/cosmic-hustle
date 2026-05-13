@@ -119,12 +119,19 @@ async def _pipeline_inner(
         send(make_ts_event(etype, **kwargs))
 
     async def run_a(prompt: str, tools=None, no_tools=False, max_turns=None, agent_id: str | None = None):
+        from pathlib import Path as _Path
         def _on_stream(chunk: str):
             if agent_id:
                 send({"type": "agent_stream", "agentId": agent_id, "chunk": chunk})
+        agent_dir = None
+        if agent_id:
+            _d = _Path(__file__).parent.parent / "agents" / agent_id
+            if _d.exists():
+                agent_dir = str(_d)
         return await run_agent(
             prompt, allowed_tools=tools, no_tools=no_tools,
             add_dirs=[WIKI_DIR], max_turns=max_turns,
+            cwd=agent_dir,
             on_stream=_on_stream if agent_id else None,
         )
 
