@@ -111,20 +111,20 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
 
   return (
     <div className="relative w-full h-full overflow-hidden">
-      {/* 베이스 레이어 */}
-      <div className="absolute inset-0" style={bg(bottom)} />
-      {/* 상태 전환 크로스페이드 레이어 */}
-      <div
-        className="absolute inset-0"
-        style={{ ...bg(top), opacity: topVisible ? 1 : 0, transition: "opacity 350ms ease" }}
-      />
-      {/* 말하기 오버레이 — 크로스페이드 없이 즉시 교체 */}
-      {talkFrame && (
+      {talkFrame ? (
+        /* talk 중에는 talk 프레임만 — 다른 레이어 전부 숨김 */
         <div className="absolute inset-0" style={bg(`${base}${talkFrame}.png`)} />
-      )}
-      {/* 눈 깜빡임 오버레이 — talk 위에 올라옴 */}
-      {blinkFrame && (
-        <div className="absolute inset-0" style={bg(`${base}${blinkFrame}.png`)} />
+      ) : (
+        <>
+          <div className="absolute inset-0" style={bg(bottom)} />
+          <div
+            className="absolute inset-0"
+            style={{ ...bg(top), opacity: topVisible ? 1 : 0, transition: "opacity 350ms ease" }}
+          />
+          {blinkFrame && (
+            <div className="absolute inset-0" style={bg(`${base}${blinkFrame}.png`)} />
+          )}
+        </>
       )}
     </div>
   );
