@@ -300,15 +300,14 @@ async def _pipeline_inner(
                  f' "conclusion": "{topic}에 대한 분석 결과입니다.", "data_quality": "medium"}}')
     emit("agent_start", agentId="ka", message="패턴 분석 시작. 데이터 하나만 더...")
     send({"type": "agent_thinking", "agentId": "ka", "chunk": "팩트 간 연결고리 탐색 중..."})
+    stop_ka = _start_murmurs("ka", MURMURS["ka"], send, interval_sec=10.0)
     try:
-        stop_ka = _start_murmurs("ka", MURMURS["ka"], send, interval_sec=10.0)
         ka_raw, ka_stream = await run_a(
             build_prompt(config["ka"], topic=topic,
                          facts=" / ".join(pocke.get("key_facts", [])),
                          ceo_notes=ceo_notes),
             no_tools=True, max_turns=1, agent_id="ka",
         )
-        stop_ka()
         if ka_raw.strip():
             ka_output = ka_raw
         await asyncio.sleep(1.2)
@@ -316,6 +315,8 @@ async def _pipeline_inner(
              message=f"찾았다!!! 핵심 인사이트 잡음. {writer_agent_id}한테 넘길게.")
     except Exception:
         emit("agent_done", agentId="ka", message="분석 완료.")
+    finally:
+        stop_ka()
 
     ka = parse_json(ka_output, {"insights": [], "conclusion": "", "data_quality": "medium"})
 
@@ -369,8 +370,8 @@ async def _pipeline_inner(
         if attempt == 2:
             send({"type": "agent_expression", "agentId": writer_agent_id, "expression": None})
 
+        stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), send, interval_sec=11.0)
         try:
-            stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), send, interval_sec=11.0)
             _feedback_parts = []
             if style_note:
                 _feedback_parts.append(style_note)
@@ -387,7 +388,6 @@ async def _pipeline_inner(
                              feedback="\n".join(_feedback_parts) + "\n" if _feedback_parts else ""),
                 no_tools=True, max_turns=2, agent_id=writer_agent_id,
             )
-            stop_writer()
             if writer_raw.strip():
                 draft = writer_raw
             await asyncio.sleep(1.8)
@@ -396,6 +396,8 @@ async def _pipeline_inner(
         except Exception:
             draft = f"# {topic}\n\n{ka.get('conclusion', '')}\n\n" + "\n".join(live_pocke["key_facts"])
             emit("agent_done", agentId=writer_agent_id, message="초안 완성. 팩트 부장님께.")
+        finally:
+            stop_writer()
 
         # 버전 저장 + 이벤트 발송
         draft_versions.append((attempt, draft, fact_feedback))
@@ -413,16 +415,15 @@ async def _pipeline_inner(
 
         emit("agent_start", agentId="fact", message="...")
         send({"type": "agent_thinking", "agentId": "fact", "chunk": "초안 분석 중..."})
+        stop_fact = _start_murmurs("fact", MURMURS["fact"], send, interval_sec=10.0)
         try:
-            stop_fact = _start_murmurs("fact", MURMURS["fact"], send, interval_sec=10.0)
             fact_prompt_key = "fact_dev" if is_dev_task else "fact"
             fact_raw, fact_stream = await run_a(
                 build_prompt(fact_prompt_key,
                              report=draft[:3000],
-                             sources=json.dumps(pocke.get("sources", [])[:5], ensure_ascii=False)),
+                             sources=json.dumps(live_pocke["sources"][:5], ensure_ascii=False)),
                 no_tools=True, max_turns=1, agent_id="fact",
             )
-            stop_fact()
             await asyncio.sleep(0.8)
 
             fact = parse_json(fact_raw, {
@@ -483,6 +484,8 @@ async def _pipeline_inner(
             fact_passed = True
             emit("agent_done", agentId="fact", message="검토 완료.")
             break
+        finally:
+            stop_fact()
 
     if not fact_passed:
         send({"type": "agent_expression", "agentId": "fact", "expression": None})

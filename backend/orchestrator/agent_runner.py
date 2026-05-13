@@ -88,43 +88,55 @@ async def run_agent(
     stream_chunks: list[str] = []
 
     assert proc.stdout is not None
-    async for raw_line in proc.stdout:
-        line = raw_line.decode("utf-8", errors="replace").strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-            etype = event.get("type")
+    try:
+        async with asyncio.timeout(600):
+            async for raw_line in proc.stdout:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    etype = event.get("type")
 
-            if etype == "result" and event.get("subtype") == "success":
-                final_result = event.get("result", "")
+                    if etype == "result" and event.get("subtype") == "success":
+                        final_result = event.get("result", "") or ""
 
-            elif etype == "stream_event":
-                se = event.get("event", {})
-                if se.get("type") == "content_block_delta":
-                    delta = se.get("delta", {})
-                    if delta.get("type") == "text_delta":
-                        chunk = delta.get("text", "")
-                        if chunk:
-                            stream_chunks.append(chunk)
-                            if on_stream:
-                                on_stream(chunk)
+                    elif etype == "stream_event":
+                        se = event.get("event", {})
+                        if se.get("type") == "content_block_delta":
+                            delta = se.get("delta", {})
+                            if delta.get("type") == "text_delta":
+                                chunk = delta.get("text", "")
+                                if chunk:
+                                    stream_chunks.append(chunk)
+                                    if on_stream:
+                                        on_stream(chunk)
 
-            elif etype == "assistant":
-                for block in event.get("message", {}).get("content", []):
-                    if block.get("type") == "text":
-                        last_text = block.get("text", "")
-                    elif block.get("type") == "tool_use":
-                        tool_line = format_tool_use(block.get("name", ""), block.get("input", {}))
-                        if tool_line:
-                            stream_chunks.append(tool_line)
-                            if on_stream:
-                                on_stream(tool_line)
-        except Exception:
-            pass
+                    elif etype == "assistant":
+                        # 한 메시지 내 텍스트 블록 전부 합산 (마지막 블록만 유지하면 중간 JSON 유실)
+                        texts = [
+                            b.get("text", "")
+                            for b in event.get("message", {}).get("content", [])
+                            if b.get("type") == "text"
+                        ]
+                        combined = "\n".join(t for t in texts if t)
+                        if combined:
+                            last_text = combined
+                        for block in event.get("message", {}).get("content", []):
+                            if block.get("type") == "tool_use":
+                                tool_line = format_tool_use(block.get("name", ""), block.get("input", {}))
+                                if tool_line:
+                                    stream_chunks.append(tool_line)
+                                    if on_stream:
+                                        on_stream(tool_line)
+                except Exception:
+                    pass
+    except TimeoutError:
+        proc.kill()
 
     await proc.wait()
-    return final_result or last_text, "".join(stream_chunks)
+    # stream_chunks는 tool-use 에이전트의 신뢰할 수 있는 fallback
+    return final_result or last_text or "".join(stream_chunks), "".join(stream_chunks)
 
 
 def parse_json(text: str, fallback):
