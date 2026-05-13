@@ -276,6 +276,31 @@ async def _pipeline_inner(
     pocke = parse_json(pocke_output, {"sources": [], "key_facts": []})
     pocke_has_data = bool(pocke.get("key_facts"))
 
+    # ── 포케 데이터 0개면 1회 재시도 ────────────────────────────────────────
+    if not pocke_has_data and not _is_cancelled(session_id):
+        send({"type": "agent_message", "agentId": "pocke",
+              "message": "어?! 볼따구가 비었잖아... 검색어 바꿔서 다시 긁어올게요! 🐹"})
+        await asyncio.sleep(0.7)
+        emit("agent_start", agentId="pocke", message="각도 바꿔서 재시도 중...")
+        stop_pocke_retry = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
+        try:
+            retry_raw, _ = await run_a(
+                build_prompt("pocke_retry", topic=topic),
+                tools=["WebSearch", "WebFetch"], max_turns=3, agent_id="pocke",
+            )
+            retry_data = parse_json(retry_raw, {"sources": [], "key_facts": []})
+            if retry_data.get("key_facts"):
+                pocke = retry_data
+                pocke_has_data = True
+                emit("agent_done", agentId="pocke",
+                     message=f"이번엔 {len(pocke.get('key_facts', []))}개 챙겼어요! 볼따구 빵빵!")
+            else:
+                emit("agent_done", agentId="pocke", message="최선을 다했어요. 이대로 넘어갈게요.")
+        except Exception:
+            emit("agent_done", agentId="pocke", message="재시도 완료.")
+        finally:
+            stop_pocke_retry()
+
     wiki_checkin_lines = [
         *([f"맥락: {wiki['context'][:100]}"] if wiki.get("context") else []),
         *[f"🔑 키워드: {k}" for k in wiki.get("keywords", [])[:3]],
