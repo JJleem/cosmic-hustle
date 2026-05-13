@@ -149,6 +149,8 @@ type Props = {
   agent: AgentDef;
   agentStatus: AgentStatus;
   lastMessage: string;
+  liveStream?: string;
+  thinkingHint?: string;
   agentSettings: AllAgentSettings;
   pingIdeas: Idea[];
   onNewProject?: () => void;
@@ -156,7 +158,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function AgentFullScreen({ agent, agentStatus, lastMessage, agentSettings, pingIdeas, onNewProject, onStartProject, onClose }: Props) {
+export default function AgentFullScreen({ agent, agentStatus, lastMessage, liveStream, thinkingHint, agentSettings, pingIdeas, onNewProject, onStartProject, onClose }: Props) {
   const dept = DEPT_MAP[agent.departmentId];
   const isActive = agentStatus === "active";
 
@@ -233,6 +235,28 @@ export default function AgentFullScreen({ agent, agentStatus, lastMessage, agent
               {statusLabel[agentStatus]}
             </div>
           </div>
+
+          {/* LIVE 현황 */}
+          {isActive && (liveStream || thinkingHint) && (
+            <div className="rounded-xl p-3 space-y-2" style={{ background: `${agent.color}08`, border: `1px solid ${agent.color}25` }}>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: agent.color }} />
+                <p className="text-[9px] tracking-widest uppercase font-bold" style={{ color: agent.color }}>작업 중</p>
+              </div>
+              {thinkingHint && (
+                <p className="text-[10px] text-slate-500 italic leading-relaxed">
+                  💭 {thinkingHint.slice(0, 100)}{thinkingHint.length > 100 ? "..." : ""}
+                </p>
+              )}
+              {liveStream && (
+                <div className="max-h-24 overflow-y-auto scrollbar-hide rounded-lg p-2" style={{ background: "rgba(0,0,0,0.3)" }}>
+                  <p className="text-[9px] text-slate-400 leading-relaxed break-all" style={{ fontFamily: "monospace" }}>
+                    {liveStream.slice(-400)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {[
             { label: "행성", content: agent.planet },

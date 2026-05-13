@@ -75,16 +75,69 @@ body {
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-3px); }
 }
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
 @keyframes glow-breathe {
   0%, 100% { box-shadow: 0 0 8px 1px var(--glow-color, rgba(139,92,246,0.3)); }
   50%       { box-shadow: 0 0 18px 3px var(--glow-color, rgba(139,92,246,0.5)); }
 }
+@keyframes holo-scan {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 0.6; }
+  100% { transform: translateY(2000px); opacity: 0; }
+}
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  92%       { opacity: 1; }
+  93%       { opacity: 0.7; }
+  94%       { opacity: 1; }
+  97%       { opacity: 0.85; }
+  98%       { opacity: 1; }
+}
 
 /* ── Utility classes ────────────────────────────────────── */
-.animate-fadeIn   { animation: fadeIn   0.3s ease-out forwards; }
-.animate-shimmer  { animation: shimmer  2.4s linear infinite; }
-.animate-float    { animation: float    3s ease-in-out infinite; }
-.animate-twinkle  { animation: twinkle  3s ease-in-out infinite; }
+.animate-fadeIn      { animation: fadeIn      0.3s ease-out forwards; }
+.animate-shimmer     { animation: shimmer     2.4s linear infinite; }
+.animate-float       { animation: float       3s ease-in-out infinite; }
+.animate-float-slow  { animation: float-slow  6s ease-in-out infinite; }
+.animate-twinkle     { animation: twinkle     3s ease-in-out infinite; }
+.animate-flicker     { animation: flicker     6s ease-in-out infinite; }
+
+/* 홀로그램 스캔 패널 */
+.holo-panel {
+  position: relative;
+  overflow: hidden;
+}
+.holo-panel::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 60px;
+  background: linear-gradient(to bottom, transparent, rgba(140,160,255,0.035), transparent);
+  pointer-events: none;
+  animation: holo-scan 12s ease-in-out infinite;
+  z-index: 1;
+}
+
+/* 하단 플로어 글로우 */
+.floor-glow {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 80px;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(99,60,220,0.06) 0%, transparent 100%);
+}
+
+/* 콘솔 상단 글로우 */
+.console-glow-top {
+  box-shadow:
+    0 -24px 60px rgba(99,60,220,0.08),
+    0 -1px 0 rgba(139,92,246,0.15),
+    inset 0 1px 0 rgba(139,92,246,0.08);
+}
 
 /* Shimmer gradient — active loading states */
 .shimmer-bar {

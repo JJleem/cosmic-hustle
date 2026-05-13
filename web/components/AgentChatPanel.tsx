@@ -23,6 +23,8 @@ type Props = {
   agent: AgentDef;
   agentStatus: AgentStatus;
   agentExpression: string | null;
+  liveStream?: string;
+  thinkingHint?: string;
   onClose: () => void;
 };
 
@@ -48,7 +50,7 @@ const REFLECT_QUESTIONS = [
   "앞으로 어떤 일 하고 싶어요?",
 ];
 
-export default function AgentChatPanel({ agent, agentStatus, agentExpression, onClose }: Props) {
+export default function AgentChatPanel({ agent, agentStatus, agentExpression, liveStream, thinkingHint, onClose }: Props) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -165,6 +167,33 @@ export default function AgentChatPanel({ agent, agentStatus, agentExpression, on
           <X size={12} />
         </button>
       </div>
+
+      {/* ── LIVE 작업 현황 (active 상태일 때만) ── */}
+      {agentStatus === "active" && (liveStream || thinkingHint) && (
+        <div className="shrink-0 px-4 py-3 border-b" style={{ borderColor: `${agent.color}25` }}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: agent.color }} />
+            <span className="text-[9px] tracking-[0.18em] uppercase font-bold" style={{ color: agent.color }}>
+              작업 중
+            </span>
+          </div>
+          {thinkingHint && (
+            <p className="text-[10px] text-slate-500 italic mb-2 leading-relaxed">
+              💭 {thinkingHint.slice(0, 120)}{thinkingHint.length > 120 ? "..." : ""}
+            </p>
+          )}
+          {liveStream && (
+            <div
+              className="rounded-xl p-2.5 overflow-y-auto max-h-28 scrollbar-hide"
+              style={{ background: `${agent.color}08`, border: `1px solid ${agent.color}20` }}
+            >
+              <p className="text-[10px] text-slate-400 leading-relaxed break-all" style={{ fontFamily: "monospace" }}>
+                {liveStream.slice(-500)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 최근 작업 ── */}
       <div

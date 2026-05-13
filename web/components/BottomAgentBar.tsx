@@ -17,17 +17,17 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
   return (
     <>
       <div
-        className="shrink-0 px-6 py-3"
+        className="shrink-0 px-6 py-3 console-glow-top"
         style={{
           position: "relative",
           zIndex: 20,
-          borderTop: "1px solid rgba(255,255,255,0.055)",
-          background: "rgba(7,9,26,0.82)",
-          backdropFilter: "blur(28px)",
-          WebkitBackdropFilter: "blur(28px)",
+          borderTop: "1px solid rgba(99,60,220,0.12)",
+          background: "linear-gradient(to top, rgba(5,7,20,0.97) 0%, rgba(7,9,26,0.92) 100%)",
+          backdropFilter: "blur(32px)",
+          WebkitBackdropFilter: "blur(32px)",
         }}
       >
-        <div className="flex items-end justify-center gap-5">
+        <div className="flex items-end justify-center gap-3">
           {AGENTS.map((agent) => {
             const status = agentStatus[agent.id] ?? "idle";
             const isActive = status === "active";
@@ -76,21 +76,16 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                 <div className="relative">
                   {isActive && (
                     <>
-                      <div
-                        className="absolute inset-0 rounded-full animate-ping"
-                        style={{ background: agent.glow, transform: "scale(1.5)", opacity: 0.2 }}
-                      />
-                      <div
-                        className="absolute inset-0 rounded-full"
-                        style={{ boxShadow: `0 0 20px 4px ${agent.glow}`, borderRadius: "50%" }}
-                      />
+                      <div className="absolute inset-0 rounded-full animate-ping" style={{ background: agent.glow, transform: "scale(1.6)", opacity: 0.15 }} />
+                      <div className="absolute inset-0 rounded-full animate-ping" style={{ background: agent.glow, transform: "scale(1.25)", opacity: 0.2, animationDelay: "0.4s" }} />
+                      <div className="absolute inset-0 rounded-full" style={{ boxShadow: `0 0 18px 4px ${agent.glow}`, borderRadius: "50%" }} />
                     </>
                   )}
                   <div
                     className="relative rounded-full overflow-hidden group-hover:scale-110"
                     style={{
-                      width: 48,
-                      height: 48,
+                      width: 40,
+                      height: 40,
                       outline: isActive
                         ? `2px solid ${agent.color}`
                         : isDone
@@ -108,7 +103,7 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                         : "none",
                     }}
                   >
-                    <AgentImage defaultSrc={agent.image} size={48} status={status} expression={agentExpression[agent.id] ?? null} />
+                    <AgentImage defaultSrc={agent.image} size={40} status={status} expression={agentExpression[agent.id] ?? null} />
                     {isDone && (
                       <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.42)" }}>
                         <span className="text-[10px]" style={{ color: agent.color }}>✓</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { BookOpen, Settings, X } from "lucide-react";
 import AgentImage from "@/components/AgentImage";
 import BottomAgentBar from "@/components/BottomAgentBar";
 import AgentFullScreen from "@/components/AgentFullScreen";
@@ -9,7 +10,6 @@ import OfficePage from "@/components/OfficePage";
 import ProjectWorkView from "@/components/ProjectWorkView";
 import { Idea } from "@/components/AgentWorkspace";
 import ProjectSetupModal, { ProjectConfig } from "@/components/ProjectSetupModal";
-import OngoingProject from "@/components/dashboard/OngoingProject";
 import ReportBoard, { Report } from "@/components/dashboard/ReportBoard";
 import HistoryIdeaPanel from "@/components/dashboard/HistoryIdeaPanel";
 import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
@@ -19,7 +19,7 @@ import CeoCheckin, { type CeoCheckinState } from "@/components/CeoCheckin";
 import { AGENTS, PIPELINE, AgentStatus, AgentDef } from "@/lib/agents";
 import { AllAgentSettings, loadAgentSettings } from "@/lib/agentSettings";
 
-type PageTab = "dashboard" | "office" | "settings";
+type DrawerTab = "reports" | "history" | "memos";
 
 type AgentStates = Record<string, AgentStatus>;
 
@@ -37,7 +37,9 @@ const initStatus = (): AgentStates =>
 const uid = () => crypto.randomUUID();
 
 export default function Home() {
-  const [tab, setTab] = useState<PageTab>("dashboard");
+  const [sideDrawerOpen, setSideDrawerOpen] = useState(false);
+  const [sideDrawerTab, setSideDrawerTab] = useState<DrawerTab>("reports");
+  const [showSettings, setShowSettings] = useState(false);
   const [agentSettings, setAgentSettings] = useState<AllAgentSettings>({});
 
   useEffect(() => {
@@ -331,7 +333,6 @@ export default function Home() {
     setPhase("working");
     setCurrentMode(config.mode);
     setTopic(config.topic);
-    if (config.mode !== "full") setTab("office");
     // 활성화된 에이전트만 waiting, 나머지는 idle 유지
     const enabledIds = new Set(config.agentConfigs.filter((c) => c.enabled).map((c) => c.agentId));
     setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "disabled"])));
@@ -588,56 +589,76 @@ export default function Home() {
   return (
     <div className="h-dvh cosmic-bg text-white flex flex-col overflow-hidden" style={{ position: "relative" }}>
       <StarField />
+
       {/* 헤더 */}
-      <header className="shrink-0 px-8 py-3.5 flex items-center gap-4" style={{ position: "relative", zIndex: 10, borderBottom: "1px solid rgba(255,255,255,0.055)", background: "rgba(7,9,26,0.7)", backdropFilter: "blur(20px)" }}>
+      <header className="shrink-0 px-6 py-2.5 flex items-center gap-3" style={{ position: "relative", zIndex: 10, borderBottom: "1px solid rgba(99,60,220,0.12)", background: "rgba(5,7,20,0.88)", backdropFilter: "blur(24px)", boxShadow: "0 1px 0 rgba(139,92,246,0.07), 0 4px 24px rgba(0,0,0,0.4)" }}>
         <div className="flex items-center gap-2.5">
-          <span className="text-base animate-float" style={{ display: "inline-block" }}>🪐</span>
+          <span className="text-base animate-float-slow" style={{ display: "inline-block" }}>🪐</span>
           <h1
-            className="text-sm font-bold tracking-[0.28em]"
-            style={{ background: "linear-gradient(90deg, #c4b5fd 0%, #818cf8 50%, #93c5fd 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
+            className="text-sm font-bold tracking-[0.32em] animate-flicker"
+            style={{ background: "linear-gradient(90deg, #ddd6fe 0%, #a5b4fc 40%, #c4b5fd 70%, #93c5fd 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", textShadow: "0 0 20px rgba(139,92,246,0.3)" }}
           >
             COSMIC HUSTLE
           </h1>
         </div>
 
-        {/* 탭 */}
-        <div className="flex items-center gap-0.5 ml-6 p-1 rounded-full" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-          {(["dashboard", "office", "settings"] as PageTab[]).map((t) => (
+        {/* 진행 중 임무 */}
+        {phase === "working" && topic && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs min-w-0" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)" }}>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-emerald-300/80 truncate font-medium" style={{ maxWidth: "min(180px, 18vw)" }}>{topic}</span>
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="px-4 py-1.5 rounded-full text-xs font-medium tracking-wide transition-all duration-200"
-              style={
-                tab === t
-                  ? { background: "rgba(99,102,241,0.18)", color: "#a5b4fc", boxShadow: "0 0 12px rgba(99,102,241,0.15), inset 0 1px 0 rgba(255,255,255,0.08)", border: "1px solid rgba(99,102,241,0.25)" }
-                  : { color: "#64748b", border: "1px solid transparent" }
-              }
+              onClick={stopResearch}
+              className="ml-0.5 w-4 h-4 flex items-center justify-center rounded text-slate-500 hover:text-red-400 transition-colors text-[10px] shrink-0"
+              title="중단"
             >
-              {t === "dashboard" ? "대시보드" : t === "office" ? "사무실" : "설정"}
+              ■
             </button>
-          ))}
-        </div>
+          </div>
+        )}
 
-        <div className="ml-auto flex items-center gap-2.5">
-          {phase === "working" && topic && (
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.18)" }}>
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-emerald-300/80 max-w-48 truncate font-medium">{topic}</span>
-            </div>
-          )}
-          {phase === "done" && (
-            <button
-              onClick={reset}
-              className="text-xs text-slate-500 hover:text-slate-300 rounded-full px-4 py-1.5 transition-all duration-200"
-              style={{ border: "1px solid rgba(255,255,255,0.07)" }}
-            >
-              초기화
-            </button>
-          )}
+        {phase === "done" && (
+          <button
+            onClick={reset}
+            className="text-xs text-slate-500 hover:text-slate-300 rounded-full px-3 py-1.5 transition-all"
+            style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            초기화
+          </button>
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          {/* 사령부 서랍 */}
+          <button
+            onClick={() => setSideDrawerOpen((o) => !o)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all"
+            style={sideDrawerOpen
+              ? { background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)" }
+              : { color: "#475569", border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <BookOpen size={12} />
+            <span>사령부</span>
+            {reports.length > 0 && (
+              <span className="text-[9px] px-1.5 rounded-full" style={{ background: "rgba(99,102,241,0.2)", color: "#818cf8" }}>
+                {reports.length}
+              </span>
+            )}
+          </button>
+
+          {/* 설정 */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="w-8 h-8 flex items-center justify-center rounded-full transition-colors text-slate-500 hover:text-slate-300"
+            style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <Settings size={13} />
+          </button>
+
+          {/* 임무 배정 */}
           <button
             onClick={() => { if (phase !== "working") setShowSetup(true); }}
             disabled={phase === "working"}
-            className="text-xs font-semibold px-5 py-1.5 rounded-full transition-all duration-200"
+            className="text-xs font-semibold px-4 py-1.5 rounded-full transition-all"
             style={phase !== "working" ? {
               background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)",
               color: "#c4b5fd",
@@ -649,14 +670,14 @@ export default function Home() {
               border: "1px solid rgba(255,255,255,0.05)",
             }}
           >
-            새 프로젝트 +
+            임무 배정 +
           </button>
         </div>
       </header>
 
       {/* 이전 세션 resume 배너 */}
       {resumeInfo && (
-        <div className="shrink-0 px-8 py-2 flex items-center gap-3 text-xs animate-fadeIn" style={{ background: "rgba(251,191,36,0.04)", borderBottom: "1px solid rgba(251,191,36,0.12)" }}>
+        <div className="shrink-0 px-6 py-2 flex items-center gap-3 text-xs animate-fadeIn" style={{ background: "rgba(251,191,36,0.04)", borderBottom: "1px solid rgba(251,191,36,0.12)" }}>
           <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
           <span className="text-slate-500">이전 세션 발견:</span>
           <span className="text-slate-300 font-medium max-w-xs truncate">{resumeInfo.topic}</span>
@@ -667,23 +688,16 @@ export default function Home() {
           >
             이어서 보기
           </button>
-          <button
-            onClick={() => { setResumeInfo(null); localStorage.removeItem("cosmicHustleSession"); }}
-            className="text-slate-600 hover:text-slate-400 transition-colors"
-          >
-            ✕
-          </button>
+          <button onClick={() => { setResumeInfo(null); localStorage.removeItem("cosmicHustleSession"); }} className="text-slate-600 hover:text-slate-400 transition-colors">✕</button>
         </div>
       )}
 
       {/* 에러 배너 */}
       {researchError && (
         <div className="shrink-0 px-6 py-3 flex items-center gap-3 animate-fadeIn" style={{ background: "rgba(239,68,68,0.06)", borderBottom: "1px solid rgba(239,68,68,0.18)" }}>
-          {/* 루트 아바타 — talk 애니메이션 */}
-          <div className="shrink-0 rounded-full overflow-hidden" style={{ width: 36, height: 36, border: "1.5px solid rgba(239,68,68,0.35)" }}>
-            <AgentImage defaultSrc="/characters/root/default.png" size={36} status="active" />
+          <div className="shrink-0 rounded-full overflow-hidden" style={{ width: 32, height: 32, border: "1.5px solid rgba(239,68,68,0.35)" }}>
+            <AgentImage defaultSrc="/characters/root/default.png" size={32} status="active" />
           </div>
-          {/* 타이핑 텍스트 */}
           <div className="flex-1 min-w-0 text-xs">
             <span className="text-red-300 font-medium">{errorTyped}</span>
             {errorTyped.length < (researchError.detail ? `${researchError.title} — ${researchError.detail}` : researchError.title).length && (
@@ -694,70 +708,110 @@ export default function Home() {
         </div>
       )}
 
-      {/* 컨텐츠 */}
+      {/* 메인 컨텐츠 */}
       <div className="flex-1 overflow-hidden" style={{ position: "relative", zIndex: 10 }}>
-        {tab === "dashboard" && (
-          <div className="h-full flex gap-4 p-5">
-            {/* ── 왼쪽 aside ── */}
-            <div className="w-56 md:w-64 xl:w-72 shrink-0 flex flex-col gap-4 min-h-0">
-              <div className="glass-panel rounded-2xl p-5 overflow-hidden min-h-0" style={{ flex: "5" }}>
-                <OngoingProject topic={topic} phase={phase} agentStatus={agentStatus} handoffs={handoffs} lastMessage={lastMessage} onStop={stopResearch} />
-              </div>
-              <div className="glass-panel rounded-2xl p-5 overflow-hidden min-h-0" style={{ flex: "4" }}>
-                <HistoryIdeaPanel
-                  projects={history}
-                  ideas={pingIdeas}
-                  reports={reports}
-                  agentDurations={agentDurations}
-                  onIdeaSelect={(t) => { setInitialTopic(t); setShowSetup(true); }}
-                />
-              </div>
-              <div className="glass-panel rounded-2xl p-5 overflow-hidden min-h-0" style={{ flex: "3" }}>
-                <MemoWikiPanel />
-              </div>
-            </div>
 
-            {/* ── 메인: 보고현황 ── */}
-            <div className="flex-1 glass-panel rounded-2xl p-5 overflow-hidden">
+        {/* 오피스 — 항상 표시 */}
+        <OfficePage
+          agentStatus={agentStatus}
+          agentExpression={agentExpression}
+          speaking={speaking}
+          lastMessage={lastMessage}
+          pingIdeas={pingIdeas}
+          lastTopic={topic}
+          chatFeed={chatFeed}
+          onPlanClick={phase !== "working" ? () => setShowSetup(true) : undefined}
+          streamLog={streamLog}
+          thinkingHint={thinkingHint}
+        />
+
+        {/* 서랍 스크림 */}
+        {sideDrawerOpen && (
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(2px)", zIndex: 25 }}
+            onClick={() => setSideDrawerOpen(false)}
+          />
+        )}
+
+        {/* 사령부 서랍 */}
+        <div
+          className="absolute top-0 right-0 bottom-0 flex flex-col"
+          style={{
+            width: 440,
+            zIndex: 30,
+            background: "rgba(6,8,22,0.98)",
+            backdropFilter: "blur(32px)",
+            borderLeft: "1px solid rgba(255,255,255,0.07)",
+            transform: sideDrawerOpen ? "translateX(0)" : "translateX(100%)",
+            transition: "transform 0.32s cubic-bezier(0.4,0,0.2,1)",
+            boxShadow: sideDrawerOpen ? "-20px 0 60px rgba(0,0,0,0.5)" : "none",
+          }}
+        >
+          {/* 서랍 헤더 */}
+          <div className="shrink-0 px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center gap-1 flex-1">
+              {(["reports", "history", "memos"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSideDrawerTab(t)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                  style={sideDrawerTab === t
+                    ? { background: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }
+                    : { color: "#475569", border: "1px solid transparent" }}
+                >
+                  {t === "reports" ? "리포트" : t === "history" ? "히스토리" : "메모"}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setSideDrawerOpen(false)}
+              className="w-7 h-7 flex items-center justify-center rounded-full text-slate-600 hover:text-slate-300 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* 서랍 콘텐츠 */}
+          <div className="flex-1 overflow-hidden p-4">
+            {sideDrawerTab === "reports" && (
               <ReportBoard
                 reports={reports}
                 drafts={reportDrafts}
                 onDelete={(id) => setReports((prev) => prev.filter((r) => r.id !== id))}
                 onUpdate={(updated) => setReports((prev) => prev.map((r) => r.id === updated.id ? updated : r))}
-                onDeepDive={(topic) => { setInitialTopic(topic); setShowSetup(true); }}
+                onDeepDive={(t) => { setInitialTopic(t); setSideDrawerOpen(false); setShowSetup(true); }}
               />
-            </div>
+            )}
+            {sideDrawerTab === "history" && (
+              <HistoryIdeaPanel
+                projects={history}
+                ideas={pingIdeas}
+                reports={reports}
+                agentDurations={agentDurations}
+                onIdeaSelect={(t) => { setInitialTopic(t); setSideDrawerOpen(false); setShowSetup(true); }}
+              />
+            )}
+            {sideDrawerTab === "memos" && <MemoWikiPanel />}
           </div>
-        )}
+        </div>
 
-        {tab === "office" && (
-          <OfficePage
-            agentStatus={agentStatus}
-            agentExpression={agentExpression}
-            speaking={speaking}
-            lastMessage={lastMessage}
-            pingIdeas={pingIdeas}
-            lastTopic={topic}
-            chatFeed={chatFeed}
-          />
-        )}
-
-        {tab === "settings" && (
-          <AgentSettingsPage
-            settings={agentSettings}
-            onChange={setAgentSettings}
-          />
-        )}
       </div>
 
-      {/* 하단 에이전트 바 — 사무실에선 말풍선 숨김 */}
+      {/* 하단 에이전트 바 */}
       <BottomAgentBar
         agentStatus={agentStatus}
         agentExpression={agentExpression}
         speaking={speaking}
         lastMessage={lastMessage}
-        hideBubbles={tab === "office"}
-        onAgentClick={setSelectedAgent}
+        hideBubbles={false}
+        onAgentClick={(agent) => {
+          if (agent.id === "plan" && phase !== "working") {
+            setShowSetup(true);
+          } else {
+            setSelectedAgent(agent);
+          }
+        }}
       />
 
       {selectedAgent && (
@@ -765,10 +819,12 @@ export default function Home() {
           agent={selectedAgent}
           agentStatus={agentStatus[selectedAgent.id] ?? "idle"}
           lastMessage={lastMessage[selectedAgent.id] ?? ""}
+          liveStream={streamLog[selectedAgent.id]}
+          thinkingHint={thinkingHint[selectedAgent.id]}
           agentSettings={agentSettings}
           pingIdeas={pingIdeas}
           onNewProject={() => { setSelectedAgent(null); setShowSetup(true); }}
-          onStartProject={(topic) => { setInitialTopic(topic); setSelectedAgent(null); setShowSetup(true); }}
+          onStartProject={(t) => { setInitialTopic(t); setSelectedAgent(null); setShowSetup(true); }}
           onClose={() => setSelectedAgent(null)}
         />
       )}
@@ -803,6 +859,27 @@ export default function Home() {
           sessionStartTs={sessionStartTsRef.current}
           onStop={stopResearch}
         />
+      )}
+
+      {/* 설정 오버레이 */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)" }} onClick={() => setShowSettings(false)}>
+          <div
+            className="relative flex flex-col m-auto"
+            style={{ width: 760, maxHeight: "90vh", background: "rgba(7,9,26,0.99)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="shrink-0 px-6 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <span className="text-sm font-semibold text-slate-300">에이전트 설정</span>
+              <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <AgentSettingsPage settings={agentSettings} onChange={setAgentSettings} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

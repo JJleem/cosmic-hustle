@@ -13,6 +13,9 @@ type Props = {
   speaking: Record<string, boolean>;
   lastMessage: Record<string, string>;
   onBack: () => void;
+  onPlanClick?: () => void;
+  streamLog?: Record<string, string>;
+  thinkingHint?: Record<string, string>;
 };
 
 const RANK_ORDER = ["부장", "차장", "과장", "대리", "사원", "인턴"];
@@ -147,7 +150,7 @@ function AgentCard({
 }
 
 export default function DeptRoom({
-  dept, agentStatus, agentExpression, speaking, lastMessage, onBack,
+  dept, agentStatus, agentExpression, speaking, lastMessage, onBack, onPlanClick, streamLog = {}, thinkingHint = {},
 }: Props) {
   const [selected, setSelected] = useState<AgentDef | null>(null);
 
@@ -158,7 +161,7 @@ export default function DeptRoom({
   const N       = team.length;
 
   // Width for org tree (member row + connector)
-  const treeWidth = Math.min(N * 148, 580);
+  const treeWidth = Math.min(N * 120, 480);
 
   return (
     <motion.div
@@ -210,7 +213,7 @@ export default function DeptRoom({
       </motion.button>
 
       {/* Main layout */}
-      <div className="absolute inset-0 flex flex-col z-10" style={{ padding: "52px 28px 20px" }}>
+      <div className="absolute inset-0 flex flex-col z-10" style={{ padding: "44px 20px 16px" }}>
 
         {/* ── 부서 소개 헤더 ── */}
         <motion.div
@@ -260,17 +263,36 @@ export default function DeptRoom({
 
           {/* 리더 */}
           {leader && (
-            <AgentCard
-              agent={leader}
-              status={agentStatus[leader.id] ?? "idle"}
-              expression={agentExpression[leader.id] ?? null}
-              isSpeaking={speaking[leader.id] ?? false}
-              msg={lastMessage[leader.id] ?? ""}
-              size={110}
-              delay={0.42}
-              onClick={() => setSelected(leader)}
-              color={dept.color}
-            />
+            <div className="relative">
+              <AgentCard
+                agent={leader}
+                status={agentStatus[leader.id] ?? "idle"}
+                expression={agentExpression[leader.id] ?? null}
+                isSpeaking={speaking[leader.id] ?? false}
+                msg={lastMessage[leader.id] ?? ""}
+                size={88}
+                delay={0.42}
+                onClick={() => {
+                  if (leader.id === "plan" && onPlanClick) {
+                    onPlanClick();
+                  } else {
+                    setSelected(leader);
+                  }
+                }}
+                color={dept.color}
+              />
+              {leader.id === "plan" && onPlanClick && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.6 }}
+                  className="absolute -top-2 -right-2 text-[9px] font-bold px-2 py-0.5 rounded-full pointer-events-none"
+                  style={{ background: "rgba(109,40,217,0.7)", border: "1px solid rgba(139,92,246,0.5)", color: "#c4b5fd" }}
+                >
+                  임무 배정
+                </motion.div>
+              )}
+            </div>
           )}
 
           {/* 연결선 (리더 → 팀) */}
@@ -329,7 +351,7 @@ export default function DeptRoom({
                     expression={agentExpression[agent.id] ?? null}
                     isSpeaking={speaking[agent.id] ?? false}
                     msg={lastMessage[agent.id] ?? ""}
-                    size={82}
+                    size={66}
                     delay={0.5 + i * 0.07}
                     onClick={() => setSelected(agent)}
                     color={dept.color}
@@ -348,6 +370,8 @@ export default function DeptRoom({
             agent={selected}
             agentStatus={agentStatus[selected.id] ?? "idle"}
             agentExpression={agentExpression[selected.id] ?? null}
+            liveStream={streamLog[selected.id]}
+            thinkingHint={thinkingHint[selected.id]}
             onClose={() => setSelected(null)}
           />
         )}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AGENTS, AGENT_MAP, PIPELINE, DEPARTMENTS, AgentStatus, AgentDef } from "@/lib/agents";
+import { AGENTS, AGENT_MAP, PIPELINE, DEPARTMENTS, AgentStatus } from "@/lib/agents";
 import AgentImage from "./AgentImage";
 import HologramPartition from "./HologramPartition";
 import DeptRoom from "./DeptRoom";
@@ -19,10 +19,13 @@ type Props = {
   pingIdeas: Idea[];
   lastTopic: string;
   chatFeed?: ChatEntry[];
+  onPlanClick?: () => void;
+  streamLog?: Record<string, string>;
+  thinkingHint?: Record<string, string>;
 };
 
 export default function OfficePage({
-  agentStatus, agentExpression, speaking, lastMessage, pingIdeas, lastTopic, chatFeed = [],
+  agentStatus, agentExpression, speaking, lastMessage, pingIdeas, lastTopic, chatFeed = [], onPlanClick, streamLog = {}, thinkingHint = {},
 }: Props) {
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [hoveredDeptId, setHoveredDeptId]   = useState<string | null>(null);
@@ -43,23 +46,23 @@ export default function OfficePage({
   const isAnyActive = Object.values(agentStatus).some(s => s === "active");
 
   return (
-    <div className="h-full flex gap-4 px-6 py-5">
+    <div className="h-full flex gap-3 px-4 py-3">
 
       {/* 메인 영역 */}
       <div className="flex-1 flex flex-col gap-3 min-w-0">
 
       {/* 파이프라인 플로우 */}
-      <div className="shrink-0 rounded-2xl px-5 py-3" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-        {lastTopic && (
-          <p className="text-[9px] text-slate-600 truncate mb-2">
-            <span className="text-slate-700 font-bold uppercase tracking-widest mr-2">진행 중</span>
-            {lastTopic}
-          </p>
-        )}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-          <span className="text-[9px] text-slate-700 tracking-[0.2em] uppercase mr-2 font-bold whitespace-nowrap shrink-0">
-            Pipeline
-          </span>
+      <div className="holo-panel shrink-0 rounded-2xl px-4 py-2.5" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.055)" }}>
+        <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide">
+          {lastTopic ? (
+            <div className="flex items-center gap-1.5 shrink-0 mr-4 pl-1">
+              <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: isAnyActive ? "#34d399" : "#334155", boxShadow: isAnyActive ? "0 0 6px #34d399" : "none", animation: isAnyActive ? "pulse 1.5s infinite" : "none" }} />
+              <span className="text-[9px] font-medium text-slate-500 max-w-[120px] truncate">{lastTopic}</span>
+              <div className="w-px h-3 mx-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+            </div>
+          ) : (
+            <span className="text-[9px] text-slate-700 tracking-[0.2em] uppercase mr-4 font-bold whitespace-nowrap shrink-0 pl-1">Pipeline</span>
+          )}
           {PIPELINE.map((stage, i) => {
             const isActive = i === activeStageIdx;
             const isDone   = activeStageIdx !== -1 && i < activeStageIdx;
@@ -69,37 +72,52 @@ export default function OfficePage({
               ?? stage.ids[0];
             const agent    = AGENT_MAP[activeId];
             return (
-              <div key={i} className="flex items-center gap-1 shrink-0">
+              <div key={i} className="flex items-center gap-0 shrink-0">
                 {i > 0 && (
-                  <div className="relative w-6 flex items-center justify-center">
+                  <div className="relative w-3 flex items-center justify-center mx-0.5">
                     <div className="w-full h-px transition-all duration-700"
-                      style={{ background: isDone ? `${agent.color}50` : isActive ? `${agent.color}30` : "rgba(255,255,255,0.04)" }} />
+                      style={{ background: isDone ? `${agent.color}45` : isActive ? `${agent.color}30` : "rgba(255,255,255,0.05)" }} />
                     {isActive && (
                       <motion.div
-                        className="absolute w-1.5 h-1.5 rounded-full"
-                        style={{ background: agent.color, boxShadow: `0 0 6px ${agent.glow}` }}
+                        className="absolute w-1 h-1 rounded-full"
+                        style={{ background: agent.color, boxShadow: `0 0 4px ${agent.glow}` }}
                         animate={{ x: ["-100%", "100%"] }}
-                        transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+                        transition={{ repeat: Infinity, duration: 1.0, ease: "linear" }}
                       />
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold tracking-wide transition-all duration-500"
+                <div
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full transition-all duration-500"
                   style={
                     isActive
-                      ? { background: `${agent.color}18`, border: `1px solid ${agent.color}55`, color: agent.color, boxShadow: `0 0 10px ${agent.glow}` }
+                      ? { background: `${agent.color}18`, border: `1px solid ${agent.color}50`, boxShadow: `0 0 12px ${agent.glow}` }
                       : isDone
-                      ? { background: `${agent.color}08`, border: `1px solid ${agent.color}20`, color: `${agent.color}60` }
-                      : { background: "transparent", border: "1px solid rgba(255,255,255,0.05)", color: "#2a3347" }
+                      ? { background: `${agent.color}08`, border: `1px solid ${agent.color}18` }
+                      : { background: "transparent", border: "1px solid rgba(255,255,255,0.04)" }
                   }
                 >
-                  {isDone && <span className="mr-0.5">✓</span>}
-                  {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full mr-1 animate-pulse shrink-0" style={{ background: agent.color, display: "inline-block" }} />
-                  )}
-                  {stage.ids.length > 1
-                    ? stage.ids.map((id) => AGENT_MAP[id].name).join("+")
-                    : agent.name}
+                  {/* 에이전트 미니 아바타 */}
+                  <div
+                    className="rounded-full overflow-hidden shrink-0"
+                    style={{
+                      width: 12, height: 12,
+                      outline: isActive ? `1px solid ${agent.color}80` : isDone ? `1px solid ${agent.color}30` : "1px solid rgba(255,255,255,0.08)",
+                      outlineOffset: 1,
+                      opacity: isDone ? 0.6 : isActive ? 1 : 0.3,
+                    }}
+                  >
+                    <Image src={agent.image} alt={agent.name} width={12} height={12} className="object-cover" />
+                  </div>
+                  <span
+                    className="text-[8px] font-semibold whitespace-nowrap"
+                    style={{ color: isActive ? agent.color : isDone ? `${agent.color}55` : "#2a3347" }}
+                  >
+                    {isDone && "✓ "}
+                    {stage.ids.length > 1
+                      ? stage.ids.map((id) => AGENT_MAP[id].name).join("+")
+                      : agent.name}
+                  </span>
                 </div>
               </div>
             );
@@ -201,6 +219,17 @@ export default function OfficePage({
                     )}
                   </div>
 
+                  {/* 바닥 글로우 */}
+                  <div
+                    className="absolute bottom-0 inset-x-0 pointer-events-none"
+                    style={{
+                      height: 60,
+                      background: `linear-gradient(to top, ${dept.color}12 0%, transparent 100%)`,
+                      opacity: isHovered ? 1 : 0.5,
+                      transition: "opacity 0.3s",
+                    }}
+                  />
+
                   {/* 에이전트 미니 아바타 */}
                   <div className="absolute bottom-0 inset-x-0 flex items-end justify-center gap-3 flex-wrap px-3 pb-4">
                     {members.map((agent, i) => {
@@ -216,30 +245,27 @@ export default function OfficePage({
                           <div
                             className="rounded-full overflow-hidden"
                             style={{
-                              width: 44,
-                              height: 44,
+                              width: 36,
+                              height: 36,
                               outline: isActive
                                 ? `2px solid ${agent.color}`
                                 : `1.5px solid ${agent.color}30`,
                               outlineOffset: 2,
                               boxShadow: isActive
-                                ? `0 0 14px ${agent.glow}`
+                                ? `0 0 12px ${agent.glow}`
                                 : `0 4px 12px rgba(0,0,0,0.6)`,
                             }}
                           >
                             <AgentImage
                               defaultSrc={agent.image}
-                              size={44}
+                              size={36}
                               status={status}
                               expression={agentExpression[agent.id] ?? null}
                             />
                           </div>
                           <span
-                            className="text-[8px] font-medium px-1.5 py-0.5 rounded-md backdrop-blur-sm"
-                            style={{
-                              color: isActive ? agent.color : "#cbd5e1",
-                              background: "#0b0f1e99",
-                            }}
+                            className="text-[7px] font-medium px-1 py-0.5 rounded-md backdrop-blur-sm"
+                            style={{ color: isActive ? agent.color : "#94a3b8", background: "#0b0f1e99" }}
                           >
                             {agent.name}
                           </span>
@@ -285,6 +311,9 @@ export default function OfficePage({
                 speaking={speaking}
                 lastMessage={lastMessage}
                 onBack={() => setSelectedDeptId(null)}
+                onPlanClick={onPlanClick}
+                streamLog={streamLog}
+                thinkingHint={thinkingHint}
               />
             );
           })()}
@@ -294,8 +323,8 @@ export default function OfficePage({
       </div>{/* end 메인 영역 */}
 
       {/* ── 라이브 액티비티 피드 ── */}
-      <div className="w-64 shrink-0 flex flex-col rounded-2xl overflow-hidden"
-        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="holo-panel w-52 shrink-0 flex flex-col rounded-2xl overflow-hidden"
+        style={{ background: "rgba(5,7,20,0.7)", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 0 40px rgba(99,60,220,0.06), inset 0 1px 0 rgba(255,255,255,0.04)" }}>
 
         {/* 헤더 */}
         <div className="shrink-0 px-4 py-3 flex items-center gap-2"
