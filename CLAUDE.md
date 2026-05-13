@@ -140,6 +140,7 @@ cd web && npm install && npm run dev   # → http://localhost:3000
   - holo-scan 애니메이션, floor-glow, console-glow-top
   - 파이프라인 바 에이전트 미니 아바타
   - 13인치 반응형 개선
+- 에이전트 11명 사원증 이미지 제작 완료 (`web/public/id/{agentId}.png`) — 실버 ID카드 프레임 3D 일러스트
 
 ### 남은 로드맵
 
@@ -150,10 +151,11 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 [ ] 배경 리서치 — CEO가 다른 일 하는 동안 실행, 완료 알림
 
 새 기능
+[ ] 사원증 UI — /public/id/ PNG 활용, 사이드 드로어 팀원 탭 or 호버 팝업 (누끼 작업 필요)
+[ ] 에이전트 expression 시스템 (sad/err/happy 이미지 파일 추가)
 [ ] 리포트 → Notion/슬랙 내보내기
 [ ] 정기 리서치 예약 — cron 기반 ("매주 월요일 경쟁사 동향")
 [ ] 멀티 프로젝트 동시 실행 (현재 1개만)
-[ ] 에이전트 expression 시스템 (sad/err/happy 이미지 파일 추가)
 
 장기
 [ ] AWS Lightsail 배포
