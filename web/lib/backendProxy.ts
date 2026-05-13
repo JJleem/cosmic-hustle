@@ -26,9 +26,14 @@ export async function proxyJson(request: Request, backendPath: string): Promise<
 
 /** Proxy an SSE endpoint — streams the body directly to the client. */
 export async function proxySSE(request: Request, backendPath: string): Promise<Response> {
-  const upstream = await proxyTo(request, backendPath);
+  let upstream: Response;
+  try {
+    upstream = await proxyTo(request, backendPath);
+  } catch {
+    return Response.json({ error: "backend_unavailable" }, { status: 503 });
+  }
   if (!upstream.ok || !upstream.body) {
-    return Response.json({ error: "backend unavailable" }, { status: 502 });
+    return Response.json({ error: "backend_error", upstreamStatus: upstream.status }, { status: 502 });
   }
   return new Response(upstream.body, {
     headers: {

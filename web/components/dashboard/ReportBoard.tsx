@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table } from "lucide-react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { AGENT_MAP } from "@/lib/agents";
@@ -118,6 +118,15 @@ function triggerDownload(blob: Blob, filename: string) {
   const a = document.createElement("a");
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
+}
+
+async function downloadExport(report: Report, format: "pdf" | "excel") {
+  const res = await fetch(`/api/reports/${report.id}/export?format=${format}`);
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const ext = format === "pdf" ? "pdf" : "xlsx";
+  const name = report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_").slice(0, 50);
+  triggerDownload(blob, `${name}.${ext}`);
 }
 
 const WRITER_AGENTS = [
@@ -699,6 +708,17 @@ export default function ReportBoard({ reports, drafts = {}, onDelete, onUpdate, 
                           <FileCode size={11} />.html 파일
                         </button>
                       )}
+
+                      <div className="my-1 mx-3 border-t border-white/5" />
+                      <p className="text-[9px] text-slate-700 px-3 py-1.5 tracking-wider uppercase font-bold">변환</p>
+                      <button onClick={() => { void downloadExport(selected, "pdf"); setShowExport(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        <FileText size={11} />.pdf 파일
+                      </button>
+                      <button onClick={() => { void downloadExport(selected, "excel"); setShowExport(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] text-slate-400 hover:text-white hover:bg-white/5 transition-all text-left">
+                        <Table size={11} />.xlsx 엑셀
+                      </button>
 
                       <div className="my-1 mx-3 border-t border-white/5" />
                       <button onClick={() => { printReport(selected); setShowExport(false); }}

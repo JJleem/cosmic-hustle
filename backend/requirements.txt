@@ -9,3 +9,6 @@ alembic
 httpx
 pgvector
 sentence-transformers
+weasyprint
+openpyxl
+markdown
