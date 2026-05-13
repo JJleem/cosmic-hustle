@@ -121,27 +121,44 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 - 엔드투엔드 파이프라인 동작 (plan → wiki+pocke 병렬 → ka → writer → fact 루프 → ping+wiki)
 - SSE 실시간 스트리밍 (청크 단위)
 - 포케 WebSearch 직접 사용 (Tavily 제거)
-- 포케 0-data 버그 수정 (assistant 텍스트 블록 전부 합산)
-- 포케 0-data 시 자동 1회 재시도 (pocke_retry 프롬프트)
-- 오버 무한 작업 버그 수정 (murmur stop() finally 블록 이동)
-- AgentImage talk 애니메이션: talk 중 다른 레이어 완전 차단 (talk_0~2만 표시)
-- 에이전트별 CLAUDE.md + cwd 격리 (토큰 절감 — 각 에이전트가 자기 CLAUDE.md만 읽음)
-- 프로젝트 생성 UI → 채팅 pre-flight 교체 (플랜 task_type 확인 → writer 스타일 질문 → 모드 선택)
+- 포케 0-data 버그 수정 + 자동 1회 재시도
+- 오버 무한 작업 버그 수정
+- AgentImage talk 애니메이션: talk_0~2만 표시, 다른 레이어 차단
+- 에이전트별 CLAUDE.md + cwd 격리 (토큰 절감)
+- 프로젝트 생성 UI → 채팅 pre-flight 교체 (플랜 → writer 순차 질문)
 - PDF/Excel export (`GET /api/reports/{id}/export?format=pdf|excel`)
 - 리포트 버전 관리 + diff 뷰 (v1/v2/v3 탭)
 - 타임라인 간트 뷰
 - pgvector 위키 시맨틱 서치
 - 에러 처리 강화 (503/502 구분, 에러 배너 타이핑 효과)
+- **UI 전면 개편 완료** — 오피스 퍼스트 레이아웃
+  - 탭 제거, 오피스가 기본 화면
+  - 대시보드 → 우측 사령부 서랍 (리포트/히스토리/메모)
+  - 헤더 슬림화 (임무 상태 + 사령부/설정/임무배정 버튼)
+  - 플랜 클릭 → 임무 배정 모달 직접 연결
+  - 에이전트 클릭 시 live 스트림 + thinking 힌트 표시
+  - holo-scan 애니메이션, floor-glow, console-glow-top
+  - 파이프라인 바 에이전트 미니 아바타
+  - 13인치 반응형 개선
 
 ### 남은 로드맵
 
 ```
+파이프라인 개선
+[ ] 병렬 실행 확대 — 카 완료 후 writer 준비 overlap (현재 순차)
+[ ] 태스크 중단·재시작 — 런 사원 dev 태스크용
+[ ] 배경 리서치 — CEO가 다른 일 하는 동안 실행, 완료 알림
+
+새 기능
+[ ] 리포트 → Notion/슬랙 내보내기
+[ ] 정기 리서치 예약 — cron 기반 ("매주 월요일 경쟁사 동향")
+[ ] 멀티 프로젝트 동시 실행 (현재 1개만)
 [ ] 에이전트 expression 시스템 (sad/err/happy 이미지 파일 추가)
-[ ] UI 전면 개편 (세계관 살리는 방향)
-[ ] 병렬 실행 확대 (카 완료 후 writer 준비 overlap)
-[ ] 태스크 중단·재시작 (런 dev 태스크용)
+
+장기
 [ ] AWS Lightsail 배포
 [ ] Phase 5: LangGraph + Anthropic API 전환
+[ ] 3D 회의실 UI
 ```
 
 ---
