@@ -8,7 +8,7 @@ class Session(Base):
 
     id = Column(String, primary_key=True)
     topic = Column(Text, nullable=False)
-    status = Column(String, default="working")  # working | done | error | cancelled
+    status = Column(String, default="working")  # working | done | error | cancelled | paused
     created_at = Column(DateTime, server_default=func.now())
     completed_at = Column(DateTime, nullable=True)
 
@@ -50,6 +50,16 @@ class ReportVersion(Base):
     version = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     fact_feedback = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class SessionCheckpoint(Base):
+    __tablename__ = "session_checkpoints"
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
+    stage = Column(String, nullable=False)  # after_plan | after_research | after_analysis
+    payload = Column(Text, nullable=False)  # JSON blob with all intermediate data
     created_at = Column(DateTime, server_default=func.now())
 
 

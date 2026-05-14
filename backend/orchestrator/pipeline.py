@@ -13,6 +13,7 @@ from db.models import ReportVersion
 # ── Global state ───────────────────────────────────────────────────────────
 pending_responses: dict[str, asyncio.Future] = {}
 cancelled_sessions: set[str] = set()
+paused_sessions: set[str] = set()
 
 MURMURS: dict[str, list[str]] = {
     "pocke": ["슉슉... 어디다 쑤셔넣지?", "오 이거 건질 수 있겠다!", "볼따구가 빵빵해지는 중...", "검색 하나만 더!", "이것도 챙겨야지."],
@@ -48,6 +49,27 @@ WRITER_SKIP: dict[str, str] = {
 
 def _is_cancelled(session_id: str) -> bool:
     return session_id in cancelled_sessions
+
+def _is_paused(session_id: str) -> bool:
+    return session_id in paused_sessions
+
+def _save_checkpoint(session_id: str, stage: str, data: dict):
+    """파이프라인 중간 상태를 DB에 저장."""
+    from db.connection import SessionLocal
+    from db.models import SessionCheckpoint
+    db = SessionLocal()
+    try:
+        db.add(SessionCheckpoint(
+            id=str(uuid.uuid4()),
+            session_id=session_id,
+            stage=stage,
+            payload=json.dumps(data, ensure_ascii=False),
+        ))
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
 
 
 def _start_murmurs(agent_id: str, lines: list[str], send, interval_sec: float = 9.0):
@@ -101,9 +123,11 @@ async def _pipeline_inner(
     ceo_notes_init: str,
     send,
     report_style: dict | None = None,
+    checkpoint: dict | None = None,
 ):
     seq = 0
     ceo_notes = ceo_notes_init
+    resume_stage = checkpoint.get("stage") if checkpoint else None
     # dev 태스크면 plan+root, 나머지는 plan+fact 두 곳에서만 CEO 체크인
     checkin_gates: set[str] = {"plan", "root" if task_type == "dev" else "fact"}
 
@@ -160,7 +184,7 @@ async def _pipeline_inner(
     semantic_task = asyncio.get_event_loop().run_in_executor(None, semantic_search, topic, 3)
 
     # ── 0. 플랜 ───────────────────────────────────────────────────────────
-    if _is_cancelled(session_id):
+    if _is_cancelled(session_id) or _is_paused(session_id):
         return
 
     emit("agent_start", agentId="plan", message="요구사항 파악 중. 티켓 열게요.")
@@ -211,6 +235,13 @@ async def _pipeline_inner(
 
     if _is_cancelled(session_id):
         return
+    if _is_paused(session_id):
+        _save_checkpoint(session_id, "after_plan", {
+            "stage": "after_plan", "topic": topic,
+            "resolved_task_type": resolved_task_type, "ceo_notes": ceo_notes,
+            "mode": mode, "report_style": report_style,
+        })
+        return
 
     # ── 태스크 타입 + writer 결정 ──────────────────────────────────────────
     config = TASK_CONFIG.get(resolved_task_type, TASK_CONFIG["research"])
@@ -226,65 +257,73 @@ async def _pipeline_inner(
             send({"type": "agent_done", "agentId": wid, "message": skip_msg,
                   "ts": int(time.time() * 1000)})
 
-    # ── 1+2. 위키 + 포케 동시 실행 ────────────────────────────────────────
+    # ── 1+2. 위키 + 포케 동시 실행 (또는 체크포인트 복원) ─────────────────
     wiki_context = f'{{"context": "{topic}에 대한 배경", "keywords": ["{topic}"], "wiki_pages_found": []}}'
     pocke_output = '{"sources": [], "key_facts": []}'
 
-    emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
-    emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
-    send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 시맨틱 서치 중..."})
-    send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
+    if resume_stage in ("after_research", "after_analysis"):
+        # 체크포인트에서 복원 — 재실행 없이 이전 데이터 사용
+        wiki_context = checkpoint.get("wiki_raw") or wiki_context
+        pocke_output = checkpoint.get("pocke_raw") or pocke_output
+        emit("agent_done", agentId="wiki", message="이전 리서치 데이터 복원됨.")
+        emit("agent_done", agentId="pocke", message="볼따구 데이터 복원됨. 카 과장한테 넘길게요.")
+        await asyncio.sleep(0.3)
+    else:
+        emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
+        emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
+        send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 시맨틱 서치 중..."})
+        send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
 
-    stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
+        stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], send, interval_sec=9.0)
 
-    async def _wiki_task():
-        try:
-            past_entries = await semantic_task  # 플랜 실행 중 이미 완료됨
-            if past_entries:
-                past_ctx = "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
-                    f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
-                    for e in past_entries
-                )
-            else:
+        async def _wiki_task():
+            try:
+                past_entries = await semantic_task
+                if past_entries:
+                    past_ctx = "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
+                        f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
+                        for e in past_entries
+                    )
+                else:
+                    past_ctx = "관련 과거 리서치 없음. 일반 지식 활용."
+            except Exception:
                 past_ctx = "관련 과거 리서치 없음. 일반 지식 활용."
-        except Exception:
-            past_ctx = "관련 과거 리서치 없음. 일반 지식 활용."
-        try:
-            return await run_a(
-                build_prompt("wiki", topic=topic, past_context=past_ctx),
-                no_tools=True, max_turns=1, agent_id="wiki",
-            )
-        except Exception:
-            return "", ""
+            try:
+                return await run_a(
+                    build_prompt("wiki", topic=topic, past_context=past_ctx),
+                    no_tools=True, max_turns=1, agent_id="wiki",
+                )
+            except Exception:
+                return "", ""
 
-    async def _pocke_task():
-        try:
-            return await run_a(
-                build_prompt(config["pocke"], topic=topic, context=topic, keywords=topic),
-                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
-            )
-        except Exception:
-            return "", ""
+        async def _pocke_task():
+            try:
+                return await run_a(
+                    build_prompt(config["pocke"], topic=topic, context=topic, keywords=topic),
+                    tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
+                )
+            except Exception:
+                return "", ""
 
-    wiki_result, pocke_result = await asyncio.gather(_wiki_task(), _pocke_task())
-    stop_pocke()
+        wiki_result, pocke_result = await asyncio.gather(_wiki_task(), _pocke_task())
+        stop_pocke()
 
-    wiki_raw, wiki_stream = wiki_result
-    if wiki_raw.strip():
-        wiki_context = wiki_raw
-    emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
+        wiki_raw, wiki_stream = wiki_result
+        if wiki_raw.strip():
+            wiki_context = wiki_raw
+        emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
 
-    pocke_raw, pocke_stream = pocke_result
-    if pocke_raw.strip():
-        pocke_output = pocke_raw
-    emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
+        pocke_raw, pocke_stream = pocke_result
+        if pocke_raw.strip():
+            pocke_output = pocke_raw
+        emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
 
     wiki = parse_json(wiki_context, {"context": "", "keywords": [], "wiki_pages_found": []})
     pocke = parse_json(pocke_output, {"sources": [], "key_facts": []})
     pocke_has_data = bool(pocke.get("key_facts"))
 
-    # ── 포케 데이터 0개면 1회 재시도 ────────────────────────────────────────
-    if not pocke_has_data and not _is_cancelled(session_id):
+    # ── 포케 데이터 0개면 1회 재시도 (복원 경로는 스킵) ────────────────────
+    if not pocke_has_data and not _is_cancelled(session_id) and resume_stage not in ("after_research", "after_analysis"):
         send({"type": "agent_message", "agentId": "pocke",
               "message": "어?! 볼따구가 비었잖아... 검색어 바꿔서 다시 긁어올게요! 🐹"})
         await asyncio.sleep(0.7)
@@ -321,34 +360,48 @@ async def _pipeline_inner(
 
     if _is_cancelled(session_id):
         return
+    if _is_paused(session_id):
+        _save_checkpoint(session_id, "after_research", {
+            "stage": "after_research", "topic": topic,
+            "resolved_task_type": resolved_task_type, "ceo_notes": ceo_notes,
+            "mode": mode, "report_style": report_style,
+            "wiki_raw": wiki_context, "pocke_raw": pocke_output,
+        })
+        return
 
     await asyncio.sleep(0.4)
     send({"type": "agent_message", "agentId": "ka",
           "message": f"포케가 팩트 {len(pocke.get('key_facts', []))}개 넘겼어. ...흥미롭네."})
     await asyncio.sleep(0.6)
 
-    # ── 3. 카 ─────────────────────────────────────────────────────────────
+    # ── 3. 카 (또는 체크포인트 복원) ────────────────────────────────────────
     ka_output = (f'{{"insights": [{{"title": "주요 동향", "description": "{topic}의 핵심 흐름"}}],'
                  f' "conclusion": "{topic}에 대한 분석 결과입니다.", "data_quality": "medium"}}')
-    emit("agent_start", agentId="ka", message="패턴 분석 시작. 데이터 하나만 더...")
-    send({"type": "agent_thinking", "agentId": "ka", "chunk": "팩트 간 연결고리 탐색 중..."})
-    stop_ka = _start_murmurs("ka", MURMURS["ka"], send, interval_sec=10.0)
-    try:
-        ka_raw, ka_stream = await run_a(
-            build_prompt(config["ka"], topic=topic,
-                         facts=" / ".join(pocke.get("key_facts", [])),
-                         ceo_notes=ceo_notes),
-            no_tools=True, max_turns=1, agent_id="ka",
-        )
-        if ka_raw.strip():
-            ka_output = ka_raw
-        await asyncio.sleep(1.2)
-        emit("agent_done", agentId="ka",
-             message=f"찾았다!!! 핵심 인사이트 잡음. {writer_agent_id}한테 넘길게.")
-    except Exception:
-        emit("agent_done", agentId="ka", message="분석 완료.")
-    finally:
-        stop_ka()
+
+    if resume_stage == "after_analysis":
+        ka_output = checkpoint.get("ka_raw") or ka_output
+        emit("agent_done", agentId="ka", message="분석 데이터 복원됨. 작성 시작할게.")
+        await asyncio.sleep(0.3)
+    else:
+        emit("agent_start", agentId="ka", message="패턴 분석 시작. 데이터 하나만 더...")
+        send({"type": "agent_thinking", "agentId": "ka", "chunk": "팩트 간 연결고리 탐색 중..."})
+        stop_ka = _start_murmurs("ka", MURMURS["ka"], send, interval_sec=10.0)
+        try:
+            ka_raw, ka_stream = await run_a(
+                build_prompt(config["ka"], topic=topic,
+                             facts=" / ".join(pocke.get("key_facts", [])),
+                             ceo_notes=ceo_notes),
+                no_tools=True, max_turns=1, agent_id="ka",
+            )
+            if ka_raw.strip():
+                ka_output = ka_raw
+            await asyncio.sleep(1.2)
+            emit("agent_done", agentId="ka",
+                 message=f"찾았다!!! 핵심 인사이트 잡음. {writer_agent_id}한테 넘길게.")
+        except Exception:
+            emit("agent_done", agentId="ka", message="분석 완료.")
+        finally:
+            stop_ka()
 
     ka = parse_json(ka_output, {"insights": [], "conclusion": "", "data_quality": "medium"})
 
@@ -363,6 +416,14 @@ async def _pipeline_inner(
     await maybe_checkin("ka", ka_summary, ka_checkin_lines)
 
     if _is_cancelled(session_id):
+        return
+    if _is_paused(session_id):
+        _save_checkpoint(session_id, "after_analysis", {
+            "stage": "after_analysis", "topic": topic,
+            "resolved_task_type": resolved_task_type, "ceo_notes": ceo_notes,
+            "mode": mode, "report_style": report_style,
+            "wiki_raw": wiki_context, "pocke_raw": pocke_output, "ka_raw": ka_output,
+        })
         return
 
     await asyncio.sleep(0.4)
@@ -395,6 +456,14 @@ async def _pipeline_inner(
 
     for attempt in range(1, 4):
         if _is_cancelled(session_id):
+            return
+        if _is_paused(session_id):
+            _save_checkpoint(session_id, "after_analysis", {
+                "stage": "after_analysis", "topic": topic,
+                "resolved_task_type": resolved_task_type, "ceo_notes": ceo_notes,
+                "mode": mode, "report_style": report_style,
+                "wiki_raw": wiki_context, "pocke_raw": pocke_output, "ka_raw": ka_output,
+            })
             return
 
         start_msg = msgs["start1"] if attempt == 1 else msgs["start2"]
@@ -626,6 +695,7 @@ async def run_pipeline(
     mode: str = "full",
     ceo_notes: str = "",
     report_style: dict | None = None,
+    checkpoint: dict | None = None,
 ) -> AsyncGenerator[dict, None]:
     """AsyncGenerator that yields SSE events from the pipeline via asyncio.Queue."""
     queue: asyncio.Queue = asyncio.Queue()
@@ -635,7 +705,7 @@ async def run_pipeline(
 
     async def _run():
         try:
-            await _pipeline_inner(session_id, topic, task_type, mode, ceo_notes, send, report_style)
+            await _pipeline_inner(session_id, topic, task_type, mode, ceo_notes, send, report_style, checkpoint)
         except Exception as e:
             send({"type": "error", "message": str(e)})
         finally:

@@ -9,7 +9,8 @@ from sse_starlette.sse import EventSourceResponse
 
 from db.connection import get_db
 from db import models
-from orchestrator.pipeline import run_pipeline, pending_responses, cancelled_sessions
+from db.models import SessionCheckpoint  # noqa: F401 — ensure model is loaded
+from orchestrator.pipeline import run_pipeline, pending_responses, cancelled_sessions, paused_sessions
 
 router = APIRouter(prefix="/api")
 
@@ -126,6 +127,101 @@ async def cancel_session(session_id: str, db: Session = Depends(get_db)):
     ).update({"status": "cancelled"})
     db.commit()
     return {"ok": True}
+
+
+@router.post("/research/{session_id}/pause")
+async def pause_session(session_id: str, db: Session = Depends(get_db)):
+    paused_sessions.add(session_id)
+    future = pending_responses.get(session_id)
+    if future and not future.done():
+        future.cancel()
+    db.query(models.Session).filter(
+        models.Session.id == session_id
+    ).update({"status": "paused"})
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/research/{session_id}/restart")
+async def restart_session(session_id: str, db: Session = Depends(get_db)):
+    from fastapi.responses import JSONResponse as _JSONResponse
+
+    checkpoint_row = (
+        db.query(models.SessionCheckpoint)
+        .filter(models.SessionCheckpoint.session_id == session_id)
+        .order_by(models.SessionCheckpoint.created_at.desc())
+        .first()
+    )
+    if not checkpoint_row:
+        return _JSONResponse({"error": "checkpoint not found"}, status_code=404)
+
+    checkpoint = json.loads(checkpoint_row.payload)
+    topic = checkpoint.get("topic", "")
+    task_type = checkpoint.get("resolved_task_type", "research")
+    mode = checkpoint.get("mode", "full")
+    ceo_notes = checkpoint.get("ceo_notes", "")
+    report_style_dict = checkpoint.get("report_style")
+
+    new_session_id = str(uuid.uuid4())
+    db.add(models.Session(id=new_session_id, topic=topic, status="working"))
+    db.commit()
+
+    paused_sessions.discard(session_id)
+
+    seq_counter = [0]
+
+    async def generator():
+        try:
+            async for event in run_pipeline(
+                new_session_id, topic, task_type, mode,
+                ceo_notes=ceo_notes,
+                report_style=report_style_dict,
+                checkpoint=checkpoint,
+            ):
+                if event.get("type") == "report":
+                    try:
+                        db.add(models.Report(
+                            id=event.get("reportId", str(uuid.uuid4())),
+                            session_id=new_session_id,
+                            agent_id=event.get("agentId", ""),
+                            topic=topic,
+                            content=event.get("content", ""),
+                        ))
+                        db.commit()
+                    except Exception:
+                        pass
+
+                try:
+                    seq_counter[0] += 1
+                    db.add(models.SessionEvent(
+                        id=str(uuid.uuid4()),
+                        session_id=new_session_id,
+                        seq=seq_counter[0],
+                        payload=json.dumps(event, ensure_ascii=False),
+                    ))
+                    db.commit()
+                except Exception:
+                    pass
+
+                yield {"data": json.dumps(event, ensure_ascii=False)}
+
+            db.query(models.Session).filter(
+                models.Session.id == new_session_id
+            ).update({"status": "done"})
+            db.commit()
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield {"data": json.dumps({"type": "error", "message": str(e)})}
+            db.query(models.Session).filter(
+                models.Session.id == new_session_id
+            ).update({"status": "error"})
+            db.commit()
+        finally:
+            cancelled_sessions.discard(new_session_id)
+
+    return EventSourceResponse(generator())
 
 
 @router.get("/research/{session_id}/events")

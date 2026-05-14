@@ -81,7 +81,9 @@
       "Read(//opt/homebrew/Cellar/pgvector/**)",
       "Bash(PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make)",
       "Bash(PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make install)",
-      "Bash(echo \"PID: $!\")"
+      "Bash(echo \"PID: $!\")",
+      "Bash(mkdir -p /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/api/research/\\\\[sessionId\\\\]/pause)",
+      "Bash(mkdir -p /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/api/research/\\\\[sessionId\\\\]/restart)"
     ]
   }
 }

@@ -84,6 +84,7 @@ export default function Home() {
   const agentStartTs = useRef<Record<string, number>>({});
   const [agentDurations, setAgentDurations] = useState<Record<string, number>>({});
   const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; topic: string } | null>(null);
+  const [pausedInfo, setPausedInfo] = useState<{ sessionId: string; topic: string } | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentDef | null>(null);
   const [researchError, setResearchError] = useState<{ title: string; detail: string } | null>(null);
   const [errorTyped, setErrorTyped] = useState("");
@@ -135,6 +136,9 @@ export default function Home() {
         .then((data: { status: string }) => {
           if (data.status === "working" || data.status === "done") {
             setResumeInfo(parsed);
+          } else if (data.status === "paused") {
+            setPausedInfo(parsed);
+            localStorage.removeItem("cosmicHustleSession");
           } else {
             localStorage.removeItem("cosmicHustleSession");
           }
@@ -563,6 +567,73 @@ export default function Home() {
     reset();
   };
 
+  const pauseResearch = () => {
+    const sId = sessionIdRef.current;
+    if (!sId) return;
+    const currentTopic = topic;
+    void fetch(`/api/research/${sId}/pause`, { method: "POST" });
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPausedInfo({ sessionId: sId, topic: currentTopic });
+    sessionIdRef.current = "";
+    localStorage.removeItem("cosmicHustleSession");
+    reset();
+  };
+
+  const restartFromPaused = async (info: { sessionId: string; topic: string }) => {
+    setPausedInfo(null);
+    if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+    setPhase("working");
+    setTopic(info.topic);
+    setAgentStatus(Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"])));
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    const showError = (title: string, detail: string) => {
+      setResearchError({ title, detail });
+      addChat("root", `[오류] ${title}`);
+      setAgentStatus((prev) => ({ ...prev, root: "active" }));
+      speak("root", `🚨 ${title}`);
+      setTimeout(() => { setAgentStatus(initStatus()); setPhase("idle"); setTopic(""); }, 3000);
+    };
+
+    let errorHandled = false;
+    try {
+      const res = await fetch(`/api/research/${info.sessionId}/restart`, {
+        method: "POST",
+        signal: abort.signal,
+      });
+      if (!res.ok || !res.body) {
+        errorHandled = true;
+        showError(`재시작 오류 (${res.status})`, "체크포인트를 찾을 수 없어요. 새 임무를 시작해주세요.");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try { handleSSE(JSON.parse(line.slice(6)), info.topic); } catch { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        errorHandled = true;
+        showError("재시작 오류", (err as Error).message);
+      }
+    } finally {
+      abortRef.current = null;
+      if (!errorHandled) setPhase((p) => p === "working" ? "done" : p);
+    }
+  };
+
   const reset = () => {
     setAgentStatus(initStatus());
     setAgentExpression({});
@@ -609,8 +680,15 @@ export default function Home() {
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="text-emerald-300/80 truncate font-medium" style={{ maxWidth: "min(180px, 18vw)" }}>{topic}</span>
             <button
+              onClick={pauseResearch}
+              className="ml-0.5 w-4 h-4 flex items-center justify-center rounded text-slate-500 hover:text-amber-400 transition-colors text-[10px] shrink-0"
+              title="일시정지"
+            >
+              ⏸
+            </button>
+            <button
               onClick={stopResearch}
-              className="ml-0.5 w-4 h-4 flex items-center justify-center rounded text-slate-500 hover:text-red-400 transition-colors text-[10px] shrink-0"
+              className="w-4 h-4 flex items-center justify-center rounded text-slate-500 hover:text-red-400 transition-colors text-[10px] shrink-0"
               title="중단"
             >
               ■
@@ -690,6 +768,23 @@ export default function Home() {
             이어서 보기
           </button>
           <button onClick={() => { setResumeInfo(null); localStorage.removeItem("cosmicHustleSession"); }} className="text-slate-600 hover:text-slate-400 transition-colors">✕</button>
+        </div>
+      )}
+
+      {/* 일시정지 재시작 배너 */}
+      {pausedInfo && (
+        <div className="shrink-0 px-6 py-2 flex items-center gap-3 text-xs animate-fadeIn" style={{ background: "rgba(251,146,60,0.04)", borderBottom: "1px solid rgba(251,146,60,0.15)" }}>
+          <span className="text-[11px]">⏸</span>
+          <span className="text-slate-500">일시정지된 임무:</span>
+          <span className="text-slate-300 font-medium max-w-xs truncate">{pausedInfo.topic}</span>
+          <button
+            onClick={() => void restartFromPaused(pausedInfo)}
+            className="ml-2 px-3 py-1 rounded-full text-xs font-medium transition-all"
+            style={{ background: "rgba(251,146,60,0.1)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}
+          >
+            재시작
+          </button>
+          <button onClick={() => setPausedInfo(null)} className="text-slate-600 hover:text-slate-400 transition-colors">✕</button>
         </div>
       )}
 
