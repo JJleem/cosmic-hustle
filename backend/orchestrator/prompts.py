@@ -56,84 +56,60 @@ CEO 요청: "{topic}"
 
     "wiki": """위키 대리. 사서.
 주제: "{topic}"
-
 {past_context}
-
-위 내용을 참고해 결과를 JSON 코드블록으로:
+JSON으로:
 ```json
 {{"context": "배경 요약 (2~3문장)", "keywords": ["키워드1", "키워드2", "키워드3"], "wiki_pages_found": ["페이지명"]}}
 ```""",
 
     "wiki_update": """위키 대리. 사서.
 주제: "{topic}". 결론: {conclusion}. 인사이트: {insights}.
-이번 리서치 결과를 wiki-llm/concepts/ 에 마크다운 파일로 저장하거나 기존 파일 업데이트.
-파일명: topic을 영문 소문자 kebab-case로. 예: ai-startup-trends.md
-wiki/index.md 에도 한 줄 추가.
-내용: 주제·결론·핵심 인사이트 포함. 500자 이내. 완료 후 저장된 파일명만 한 줄로 출력.""",
+wiki-llm/concepts/ 에 kebab-case 마크다운 저장 또는 업데이트. wiki/index.md 한 줄 추가.
+주제·결론·인사이트 포함. 500자 이내. 완료 후 파일명만 출력.""",
 
     "pocke": """포케 대리. 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-WebSearch 최소 3회 필수 실행. 한국어·영어 번갈아 검색.
-검색마다 구체적 수치·날짜·이름·기록 팩트 추출.
-인물·기업 주제라면: 설립/데뷔연도, 매출/성적 수치, 주요 제품/성과, 최근 동향 반드시 검색.
-확인된 것만 기록하되, 공식 출처가 없는 수치는 "(추정)" 또는 "(출처 미확인)" 표기하고 포함.
-key_facts 빈 배열 금지 — 찾은 모든 구체적 정보를 반드시 넣을 것.
-각 소스 URL 필수. 없으면 "검증불가" 표기.
-⚠️ 검색 완료 후 아래 JSON 코드블록을 응답 맨 마지막에 출력. JSON 이후 추가 텍스트 없을 것.
+WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이름 팩트 우선 추출.
+인물·기업이면: 설립/데뷔연도, 매출/성적, 주요 제품/성과, 최근 동향 검색.
+출처 없는 수치는 "(추정)" 표기 후 포함. key_facts 빈 배열 금지.
+소스 URL 필수. 없으면 "검증불가".
+⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["구체적팩트(수치·날짜 포함)", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
-```""",
-
-    "pocke_preloaded": """포케 대리. 리서처.
-주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-WebSearch 최소 3회 필수 실행. 한국어·영어 번갈아 검색.
-검색마다 구체적 수치·날짜·이름·기록 팩트 추출.
-인물·기업 주제라면: 설립/데뷔연도, 매출/성적 수치, 주요 제품/성과, 최근 동향 반드시 검색.
-확인된 것만 기록하되, 공식 출처가 없는 수치는 "(추정)" 또는 "(출처 미확인)" 표기하고 포함.
-key_facts 빈 배열 금지 — 찾은 모든 구체적 정보를 반드시 넣을 것.
-각 소스 URL 필수. 없으면 "검증불가" 표기.
-⚠️ 검색 완료 후 아래 JSON 코드블록을 응답 맨 마지막에 출력. JSON 이후 추가 텍스트 없을 것.
-```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["구체적팩트(수치·날짜 포함)", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}
 ```""",
 
     "pocke_retry": """포케 대리. 재시도 모드.
-주제: "{topic}".
-이전 검색에서 데이터를 못 가져왔음. 검색어를 바꿔서 다시 시도.
-한국어 1회 + 영어 1회 이상 검색. 결과가 불확실해도 "(추정)" 표기 후 반드시 포함.
-key_facts 최소 3개 이상 필수. 빈 배열 절대 금지.
-⚠️ 검색 완료 즉시 아래 JSON 코드블록만 출력. JSON 이후 추가 텍스트 없을 것.
+주제: "{topic}". 이전 검색 실패. 검색어 바꿔서 재시도.
+한국어·영어 각 1회 이상. 불확실해도 "(추정)" 표기 후 포함. key_facts 최소 3개 필수.
+⚠️ 검색 완료 즉시 아래 JSON만 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}
 ```""",
 
     "pocke_recheck": """포케 대리. 팩트 재조사 모드.
-주제: "{topic}". 팩트 부장이 검증을 요청한 항목:
+주제: "{topic}". 팩트 부장 검증 요청 항목:
 {research_queries}
 
-WebSearch로 위 항목들을 직접 검색하라. 각 쿼리마다 검색 실행.
-찾을 수 없으면 "공식 확인 불가" 명시. 빈 배열 금지.
-⚠️ 검색 완료 후 아래 JSON 코드블록을 응답 맨 마지막에 출력. JSON 이후 추가 텍스트 없을 것.
+각 쿼리마다 WebSearch 실행. 못 찾으면 "공식 확인 불가" 명시. 빈 배열 금지.
+⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["재확인 팩트1 (출처명시)", "팩트2", "팩트3"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["재확인 팩트1 (출처)", "팩트2", "팩트3"], "unverified_count": 0}}
 ```""",
 
     "pocke_marketing": """포케 대리. 시장 조사 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-WebSearch 최소 3회 필수 실행. 시장 규모·경쟁사·트렌드·소비자 반응 관련 쿼리로 검색.
-구체적 수치(시장 규모, 성장률, 점유율)와 날짜 포함된 팩트 우선 추출.
-⚠️ 검색 완료 후 아래 JSON 코드블록을 응답 맨 마지막에 출력. JSON 이후 추가 텍스트 없을 것.
+WebSearch 최소 3회. 시장 규모·경쟁사·트렌드·소비자 반응 중심 검색. 수치·날짜 팩트 우선.
+⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
 ```""",
 
     "pocke_tech": """포케 대리. 기술 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
-WebSearch 최소 3회 필수 실행. 공식 문서·GitHub·기술 블로그 위주로 검색.
-버전·성능 수치·릴리즈 날짜·주요 기능 팩트 추출.
-⚠️ 검색 완료 후 아래 JSON 코드블록을 응답 맨 마지막에 출력. JSON 이후 추가 텍스트 없을 것.
+WebSearch 최소 3회. 공식 문서·GitHub·기술 블로그 위주. 버전·성능 수치·릴리즈 날짜 팩트 추출.
+⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "실제URL또는검증불가"}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
 ```""",
 
     "ka": """카 과장. 분석가.
@@ -218,29 +194,22 @@ Velog·티스토리 스타일 블로그 포스팅. 도입부(훅)→본문→마
 {feedback}분석을 바탕으로 구현 방향 작성. 코드 예시 포함 (마크다운 코드블록). 주요 결정사항과 트레이드오프 명시. 600~800자.""",
 
     "fact": """팩트 부장. 검토자.
-리포트:
-{report}
+리포트: {report}
+출처: {sources}
 
-출처:
-{sources}
-
-체크: ① 출처 없는 수치·날짜 주장 ② 검증불가 항목 ③ 논리 오류.
-출처로 검증 불가능한 구체적 수치·연도·수치 등은 반드시 issues에 기록.
-needs_research: 재조사가 필요한 항목이 있으면 true.
+체크: ① 출처 없는 수치·날짜 ② 검증불가 항목 ③ 논리 오류. 문제 항목은 issues에 기록.
+needs_research: 재조사 필요 시 true, research_queries에 포케가 검색할 쿼리 목록.
 ```json
-{{"passed": true, "issues": [], "feedback": "작성자에게 전달할 수정 지시사항", "unverified_claims": [], "needs_research": false, "research_queries": []}}
+{{"passed": true, "issues": [], "feedback": "수정 지시사항", "unverified_claims": [], "needs_research": false, "research_queries": []}}
 ```""",
 
     "fact_dev": """팩트 부장. 코드 리뷰어.
-코드/구현:
-{report}
-
-참고 소스:
-{sources}
+코드/구현: {report}
+참고 소스: {sources}
 
 체크: ① 보안 취약점 ② 로직 오류 ③ 성능 문제 ④ 미구현 항목.
 ```json
-{{"passed": true, "issues": [], "feedback": "수정 지시사항", "unverified_claims": []}}
+{{"passed": true, "issues": [], "feedback": "수정 지시사항", "unverified_claims": [], "needs_research": false, "research_queries": []}}
 ```""",
 
     "ping": """핑 인턴. 아이디어 수집가.
@@ -250,12 +219,9 @@ needs_research: 재조사가 필요한 항목이 있으면 true.
 {{"ideas": [{{"title": "아이디어 제목", "spark": "한 줄 설명"}}]}}
 ```""",
 
-    "root": """루트 사원. DevOps 엔지니어.
-주제: "{topic}".
-구현 결과:
-{report}
-
-CI/CD 파이프라인 설계 + 배포 단계 문서화. 마크다운 ## 구조. 자동화 스텝·환경변수·롤백 전략 포함. 400~600자.""",
+    "root": """루트 사원. DevOps.
+주제: "{topic}". 구현 결과: {report}
+CI/CD 파이프라인·배포 단계·자동화 스텝·환경변수·롤백 전략. ## 구조. 400~600자.""",
 }
 
 
@@ -268,15 +234,15 @@ def build_prompt(key: str, **kwargs) -> str:
 
 # 태스크 타입별 에이전트 매핑
 TASK_CONFIG = {
-    "research":  {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over"},
-    "blog":      {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over_blog"},
-    "tech":      {"pocke": "pocke_tech",               "ka": "ka_tech",     "writer": "over_tech"},
-    "marketing": {"pocke": "pocke_marketing",          "ka": "ka_marketing","writer": "over_marketing"},
-    "design_ux": {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "pixel"},
-    "design_ui": {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "pixel"},
-    "dev":       {"pocke": "pocke_tech",               "ka": "ka_tech",     "writer": "run"},
-    "dev_plan":  {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over"},
-    "dev_spec":  {"pocke": "pocke_preloaded",          "ka": "ka",          "writer": "over"},
+    "research":  {"pocke": "pocke",          "ka": "ka",          "writer": "over"},
+    "blog":      {"pocke": "pocke",          "ka": "ka",          "writer": "over_blog"},
+    "tech":      {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_tech"},
+    "marketing": {"pocke": "pocke_marketing","ka": "ka_marketing","writer": "over_marketing"},
+    "design_ux": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel"},
+    "design_ui": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel"},
+    "dev":       {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "run"},
+    "dev_plan":  {"pocke": "pocke",          "ka": "ka",          "writer": "over"},
+    "dev_spec":  {"pocke": "pocke",          "ka": "ka",          "writer": "over"},
 }
 
 WRITER_AGENT_ID = {

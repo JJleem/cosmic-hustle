@@ -16,13 +16,59 @@ router = APIRouter(prefix="/api")
 
 
 def _ts(dt) -> int | None:
-    """datetime → Unix timestamp(seconds). None if dt is None."""
     if dt is None:
         return None
     try:
         return int(dt.replace(tzinfo=timezone.utc).timestamp())
     except Exception:
         return None
+
+
+def _sse_generator(session_id: str, topic: str, db, pipeline_kwargs: dict):
+    """SSE 제너레이터 팩토리. start_research / restart_session 공통 로직."""
+    seq_counter = [0]
+
+    async def generator():
+        try:
+            async for event in run_pipeline(**pipeline_kwargs):
+                if event.get("type") == "report":
+                    try:
+                        db.add(models.Report(
+                            id=event.get("reportId", str(uuid.uuid4())),
+                            session_id=session_id,
+                            agent_id=event.get("agentId", ""),
+                            topic=topic,
+                            content=event.get("content", ""),
+                        ))
+                        db.commit()
+                    except Exception:
+                        pass
+                try:
+                    seq_counter[0] += 1
+                    db.add(models.SessionEvent(
+                        id=str(uuid.uuid4()),
+                        session_id=session_id,
+                        seq=seq_counter[0],
+                        payload=json.dumps(event, ensure_ascii=False),
+                    ))
+                    db.commit()
+                except Exception:
+                    pass
+                yield {"data": json.dumps(event, ensure_ascii=False)}
+
+            db.query(models.Session).filter(models.Session.id == session_id).update({"status": "done"})
+            db.commit()
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield {"data": json.dumps({"type": "error", "message": str(e)})}
+            db.query(models.Session).filter(models.Session.id == session_id).update({"status": "error"})
+            db.commit()
+        finally:
+            cancelled_sessions.discard(session_id)
+
+    return generator
 
 
 class ReportStyleModel(BaseModel):
@@ -57,54 +103,10 @@ async def start_research(body: ResearchRequest, db: Session = Depends(get_db)):
     db.add(models.Session(id=session_id, topic=topic, status="working"))
     db.commit()
 
-    seq_counter = [0]
-
-    async def generator():
-        try:
-            async for event in run_pipeline(session_id, topic, task_type, mode, report_style=report_style):
-                if event.get("type") == "report":
-                    try:
-                        db.add(models.Report(
-                            id=event.get("reportId", str(uuid.uuid4())),
-                            session_id=session_id,
-                            agent_id=event.get("agentId", ""),
-                            topic=topic,
-                            content=event.get("content", ""),
-                        ))
-                        db.commit()
-                    except Exception:
-                        pass
-
-                try:
-                    seq_counter[0] += 1
-                    db.add(models.SessionEvent(
-                        id=str(uuid.uuid4()),
-                        session_id=session_id,
-                        seq=seq_counter[0],
-                        payload=json.dumps(event, ensure_ascii=False),
-                    ))
-                    db.commit()
-                except Exception:
-                    pass
-
-                yield {"data": json.dumps(event, ensure_ascii=False)}
-
-            db.query(models.Session).filter(
-                models.Session.id == session_id
-            ).update({"status": "done"})
-            db.commit()
-
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            yield {"data": json.dumps({"type": "error", "message": str(e)})}
-            db.query(models.Session).filter(
-                models.Session.id == session_id
-            ).update({"status": "error"})
-            db.commit()
-        finally:
-            cancelled_sessions.discard(session_id)
-
+    generator = _sse_generator(session_id, topic, db, {
+        "session_id": session_id, "topic": topic,
+        "task_type": task_type, "mode": mode, "report_style": report_style,
+    })
     return EventSourceResponse(generator())
 
 
@@ -157,70 +159,21 @@ async def restart_session(session_id: str, db: Session = Depends(get_db)):
 
     checkpoint = json.loads(checkpoint_row.payload)
     topic = checkpoint.get("topic", "")
-    task_type = checkpoint.get("resolved_task_type", "research")
-    mode = checkpoint.get("mode", "full")
-    ceo_notes = checkpoint.get("ceo_notes", "")
-    report_style_dict = checkpoint.get("report_style")
-
     new_session_id = str(uuid.uuid4())
+
     db.add(models.Session(id=new_session_id, topic=topic, status="working"))
     db.commit()
-
     paused_sessions.discard(session_id)
 
-    seq_counter = [0]
-
-    async def generator():
-        try:
-            async for event in run_pipeline(
-                new_session_id, topic, task_type, mode,
-                ceo_notes=ceo_notes,
-                report_style=report_style_dict,
-                checkpoint=checkpoint,
-            ):
-                if event.get("type") == "report":
-                    try:
-                        db.add(models.Report(
-                            id=event.get("reportId", str(uuid.uuid4())),
-                            session_id=new_session_id,
-                            agent_id=event.get("agentId", ""),
-                            topic=topic,
-                            content=event.get("content", ""),
-                        ))
-                        db.commit()
-                    except Exception:
-                        pass
-
-                try:
-                    seq_counter[0] += 1
-                    db.add(models.SessionEvent(
-                        id=str(uuid.uuid4()),
-                        session_id=new_session_id,
-                        seq=seq_counter[0],
-                        payload=json.dumps(event, ensure_ascii=False),
-                    ))
-                    db.commit()
-                except Exception:
-                    pass
-
-                yield {"data": json.dumps(event, ensure_ascii=False)}
-
-            db.query(models.Session).filter(
-                models.Session.id == new_session_id
-            ).update({"status": "done"})
-            db.commit()
-
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            yield {"data": json.dumps({"type": "error", "message": str(e)})}
-            db.query(models.Session).filter(
-                models.Session.id == new_session_id
-            ).update({"status": "error"})
-            db.commit()
-        finally:
-            cancelled_sessions.discard(new_session_id)
-
+    generator = _sse_generator(new_session_id, topic, db, {
+        "session_id": new_session_id,
+        "topic": topic,
+        "task_type": checkpoint.get("resolved_task_type", "research"),
+        "mode": checkpoint.get("mode", "full"),
+        "ceo_notes": checkpoint.get("ceo_notes", ""),
+        "report_style": checkpoint.get("report_style"),
+        "checkpoint": checkpoint,
+    })
     return EventSourceResponse(generator())
 
 
