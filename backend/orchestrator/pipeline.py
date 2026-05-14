@@ -7,6 +7,7 @@ from typing import AsyncGenerator
 
 from .agent_runner import run_agent, parse_json, WIKI_DIR
 from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
+from .types import PlanResult, WikiResult, PockeResult, KaResult, Insight, FactResult, PingResult, PingIdea
 from db.wiki_store import semantic_search, sync_concepts_dir
 from db.connection import SessionLocal
 from db.models import ReportVersion
@@ -78,6 +79,15 @@ def _start_murmurs(agent_id: str, lines: list[str], send, interval_sec: float = 
         task.cancel()
 
     return stop
+
+
+def _parse_typed(raw: str, model_class, default):
+    """JSON 파싱 후 Pydantic 모델로 변환. 실패 시 default 반환."""
+    data = parse_json(raw, default.model_dump())
+    try:
+        return model_class.model_validate(data)
+    except Exception:
+        return default
 
 
 def _save_checkpoint(session_id: str, stage: str, data: dict):
@@ -163,8 +173,8 @@ class _Pipeline:
 
     # ── Stage 0: 플랜 ─────────────────────────────────────────────────────
 
-    async def stage_plan(self) -> tuple[dict, asyncio.Future]:
-        """플랜 실행. (plan_dict, semantic_task) 반환."""
+    async def stage_plan(self) -> tuple[PlanResult, asyncio.Future]:
+        """플랜 실행. (PlanResult, semantic_task) 반환."""
         self.emit("session_start", topic=self.topic)
         semantic_task = asyncio.get_event_loop().run_in_executor(None, semantic_search, self.topic, 3)
 
@@ -176,26 +186,21 @@ class _Pipeline:
             build_prompt(plan_key, topic=self.topic, task_type=self.task_type),
             no_tools=True, max_turns=1, agent_id="plan",
         )
-        plan = parse_json(plan_raw, {
-            "task_type": self.task_type, "objective": self.topic, "scope": "",
-            "output_format": "리포트", "needs_clarification": False,
-            "clarify_questions": [], "plan_note": "",
-        })
+        plan = _parse_typed(plan_raw, PlanResult,
+                            PlanResult(task_type=self.task_type, objective=self.topic))
 
-        resolved_task_type = plan.get("task_type", self.task_type)
-        if resolved_task_type not in TASK_CONFIG:
-            resolved_task_type = self.task_type if self.task_type in TASK_CONFIG else "research"
-        plan["_resolved_task_type"] = resolved_task_type
+        resolved_task_type = plan.task_type if plan.task_type in TASK_CONFIG else (
+            self.task_type if self.task_type in TASK_CONFIG else "research"
+        )
+        plan.resolved_task_type = resolved_task_type
 
-        objective = plan.get("objective", "")
-        scope = plan.get("scope", "")
-        if objective and objective != self.topic:
-            self.topic = f"{self.topic} (목표: {objective}{f' / 범위: {scope}' if scope else ''})"
+        if plan.objective and plan.objective != self.topic:
+            self.topic = f"{self.topic} (목표: {plan.objective}{f' / 범위: {plan.scope}' if plan.scope else ''})"
 
-        if plan.get("needs_clarification") and plan.get("clarify_questions") and self.mode != "background":
+        if plan.needs_clarification and plan.clarify_questions and self.mode != "background":
             future: asyncio.Future = asyncio.get_event_loop().create_future()
             pending_responses[self.session_id] = future
-            self.emit("clarify_request", questions=plan["clarify_questions"])
+            self.emit("clarify_request", questions=plan.clarify_questions)
             try:
                 ceo_answer = await asyncio.wait_for(asyncio.shield(future), timeout=600)
                 if ceo_answer and ceo_answer.strip():
@@ -205,20 +210,20 @@ class _Pipeline:
             finally:
                 pending_responses.pop(self.session_id, None)
 
-        self.emit("agent_done", agentId="plan", message=plan.get("plan_note") or "기획 완료. 팀 투입할게요.")
+        self.emit("agent_done", agentId="plan", message=plan.plan_note or "기획 완료. 팀 투입할게요.")
         await self.maybe_checkin("plan", "기획이 완료됐어요. 이 방향으로 진행할까요?", [
-            f"목적: {plan.get('objective', self.topic)}",
-            *([f"범위: {scope}"] if scope else []),
+            f"목적: {plan.objective or self.topic}",
+            *([f"범위: {plan.scope}"] if plan.scope else []),
             f"태스크 타입: {resolved_task_type}",
-            f"출력 형식: {plan.get('output_format', '리포트')}",
-            *([f"메모: {plan.get('plan_note')}"] if plan.get("plan_note") else []),
+            f"출력 형식: {plan.output_format}",
+            *([f"메모: {plan.plan_note}"] if plan.plan_note else []),
         ])
         return plan, semantic_task
 
     # ── Stage 1+2: 위키 + 포케 ────────────────────────────────────────────
 
-    async def stage_research(self, config: dict, semantic_task) -> tuple[str, str, dict, dict]:
-        """위키+포케 병렬 실행. (wiki_raw, pocke_raw, wiki, pocke) 반환."""
+    async def stage_research(self, config: dict, semantic_task) -> tuple[str, str, WikiResult, PockeResult]:
+        """위키+포케 병렬 실행. (wiki_raw, pocke_raw, WikiResult, PockeResult) 반환."""
         resume_stage = self.checkpoint.get("stage")
         default_wiki = f'{{"context": "{self.topic}에 대한 배경", "keywords": ["{self.topic}"], "wiki_pages_found": []}}'
         default_pocke = '{"sources": [], "key_facts": []}'
@@ -232,21 +237,21 @@ class _Pipeline:
         else:
             wiki_raw, pocke_raw = await self._run_wiki_pocke_parallel(config, semantic_task, default_wiki, default_pocke)
 
-        wiki = parse_json(wiki_raw, {"context": "", "keywords": [], "wiki_pages_found": []})
-        pocke = parse_json(pocke_raw, {"sources": [], "key_facts": []})
+        wiki = _parse_typed(wiki_raw, WikiResult, WikiResult())
+        pocke = _parse_typed(pocke_raw, PockeResult, PockeResult())
 
-        if not pocke.get("key_facts") and not self.is_cancelled() and resume_stage not in ("after_research", "after_analysis"):
+        if not pocke.key_facts and not self.is_cancelled() and resume_stage not in ("after_research", "after_analysis"):
             pocke = await self._pocke_retry()
-            pocke_raw = json.dumps(pocke, ensure_ascii=False)
+            pocke_raw = json.dumps(pocke.model_dump(), ensure_ascii=False)
 
         await self.maybe_checkin("wiki", "관련 지식 연결됐어요.", [
-            *([f"맥락: {wiki['context'][:100]}"] if wiki.get("context") else []),
-            *[f"🔑 키워드: {k}" for k in wiki.get("keywords", [])[:3]],
+            *([f"맥락: {wiki.context[:100]}"] if wiki.context else []),
+            *[f"🔑 키워드: {k}" for k in wiki.keywords[:3]],
         ])
         await self.maybe_checkin("pocke",
-            f"소스 {len(pocke.get('sources', []))}개, 팩트 {len(pocke.get('key_facts', []))}개 수집됐어요.",
-            [f"📌 {f}" for f in pocke.get("key_facts", [])[:4]] +
-            [f"🔗 {s['title']}" for s in pocke.get("sources", [])[:3] if isinstance(s, dict)],
+            f"소스 {len(pocke.sources)}개, 팩트 {len(pocke.key_facts)}개 수집됐어요.",
+            [f"📌 {f}" for f in pocke.key_facts[:4]] +
+            [f"🔗 {s['title']}" for s in pocke.sources[:3] if isinstance(s, dict)],
         )
         return wiki_raw, pocke_raw, wiki, pocke
 
@@ -295,7 +300,7 @@ class _Pipeline:
         self.emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
         return wiki_raw or default_wiki, pocke_raw or default_pocke
 
-    async def _pocke_retry(self) -> dict:
+    async def _pocke_retry(self) -> PockeResult:
         self.send({"type": "agent_message", "agentId": "pocke",
                    "message": "어?! 볼따구가 비었잖아... 검색어 바꿔서 다시 긁어올게요! 🐹"})
         await asyncio.sleep(0.7)
@@ -306,23 +311,23 @@ class _Pipeline:
                 build_prompt("pocke_retry", topic=self.topic),
                 tools=["WebSearch", "WebFetch"], max_turns=3, agent_id="pocke",
             )
-            retry = parse_json(retry_raw, {"sources": [], "key_facts": []})
-            if retry.get("key_facts"):
+            retry = _parse_typed(retry_raw, PockeResult, PockeResult())
+            if retry.key_facts:
                 self.emit("agent_done", agentId="pocke",
-                          message=f"이번엔 {len(retry['key_facts'])}개 챙겼어요! 볼따구 빵빵!")
+                          message=f"이번엔 {len(retry.key_facts)}개 챙겼어요! 볼따구 빵빵!")
                 return retry
             self.emit("agent_done", agentId="pocke", message="최선을 다했어요. 이대로 넘어갈게요.")
-            return {"sources": [], "key_facts": []}
+            return PockeResult()
         except Exception:
             self.emit("agent_done", agentId="pocke", message="재시도 완료.")
-            return {"sources": [], "key_facts": []}
+            return PockeResult()
         finally:
             stop()
 
     # ── Stage 3: 카 분석 ──────────────────────────────────────────────────
 
-    async def stage_analysis(self, config: dict, pocke: dict) -> dict:
-        """카 분석 실행. ka dict 반환."""
+    async def stage_analysis(self, config: dict, pocke: PockeResult) -> KaResult:
+        """카 분석 실행. KaResult 반환."""
         resume_stage = self.checkpoint.get("stage")
         ka_fallback = (f'{{"insights": [{{"title": "주요 동향", "description": "{self.topic}의 핵심 흐름"}}],'
                        f' "conclusion": "{self.topic}에 대한 분석 결과입니다.", "data_quality": "medium"}}')
@@ -339,7 +344,7 @@ class _Pipeline:
             try:
                 raw, _ = await self.run_a(
                     build_prompt(config["ka"], topic=self.topic,
-                                 facts=" / ".join(pocke.get("key_facts", [])),
+                                 facts=" / ".join(pocke.key_facts),
                                  ceo_notes=self.ceo_notes),
                     no_tools=True, max_turns=1, agent_id="ka",
                 )
@@ -352,26 +357,21 @@ class _Pipeline:
             finally:
                 stop_ka()
 
-        ka = parse_json(ka_raw, {"insights": [], "conclusion": "", "data_quality": "medium"})
-        ka_is_list = isinstance(ka.get("insights"), list)
+        ka = _parse_typed(ka_raw, KaResult, KaResult())
         await self.maybe_checkin("ka",
-            f"인사이트 {len(ka['insights'])}개 도출됐어요." if ka_is_list and ka["insights"] else "분석 완료.",
-            [*([f"결론: {ka.get('conclusion', '')[:120]}"] if ka.get("conclusion") else []),
-             *[f"💡 {i['title']}: {i.get('description', '')[:80]}"
-               for i in (ka.get("insights") or [])[:4] if isinstance(i, dict)]],
+            f"인사이트 {len(ka.insights)}개 도출됐어요." if ka.insights else "분석 완료.",
+            [*([f"결론: {ka.conclusion[:120]}"] if ka.conclusion else []),
+             *[f"💡 {i.title}: {i.description[:80]}" for i in ka.insights[:4]]],
         )
         return ka
 
     # ── Stage 4: Writer + Fact 루프 ───────────────────────────────────────
 
-    async def stage_writing(self, config: dict, ka: dict, pocke: dict,
+    async def stage_writing(self, config: dict, ka: KaResult, pocke: PockeResult,
                              writer_agent_id: str, writer_key: str) -> tuple[str, list, bool]:
         """Writer+Fact 루프 (최대 3회). (draft, draft_versions, paused) 반환."""
         is_dev_task = config.get("_is_dev", False)
-        insights_str = "; ".join(
-            f"{i['title']}: {i.get('description', '')}"
-            for i in (ka.get("insights") or []) if isinstance(i, dict)
-        )
+        insights_str = "; ".join(f"{i.title}: {i.description}" for i in ka.insights)
         style_note = _STYLE_NOTE.get(
             (self.report_style.get("length", "standard"), self.report_style.get("tone", "formal")), ""
         )
@@ -379,7 +379,7 @@ class _Pipeline:
         fact_passed = False
         fact_feedback = ""
         draft_versions: list[tuple[int, str, str]] = []
-        live_pocke = {"sources": list(pocke.get("sources", [])), "key_facts": list(pocke.get("key_facts", []))}
+        live_pocke = PockeResult(sources=list(pocke.sources), key_facts=list(pocke.key_facts))
         msgs = WRITER_MESSAGES.get(writer_agent_id, WRITER_MESSAGES["over"])
 
         self.send({"type": "agent_message", "agentId": writer_agent_id,
@@ -404,13 +404,13 @@ class _Pipeline:
                     feedback_parts.append(style_note)
                 if fact_feedback:
                     feedback_parts.append(f"피드백: {fact_feedback}")
-                if not live_pocke["key_facts"]:
+                if not live_pocke.key_facts:
                     feedback_parts.append("웹 리서치 데이터 없음. 위키 맥락과 일반 지식 기반으로 작성.")
                 writer_raw, _ = await self.run_a(
                     build_prompt(writer_key,
                                  topic=self.topic, insights=insights_str,
-                                 conclusion=ka.get("conclusion", ""),
-                                 facts="; ".join(live_pocke["key_facts"][:6]),
+                                 conclusion=ka.conclusion,
+                                 facts="; ".join(live_pocke.key_facts[:6]),
                                  feedback="\n".join(feedback_parts) + "\n" if feedback_parts else ""),
                     no_tools=True, max_turns=2, agent_id=writer_agent_id,
                 )
@@ -449,8 +449,8 @@ class _Pipeline:
                                  [l[:110] for l in final_lines])
         return draft, draft_versions, False
 
-    async def _stage_fact(self, draft: str, live_pocke: dict, writer_agent_id: str,
-                           msgs: dict, attempt: int, is_dev_task: bool) -> tuple[bool, str, dict]:
+    async def _stage_fact(self, draft: str, live_pocke: PockeResult, writer_agent_id: str,
+                           msgs: dict, attempt: int, is_dev_task: bool) -> tuple[bool, str, PockeResult]:
         """팩트 검토 1회차. (passed, feedback, updated_live_pocke) 반환."""
         await asyncio.sleep(0.4)
         self.send({"type": "agent_message", "agentId": "fact", "message": "...검토 시작."})
@@ -462,26 +462,25 @@ class _Pipeline:
             fact_raw, _ = await self.run_a(
                 build_prompt("fact_dev" if is_dev_task else "fact",
                              report=draft[:3000],
-                             sources=json.dumps(live_pocke["sources"][:5], ensure_ascii=False)),
+                             sources=json.dumps(live_pocke.sources[:5], ensure_ascii=False)),
                 no_tools=True, max_turns=1, agent_id="fact",
             )
             await asyncio.sleep(0.8)
-            fact = parse_json(fact_raw, {"passed": True, "issues": [], "feedback": "",
-                                          "needs_research": False, "research_queries": []})
-            fact_passed = bool(fact.get("passed", True))
-            fact_feedback = fact.get("feedback", "")
+            fact = _parse_typed(fact_raw, FactResult, FactResult())
+            fact_passed = fact.passed
+            fact_feedback = fact.feedback
 
             if not fact_passed:
                 self.send({"type": "draft_report", "agentId": writer_agent_id, "topic": self.topic, "content": draft})
                 self.send({"type": "agent_message", "agentId": "fact",
-                           "message": f"오류 {len(fact.get('issues', []))}건. 수정 후 재검토."})
+                           "message": f"오류 {len(fact.issues)}건. 수정 후 재검토."})
                 self.send({"type": "agent_expression", "agentId": "fact", "expression": "err"})
                 self.send({"type": "agent_expression", "agentId": writer_agent_id,
                            "expression": "sad" if writer_agent_id == "over" else "err"})
                 self.emit("agent_done", agentId="fact", message="재조사 요청.")
 
-                if fact.get("needs_research") and fact.get("research_queries") and attempt < 3:
-                    live_pocke = await self._pocke_recheck(fact["research_queries"], live_pocke)
+                if fact.needs_research and fact.research_queries and attempt < 3:
+                    live_pocke = await self._pocke_recheck(fact.research_queries, live_pocke)
 
                 await asyncio.sleep(0.4)
                 self.send({"type": "agent_message", "agentId": writer_agent_id, "message": msgs["retry"]})
@@ -500,7 +499,7 @@ class _Pipeline:
         finally:
             stop_fact()
 
-    async def _pocke_recheck(self, research_queries: list, live_pocke: dict) -> dict:
+    async def _pocke_recheck(self, research_queries: list, live_pocke: PockeResult) -> PockeResult:
         """팩트 부장 요청으로 포케 재조사."""
         if self.is_cancelled():
             return live_pocke
@@ -515,13 +514,11 @@ class _Pipeline:
                              research_queries="\n".join(research_queries)),
                 tools=["WebSearch", "WebFetch"], max_turns=3, agent_id="pocke",
             )
-            recheck = parse_json(recheck_raw, {"sources": [], "key_facts": []})
-            live_pocke["key_facts"] = list(dict.fromkeys(
-                recheck.get("key_facts", []) + live_pocke["key_facts"]
-            ))[:10]
-            live_pocke["sources"] = (live_pocke["sources"] + recheck.get("sources", []))[:8]
+            recheck = _parse_typed(recheck_raw, PockeResult, PockeResult())
+            live_pocke.key_facts = list(dict.fromkeys(recheck.key_facts + live_pocke.key_facts))[:10]
+            live_pocke.sources = (live_pocke.sources + recheck.sources)[:8]
             self.emit("agent_done", agentId="pocke",
-                      message=f"재조사 완료. 팩트 {len(recheck.get('key_facts', []))}개 추가됐어요.")
+                      message=f"재조사 완료. 팩트 {len(recheck.key_facts)}개 추가됐어요.")
         except Exception:
             self.emit("agent_done", agentId="pocke", message="재조사 완료.")
         return live_pocke
@@ -551,12 +548,9 @@ class _Pipeline:
 
     # ── Stage 6: 핑 + 위키 ────────────────────────────────────────────────
 
-    async def stage_finalize(self, report_id: str, ka: dict, draft: str):
+    async def stage_finalize(self, report_id: str, ka: KaResult, draft: str):
         """핑 + 위키 업데이트 동시 실행 후 complete 이벤트."""
-        insights_str = "; ".join(
-            f"{i['title']}: {i.get('description', '')}"
-            for i in (ka.get("insights") or []) if isinstance(i, dict)
-        )
+        insights_str = "; ".join(f"{i.title}: {i.description}" for i in ka.insights)
         await asyncio.sleep(0.3)
         self.emit("agent_start", agentId="ping", message="이거랑 저거 합치면?! ✨ 안테나 반짝!")
         self.emit("agent_start", agentId="wiki", message="리서치 기록 업데이트 중...")
@@ -568,13 +562,13 @@ class _Pipeline:
                     no_tools=True, max_turns=1, agent_id="ping",
                 )
                 await asyncio.sleep(0.6)
-                ping_data = parse_json(ping_raw, {"ideas": []})
-                if ping_data.get("ideas"):
-                    self.send({"type": "ping_ideas", "agentId": "ping", "ideas": ping_data["ideas"]})
+                ping_data = _parse_typed(ping_raw, PingResult, PingResult())
+                if ping_data.ideas:
+                    self.send({"type": "ping_ideas", "agentId": "ping",
+                               "ideas": [i.model_dump() for i in ping_data.ideas]})
                 self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
-                ping_lines = [f"💡 {i['title']}: {i.get('spark', '')}"
-                              for i in ping_data.get("ideas", [])[:5] if isinstance(i, dict)]
-                await self.maybe_checkin("ping", f"아이디어 {len(ping_data.get('ideas', []))}개 캡처됐어요.", ping_lines)
+                ping_lines = [f"💡 {i.title}: {i.spark}" for i in ping_data.ideas[:5]]
+                await self.maybe_checkin("ping", f"아이디어 {len(ping_data.ideas)}개 캡처됐어요.", ping_lines)
             except Exception:
                 self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
 
@@ -609,14 +603,14 @@ class _Pipeline:
         if self.is_paused():
             _save_checkpoint(self.session_id, "after_plan", {
                 "stage": "after_plan", "topic": self.topic,
-                "resolved_task_type": plan["_resolved_task_type"],
+                "resolved_task_type": plan.resolved_task_type,
                 "ceo_notes": self.ceo_notes, "mode": self.mode,
                 "report_style": self.report_style,
             })
             return
 
         # 태스크 타입 + writer 결정
-        resolved_task_type = plan["_resolved_task_type"]
+        resolved_task_type = plan.resolved_task_type
         config = dict(TASK_CONFIG.get(resolved_task_type, TASK_CONFIG["research"]))
         is_dev_task = resolved_task_type == "dev"
         config["_is_dev"] = is_dev_task
@@ -647,7 +641,7 @@ class _Pipeline:
 
         await asyncio.sleep(0.4)
         self.send({"type": "agent_message", "agentId": "ka",
-                   "message": f"포케가 팩트 {len(pocke.get('key_facts', []))}개 넘겼어. ...흥미롭네."})
+                   "message": f"포케가 팩트 {len(pocke.key_facts)}개 넘겼어. ...흥미롭네."})
         await asyncio.sleep(0.6)
 
         # ── 3. 카 ─────────────────────────────────────────────────────────
