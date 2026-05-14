@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { PIPELINE, AGENT_MAP, AgentStatus } from "@/lib/agents";
-import { Handoff } from "@/app/page";
+import { Handoff } from "@/lib/types";
 
 type Props = {
   topic: string | null;
