@@ -16,10 +16,11 @@ import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
 import AgentSettingsPage from "@/components/AgentSettingsPage";
 import CeoCheckin, { type CeoCheckinState } from "@/components/CeoCheckin";
+import TeamRoster from "@/components/TeamRoster";
 import { AGENTS, PIPELINE, AgentStatus, AgentDef } from "@/lib/agents";
 import { AllAgentSettings, loadAgentSettings } from "@/lib/agentSettings";
 
-type DrawerTab = "reports" | "history" | "memos";
+type DrawerTab = "reports" | "history" | "memos" | "team";
 
 type AgentStates = Record<string, AgentStatus>;
 
@@ -751,7 +752,7 @@ export default function Home() {
           {/* 서랍 헤더 */}
           <div className="shrink-0 px-5 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <div className="flex items-center gap-1 flex-1">
-              {(["reports", "history", "memos"] as const).map((t) => (
+              {(["reports", "history", "memos", "team"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setSideDrawerTab(t)}
@@ -760,7 +761,7 @@ export default function Home() {
                     ? { background: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }
                     : { color: "#475569", border: "1px solid transparent" }}
                 >
-                  {t === "reports" ? "리포트" : t === "history" ? "히스토리" : "메모"}
+                  {t === "reports" ? "리포트" : t === "history" ? "히스토리" : t === "memos" ? "메모" : "팀원"}
                 </button>
               ))}
             </div>
@@ -793,6 +794,7 @@ export default function Home() {
               />
             )}
             {sideDrawerTab === "memos" && <MemoWikiPanel />}
+            {sideDrawerTab === "team" && <TeamRoster agentStatus={agentStatus} />}
           </div>
         </div>
 
