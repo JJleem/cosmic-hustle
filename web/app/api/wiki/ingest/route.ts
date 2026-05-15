@@ -1,4 +1,5 @@
 import { runAgent, WIKI_DIR } from "@/lib/agentRunner";
+import { BACKEND_URL } from "@/lib/backendProxy";
 
 export const maxDuration = 300;
 
@@ -53,6 +54,9 @@ export async function POST(request: Request) {
           if (chunk.trim()) send({ type: "agent_message", agentId: "wiki", message: "페이지 정리 중..." });
         },
       ).then(() => {
+        send({ type: "agent_message", agentId: "wiki", message: "벡터 DB 동기화 중..." });
+        return fetch(`${BACKEND_URL}/api/wiki/sync`, { method: "POST" }).catch(() => null);
+      }).then(() => {
         send({ type: "agent_done", agentId: "wiki", message: "위키에 저장했어요. 다음에 쓸 수 있어요." });
         send({ type: "complete" });
       }).catch((err: Error) => {

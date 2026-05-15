@@ -1,7 +1,7 @@
 from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
-from db.wiki_store import semantic_search, upsert_wiki_entry
+from db.wiki_store import semantic_search, upsert_wiki_entry, sync_concepts_dir
 
 router = APIRouter(prefix="/api/wiki")
 
@@ -74,3 +74,13 @@ def ingest_wiki(body: IngestRequest):
         pass
 
     return {"ok": True, "filename": safe_name}
+
+
+@router.post("/sync")
+def sync_wiki():
+    """wiki-llm/wiki/concepts/의 모든 .md 파일을 DB에 벡터 저장."""
+    try:
+        count = sync_concepts_dir()
+        return {"ok": True, "synced": count}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

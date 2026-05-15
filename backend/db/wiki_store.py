@@ -5,7 +5,7 @@ from .connection import SessionLocal
 from .models import WikiEntry
 from .embedder import embed
 
-WIKI_CONCEPTS_DIR = Path(__file__).parent.parent.parent / "wiki-llm" / "concepts"
+WIKI_CONCEPTS_DIR = Path(__file__).parent.parent.parent / "wiki-llm" / "wiki" / "concepts"
 
 
 def semantic_search(query: str, top_k: int = 3) -> list[dict]:
