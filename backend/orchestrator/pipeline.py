@@ -390,7 +390,7 @@ class _Pipeline:
                    "message": WRITER_INTRO.get(writer_agent_id, "인사이트 받았어요.")})
         await asyncio.sleep(0.6)
 
-        for attempt in range(1, 4):
+        for attempt in range(1, 3):
             if self.is_cancelled():
                 return draft, draft_versions, False
             if self.is_paused():
@@ -484,7 +484,7 @@ class _Pipeline:
                            "expression": "sad" if writer_agent_id == "over" else "err"})
                 self.emit("agent_done", agentId="fact", message="재조사 요청.")
 
-                if fact.needs_research and fact.research_queries and attempt < 3:
+                if fact.needs_research and fact.research_queries and attempt < 2:
                     live_pocke = await self._pocke_recheck(fact.research_queries, live_pocke)
 
                 await asyncio.sleep(0.4)
