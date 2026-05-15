@@ -420,7 +420,7 @@ class _Pipeline:
                 self.emit("agent_done", agentId=writer_agent_id,
                           message="구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")
             except Exception:
-                draft = f"# {self.topic}\n\n{ka.get('conclusion', '')}\n\n" + "\n".join(live_pocke["key_facts"])
+                draft = f"# {self.topic}\n\n{ka.conclusion}\n\n" + "\n".join(live_pocke.key_facts)
                 self.emit("agent_done", agentId=writer_agent_id, message="초안 완성. 팩트 부장님께.")
             finally:
                 stop_writer()
@@ -558,7 +558,7 @@ class _Pipeline:
         async def _ping():
             try:
                 ping_raw, _ = await self.run_a(
-                    build_prompt("ping", topic=self.topic, conclusion=ka.get("conclusion", "")[:400]),
+                    build_prompt("ping", topic=self.topic, conclusion=ka.conclusion[:400]),
                     no_tools=True, max_turns=1, agent_id="ping",
                 )
                 await asyncio.sleep(0.6)
@@ -576,7 +576,7 @@ class _Pipeline:
             try:
                 await self.run_a(
                     build_prompt("wiki_update", topic=self.topic,
-                                 conclusion=ka.get("conclusion", "")[:200],
+                                 conclusion=ka.conclusion[:200],
                                  insights=insights_str),
                     tools=["Read", "Write", "Edit", "Glob", "Grep"], max_turns=4, agent_id="wiki",
                 )

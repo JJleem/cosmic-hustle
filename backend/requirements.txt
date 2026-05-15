@@ -12,3 +12,5 @@ sentence-transformers
 weasyprint
 openpyxl
 markdown
+pytest
+pytest-asyncio
