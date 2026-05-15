@@ -25,17 +25,30 @@
 cosmic-hustle/
 ├── web/                          # Next.js 프론트엔드
 │   ├── app/api/                  # FastAPI 프록시 라우트 (thin wrapper)
-│   ├── lib/backendProxy.ts       # proxySSE / proxyJson 헬퍼
+│   │   └── logs/route.ts         # GET/POST /api/logs 프록시
+│   ├── lib/
+│   │   ├── backendProxy.ts       # proxySSE / proxyJson 헬퍼
+│   │   ├── useErrorLogger.ts     # console.error 인터셉트 → POST /api/logs
+│   │   └── stores/               # Zustand 5 스토어
+│   │       ├── agentStore.ts     # 에이전트 상태 (status/speaking/stream 등)
+│   │       ├── sessionStore.ts   # 세션 상태 (phase/topic/mode 등)
+│   │       └── dataStore.ts      # 데이터 (reports/handoffs/chatFeed 등)
 │   ├── components/
 │   │   ├── AgentImage.tsx        # talk_0~2 프레임 애니메이션
 │   │   ├── ProjectSetupModal.tsx # 채팅 pre-flight UI (플랜+writer 질문)
 │   │   ├── ProjectWorkView.tsx   # 실시간 스트림 뷰 + 간트 차트 + 버전 diff
-│   │   └── BottomAgentBar.tsx    # 에이전트 상태 바
+│   │   ├── BottomAgentBar.tsx    # 에이전트 상태 바
+│   │   ├── dashboard/
+│   │   │   ├── ReportBoard.tsx   # thin orchestrator (선택 상태만)
+│   │   │   ├── ReportList.tsx    # 리포트 목록
+│   │   │   └── ReportViewer.tsx  # 리포트 상세 + diff
+│   │   └── workspaces/
+│   │       └── RootWorkspace.tsx # 배포 체크리스트 + 에러 로그 탭 + 터미널
 │   └── .env.local                # BACKEND_URL=http://localhost:8000
 ├── backend/                      # Python FastAPI
 │   ├── main.py                   # FastAPI 앱 진입점
 │   ├── run.py                    # uvicorn 실행 진입점
-│   ├── requirements.txt          # 의존성
+│   ├── requirements.txt          # 의존성 (pytest, pytest-asyncio 포함)
 │   ├── .env                      # DATABASE_URL (gitignore됨, 직접 생성)
 │   ├── .env.example              # 키 양식 참고용
 │   ├── agents/                   # 에이전트별 CLAUDE.md (per-agent 컨텍스트)
@@ -51,21 +64,29 @@ cosmic-hustle/
 │   │   ├── ping/CLAUDE.md
 │   │   └── root/CLAUDE.md
 │   ├── orchestrator/
-│   │   ├── pipeline.py           # 메인 오케스트레이션
+│   │   ├── pipeline.py           # 메인 오케스트레이션 (_Pipeline 클래스)
 │   │   ├── agent_runner.py       # asyncio 서브프로세스 실시간 스트리밍
-│   │   └── prompts.py            # 프롬프트 템플릿
+│   │   ├── prompts.py            # 프롬프트 템플릿 + TASK_CONFIG + WRITER_AGENT_ID
+│   │   └── types.py              # Pydantic v2 모델 (PlanResult, KaResult 등 7개)
 │   ├── db/
-│   │   ├── models.py             # 테이블 정의
+│   │   ├── models.py             # 테이블 정의 (SystemLog 포함)
 │   │   ├── connection.py         # DB 연결
 │   │   ├── embedder.py           # SentenceTransformer 싱글톤
-│   │   └── wiki_store.py         # semantic_search / upsert_wiki_entry
-│   └── routers/
-│       ├── health.py             # GET /health
-│       ├── research.py           # POST /research, SSE 스트리밍
-│       ├── wiki.py               # GET/POST /api/wiki
-│       ├── memos.py              # GET/POST/DELETE /api/memos
-│       ├── versions.py           # GET /api/sessions/{id}/versions
-│       └── export.py             # GET /api/reports/{id}/export?format=pdf|excel
+│   │   ├── wiki_store.py         # semantic_search / upsert_wiki_entry
+│   │   └── logger.py             # log_error() — DB 에러 로그 기록
+│   ├── routers/
+│   │   ├── health.py             # GET /health
+│   │   ├── research.py           # POST /research, SSE 스트리밍
+│   │   ├── wiki.py               # GET/POST /api/wiki
+│   │   ├── memos.py              # GET/POST/DELETE /api/memos
+│   │   ├── versions.py           # GET /api/sessions/{id}/versions
+│   │   ├── export.py             # GET /api/reports/{id}/export?format=pdf|excel
+│   │   └── logs.py               # GET/POST /api/logs
+│   └── tests/                    # pytest 단위 테스트 (52개)
+│       ├── conftest.py           # db/agent_runner 모킹
+│       ├── test_types.py         # Pydantic 모델 검증
+│       ├── test_prompts.py       # build_prompt / TASK_CONFIG 일관성
+│       └── test_pipeline_utils.py# _parse_typed / _Pipeline 유틸리티
 └── CLAUDE.md
 ```
 
@@ -114,7 +135,7 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 
 ---
 
-## 현재 상태 (2026-05-13)
+## 현재 상태 (2026-05-15)
 
 ### 완료된 기능
 
@@ -141,6 +162,19 @@ cd web && npm install && npm run dev   # → http://localhost:3000
   - 파이프라인 바 에이전트 미니 아바타
   - 13인치 반응형 개선
 - 에이전트 11명 사원증 이미지 제작 완료 (`web/public/id/{agentId}.png`) — 실버 ID카드 프레임 3D 일러스트
+- **엔터프라이즈 리팩토링 완료 (Phase 1~3)**
+  - Phase 2: ReportBoard 936→42줄 컴포넌트 분리 (ReportList, ReportViewer, reportUtils)
+  - Phase 3-A: `orchestrator/types.py` Pydantic v2 모델 7개 (`_parse_typed` 헬퍼)
+  - Phase 3-B: Zustand 5 스토어 3개 분리 — `page.tsx` 984→728줄, useState 25→2개
+  - Phase 3-C: pytest 단위 테스트 52개 (types/prompts/pipeline 전체 커버)
+  - 버그 수정: pipeline.py `ka.get()` dict 접근 패턴 3곳 → `.conclusion` 속성 접근
+  - 버그 수정: `speak` useCallback `[agent]` 의존성 무한루프 → `getState()` 직접 호출
+- **루트 에러 로그 시스템**
+  - `system_logs` DB 테이블 + Alembic 005 마이그레이션
+  - `db/logger.py` `log_error()` — 파이프라인 7개 except 블록 연결
+  - `GET/POST /api/logs` (level/source/session_id 필터)
+  - 프론트 `console.error` 인터셉트 훅 (`useErrorLogger`)
+  - Root 에이전트 워크스페이스 — 에러 로그 탭 (level 필터, stack_trace 펼치기)
 
 ### 남은 로드맵
 
@@ -183,6 +217,8 @@ POST   /api/memos                           # 메모 생성
 DELETE /api/memos/{id}
 GET    /api/wiki/search?q=                  # 위키 시맨틱 서치
 POST   /api/wiki/ingest                     # 위키 저장 + 임베딩
+GET    /api/logs?level=&source=&session_id= # 에러 로그 조회 (최신순, 최대 200)
+POST   /api/logs                            # 에러 로그 저장 (프론트엔드 → 백엔드)
 ```
 
 ## SSE 이벤트 타입
