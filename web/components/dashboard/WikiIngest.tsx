@@ -87,16 +87,17 @@ export default function WikiIngest() {
         buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
+          let event: { type: string; message?: string };
           try {
-            const event = JSON.parse(line.slice(6)) as { type: string; message?: string };
-            if (event.type === "agent_message" && event.message) setMessage(event.message);
-            else if (event.type === "agent_done") setMessage(event.message ?? "저장 완료");
-            else if (event.type === "complete") {
-              setStatus("done");
-              setMessage("위키에 저장됐어요.");
-              setText(""); setFilename(""); setKakaoPreview(null); setRoomName("");
-            } else if (event.type === "error") throw new Error(event.message);
-          } catch { /* ignore parse errors */ }
+            event = JSON.parse(line.slice(6)) as { type: string; message?: string };
+          } catch { continue; }
+          if (event.type === "agent_message" && event.message) setMessage(event.message);
+          else if (event.type === "agent_done") setMessage(event.message ?? "저장 완료");
+          else if (event.type === "complete") {
+            setStatus("done");
+            setMessage("위키에 저장됐어요.");
+            setText(""); setFilename(""); setKakaoPreview(null); setRoomName("");
+          } else if (event.type === "error") throw new Error(event.message);
         }
       }
     } catch (err) {

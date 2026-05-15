@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus, X, AlertCircle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 type Memo = { id: string; text: string; createdAt: number };
 
@@ -10,8 +11,6 @@ export default function MemoBoard() {
   const [input, setInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
-  const [addError, setAddError] = useState<string | null>(null);
 
   const loadMemos = () => {
     setLoadError(false);
@@ -22,11 +21,6 @@ export default function MemoBoard() {
   };
 
   useEffect(() => { loadMemos(); }, []);
-
-  const showError = (setter: (v: string | null) => void, msg: string) => {
-    setter(msg);
-    setTimeout(() => setter(null), 3500);
-  };
 
   const add = async () => {
     const text = input.trim();
@@ -43,7 +37,10 @@ export default function MemoBoard() {
       setMemos((prev) => [memo, ...prev]);
       setInput("");
     } catch {
-      showError(setAddError, "저장 실패. 다시 시도해 주세요.");
+      toast.error("메모 저장 실패", {
+        description: "다시 시도해 주세요.",
+        action: { label: "재시도", onClick: () => void add() },
+      });
     } finally {
       setSaving(false);
     }
@@ -57,7 +54,10 @@ export default function MemoBoard() {
       if (!res.ok) throw new Error();
     } catch {
       setMemos(snapshot);
-      showError(setRemoveError, "삭제 실패. 다시 시도해 주세요.");
+      toast.error("메모 삭제 실패", {
+        description: "다시 시도해 주세요.",
+        action: { label: "재시도", onClick: () => void remove(id) },
+      });
     }
   };
 
@@ -83,20 +83,6 @@ export default function MemoBoard() {
           <Plus size={13} className="text-white" />
         </button>
       </form>
-
-      {addError && (
-        <div className="shrink-0 flex items-center gap-1.5 text-[10px] text-red-300 px-2 py-1.5 rounded-lg border border-red-500/30 bg-red-900/15">
-          <AlertCircle size={10} className="shrink-0" />
-          {addError}
-        </div>
-      )}
-
-      {removeError && (
-        <div className="shrink-0 flex items-center gap-1.5 text-[10px] text-red-300 px-2 py-1.5 rounded-lg border border-red-500/30 bg-red-900/15">
-          <AlertCircle size={10} className="shrink-0" />
-          {removeError}
-        </div>
-      )}
 
       {loadError ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
