@@ -183,12 +183,17 @@ class _Pipeline:
         self.send({"type": "agent_thinking", "agentId": "plan", "chunk": "태스크 타입 분류 중..."})
 
         plan_key = "plan_auto" if self.task_type == "auto" else "plan"
-        plan_raw, _ = await self.run_a(
-            build_prompt(plan_key, topic=self.topic, task_type=self.task_type),
-            no_tools=True, max_turns=1, agent_id="plan",
-        )
+        try:
+            plan_raw, _ = await self.run_a(
+                build_prompt(plan_key, topic=self.topic, task_type=self.task_type),
+                no_tools=True, max_turns=1, agent_id="plan",
+            )
+        except Exception as e:
+            log_error(f"플랜 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+            plan_raw = ""
         plan = _parse_typed(plan_raw, PlanResult,
-                            PlanResult(task_type=self.task_type, objective=self.topic))
+                            PlanResult(task_type=self.task_type if self.task_type in TASK_CONFIG else "research",
+                                       objective=self.topic))
 
         resolved_task_type = plan.task_type if plan.task_type in TASK_CONFIG else (
             self.task_type if self.task_type in TASK_CONFIG else "research"
@@ -289,7 +294,7 @@ class _Pipeline:
             try:
                 raw, _ = await self.run_a(
                     build_prompt(config["pocke"], topic=self.topic, context=self.topic, keywords=self.topic),
-                    tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
+                    tools=["WebSearch", "WebFetch"], max_turns=8, agent_id="pocke",
                 )
                 return raw
             except Exception as e:
@@ -312,7 +317,7 @@ class _Pipeline:
         try:
             retry_raw, _ = await self.run_a(
                 build_prompt("pocke_retry", topic=self.topic),
-                tools=["WebSearch", "WebFetch"], max_turns=3, agent_id="pocke",
+                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
             )
             retry = _parse_typed(retry_raw, PockeResult, PockeResult())
             if retry.key_facts:
@@ -380,7 +385,6 @@ class _Pipeline:
             (self.report_style.get("length", "standard"), self.report_style.get("tone", "formal")), ""
         )
         draft = ""
-        fact_passed = False
         fact_feedback = ""
         draft_versions: list[tuple[int, str, str]] = []
         live_pocke = PockeResult(sources=list(pocke.sources), key_facts=list(pocke.key_facts))
@@ -422,7 +426,8 @@ class _Pipeline:
                     draft = writer_raw
                 await asyncio.sleep(1.8)
                 self.emit("agent_done", agentId=writer_agent_id,
-                          message="구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")
+                          message=("구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")
+                          if attempt == 1 else ("구현 완료." if is_dev_task else "최종본 완성."))
             except Exception as e:
                 log_error(f"라이터 에이전트({writer_agent_id}) 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 draft = f"# {self.topic}\n\n{ka.conclusion}\n\n" + "\n".join(live_pocke.key_facts)
@@ -437,17 +442,17 @@ class _Pipeline:
                 draft_lines = [l.strip() for l in draft.splitlines() if l.strip()][:8]
                 await self.maybe_checkin(writer_agent_id, "초안이 완성됐어요. 내용을 확인해주세요.",
                                          [l[:110] for l in draft_lines])
+                _, fact_feedback, live_pocke = await self._stage_fact(
+                    draft, live_pocke, writer_agent_id, msgs, attempt, is_dev_task
+                )
+                # 팩트는 피드백만 전달 (항상 통과) — 라이터가 한 번 수정
+                await asyncio.sleep(0.4)
+                self.send({"type": "agent_message", "agentId": writer_agent_id,
+                           "message": msgs["retry"]})
+                await asyncio.sleep(0.8)
+            # attempt 2: 팩트 없음, 라이터 최종본으로 루프 종료
 
-            fact_passed, fact_feedback, live_pocke = await self._stage_fact(
-                draft, live_pocke, writer_agent_id, msgs, attempt, is_dev_task
-            )
-            if fact_passed:
-                break
-
-        if not fact_passed:
-            self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
-            self.emit("agent_done", agentId="fact", message="통과 처리.")
-            self.emit("agent_done", agentId=writer_agent_id, message=msgs["final"])
+        self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": None})
 
         final_lines = [l.strip() for l in draft.splitlines() if l.strip()][:8]
         await self.maybe_checkin("fact", "검토까지 완료됐어요. 최종 결과물 확인해주세요.",
@@ -472,32 +477,13 @@ class _Pipeline:
             )
             await asyncio.sleep(0.8)
             fact = _parse_typed(fact_raw, FactResult, FactResult())
-            fact_passed = fact.passed
             fact_feedback = fact.feedback
 
-            if not fact_passed:
-                self.send({"type": "draft_report", "agentId": writer_agent_id, "topic": self.topic, "content": draft})
-                self.send({"type": "agent_message", "agentId": "fact",
-                           "message": f"오류 {len(fact.issues)}건. 수정 후 재검토."})
-                self.send({"type": "agent_expression", "agentId": "fact", "expression": "err"})
-                self.send({"type": "agent_expression", "agentId": writer_agent_id,
-                           "expression": "sad" if writer_agent_id == "over" else "err"})
-                self.emit("agent_done", agentId="fact", message="재조사 요청.")
+            self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
+            self.emit("agent_done", agentId="fact",
+                      message="피드백 전달. 수정 부탁해요." if fact_feedback and fact_feedback.strip() and fact_feedback != "이상 없음" else "이상 없음. 수정 후 완료.")
 
-                if fact.needs_research and fact.research_queries and attempt < 2:
-                    live_pocke = await self._pocke_recheck(fact.research_queries, live_pocke)
-
-                await asyncio.sleep(0.4)
-                self.send({"type": "agent_message", "agentId": writer_agent_id, "message": msgs["retry"]})
-                await asyncio.sleep(0.8)
-                self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
-            else:
-                self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
-                self.emit("agent_done", agentId="fact", message="통과.")
-                await asyncio.sleep(0.3)
-                self.emit("agent_done", agentId=writer_agent_id, message=msgs["done"])
-
-            return fact_passed, fact_feedback, live_pocke
+            return True, fact_feedback, live_pocke
         except Exception as e:
             log_error(f"팩트 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
             self.emit("agent_done", agentId="fact", message="검토 완료.")
@@ -518,7 +504,7 @@ class _Pipeline:
             recheck_raw, _ = await self.run_a(
                 build_prompt("pocke_recheck", topic=self.topic,
                              research_queries="\n".join(research_queries)),
-                tools=["WebSearch", "WebFetch"], max_turns=3, agent_id="pocke",
+                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
             )
             recheck = _parse_typed(recheck_raw, PockeResult, PockeResult())
             live_pocke.key_facts = list(dict.fromkeys(recheck.key_facts + live_pocke.key_facts))[:10]

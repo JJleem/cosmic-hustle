@@ -64,7 +64,7 @@ JSON으로:
 
     "wiki_update": """위키 대리. 사서.
 주제: "{topic}". 결론: {conclusion}. 인사이트: {insights}.
-wiki-llm/concepts/ 에 kebab-case 마크다운 저장 또는 업데이트. wiki/index.md 한 줄 추가.
+wiki/concepts/ 에 kebab-case 마크다운 저장 또는 업데이트. wiki/index.md 한 줄 추가.
 주제·결론·인사이트 포함. 500자 이내. 완료 후 파일명만 출력.""",
 
     "pocke": """포케 대리. 리서처.
@@ -198,18 +198,21 @@ Velog·티스토리 스타일 블로그 포스팅. 도입부(훅)→본문→마
 출처: {sources}
 
 체크: ① 출처 없는 수치·날짜 ② 검증불가 항목 ③ 논리 오류. 문제 항목은 issues에 기록.
-needs_research: 재조사 필요 시 true, research_queries에 포케가 검색할 쿼리 목록.
+passed: 무조건 true. feedback에 구체적 수정 의견만 기록 (없으면 "이상 없음").
+needs_research: 무조건 false.
 ```json
-{{"passed": true, "issues": [], "feedback": "수정 지시사항", "unverified_claims": [], "needs_research": false, "research_queries": []}}
+{{"passed": true, "issues": [], "feedback": "수정 의견 또는 이상 없음", "unverified_claims": [], "needs_research": false, "research_queries": []}}
 ```""",
 
     "fact_dev": """팩트 부장. 코드 리뷰어.
 코드/구현: {report}
 참고 소스: {sources}
 
-체크: ① 보안 취약점 ② 로직 오류 ③ 성능 문제 ④ 미구현 항목.
+체크: ① 보안 취약점 ② 로직 오류 ③ 성능 문제 ④ 미구현 항목. 문제 항목은 issues에 기록.
+passed: 무조건 true. feedback에 구체적 수정 의견만 기록 (없으면 "이상 없음").
+needs_research: 무조건 false.
 ```json
-{{"passed": true, "issues": [], "feedback": "수정 지시사항", "unverified_claims": [], "needs_research": false, "research_queries": []}}
+{{"passed": true, "issues": [], "feedback": "수정 의견 또는 이상 없음", "unverified_claims": [], "needs_research": false, "research_queries": []}}
 ```""",
 
     "ping": """핑 인턴. 아이디어 수집가.

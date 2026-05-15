@@ -233,9 +233,11 @@ export default function Home() {
           const errMsg = (event.message as string) ?? "파이프라인 오류가 발생했어요.";
           session.setError({ title: "파이프라인 오류", detail: errMsg });
           data.addChat({ id: uid(), agentId: "root", text: `[오류] ${errMsg}`, at: new Date() });
+          agent.reset();
           agent.setStatus("root", "active");
           speak("root", `🚨 ${errMsg}`);
-          setTimeout(() => { agent.reset(); session.setPhase("idle"); session.setTopic(""); }, 3000);
+          session.setPhase("idle");
+          session.setTopic("");
           break;
         }
       }
@@ -318,7 +320,8 @@ export default function Home() {
       }
     } finally {
       abortRef.current = null;
-      if (!errorHandled && useSessionStore.getState().phase === "working") session.setPhase("done");
+      const s = useSessionStore.getState();
+      if (!errorHandled && !s.researchError && s.phase === "working") session.setPhase("done");
     }
   };
 
