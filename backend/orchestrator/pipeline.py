@@ -11,6 +11,7 @@ from .types import PlanResult, WikiResult, PockeResult, KaResult, Insight, FactR
 from db.wiki_store import semantic_search, sync_concepts_dir
 from db.connection import SessionLocal
 from db.models import ReportVersion
+from db.logger import log_error
 
 # ── Global state ───────────────────────────────────────────────────────────
 pending_responses: dict[str, asyncio.Future] = {}
@@ -280,7 +281,8 @@ class _Pipeline:
                     no_tools=True, max_turns=1, agent_id="wiki",
                 )
                 return raw
-            except Exception:
+            except Exception as e:
+                log_error(f"위키 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 return ""
 
         async def _pocke():
@@ -290,7 +292,8 @@ class _Pipeline:
                     tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
                 )
                 return raw
-            except Exception:
+            except Exception as e:
+                log_error(f"포케 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 return ""
 
         wiki_raw, pocke_raw = await asyncio.gather(_wiki(), _pocke())
@@ -352,7 +355,8 @@ class _Pipeline:
                     ka_raw = raw
                 await asyncio.sleep(1.2)
                 self.emit("agent_done", agentId="ka", message="찾았다!!! 핵심 인사이트 잡음.")
-            except Exception:
+            except Exception as e:
+                log_error(f"카 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 self.emit("agent_done", agentId="ka", message="분석 완료.")
             finally:
                 stop_ka()
@@ -419,7 +423,8 @@ class _Pipeline:
                 await asyncio.sleep(1.8)
                 self.emit("agent_done", agentId=writer_agent_id,
                           message="구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")
-            except Exception:
+            except Exception as e:
+                log_error(f"라이터 에이전트({writer_agent_id}) 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 draft = f"# {self.topic}\n\n{ka.conclusion}\n\n" + "\n".join(live_pocke.key_facts)
                 self.emit("agent_done", agentId=writer_agent_id, message="초안 완성. 팩트 부장님께.")
             finally:
@@ -493,7 +498,8 @@ class _Pipeline:
                 self.emit("agent_done", agentId=writer_agent_id, message=msgs["done"])
 
             return fact_passed, fact_feedback, live_pocke
-        except Exception:
+        except Exception as e:
+            log_error(f"팩트 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
             self.emit("agent_done", agentId="fact", message="검토 완료.")
             return True, "", live_pocke
         finally:
@@ -569,7 +575,8 @@ class _Pipeline:
                 self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
                 ping_lines = [f"💡 {i.title}: {i.spark}" for i in ping_data.ideas[:5]]
                 await self.maybe_checkin("ping", f"아이디어 {len(ping_data.ideas)}개 캡처됐어요.", ping_lines)
-            except Exception:
+            except Exception as e:
+                log_error(f"핑 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
 
         async def _wiki_update():
@@ -582,7 +589,8 @@ class _Pipeline:
                 )
                 synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
                 self.emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
-            except Exception:
+            except Exception as e:
+                log_error(f"위키 업데이트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
                 self.emit("agent_done", agentId="wiki", message="기록 완료.")
 
         await asyncio.gather(_ping(), _wiki_update(), return_exceptions=True)
@@ -728,6 +736,7 @@ async def run_pipeline(
         try:
             await pipeline.run()
         except Exception as e:
+            log_error(f"파이프라인 치명적 오류: {e}", source="pipeline", session_id=session_id, exc=e)
             send({"type": "error", "message": str(e)})
         finally:
             queue.put_nowait(None)

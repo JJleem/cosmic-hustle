@@ -63,6 +63,18 @@ class SessionCheckpoint(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class SystemLog(Base):
+    __tablename__ = "system_logs"
+
+    id = Column(String, primary_key=True)
+    level = Column(String, nullable=False)        # error | warn | info
+    source = Column(String, nullable=False)       # pipeline | agent | api | frontend
+    message = Column(Text, nullable=False)
+    stack_trace = Column(Text, nullable=True)
+    session_id = Column(String, nullable=True)    # 어떤 리서치 중 발생했는지
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 

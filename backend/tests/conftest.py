@@ -12,3 +12,4 @@ sys.modules.setdefault("db.wiki_store", MagicMock(semantic_search=MagicMock(), s
 sys.modules.setdefault("db.connection", MagicMock(SessionLocal=MagicMock()))
 sys.modules.setdefault("db.models", MagicMock())
 sys.modules.setdefault("db.embedder", MagicMock())
+sys.modules.setdefault("db.logger", MagicMock(log_error=MagicMock()))

@@ -22,6 +22,7 @@ import { AllAgentSettings, loadAgentSettings } from "@/lib/agentSettings";
 import { useAgentStore } from "@/lib/stores/agentStore";
 import { useSessionStore } from "@/lib/stores/sessionStore";
 import { useDataStore } from "@/lib/stores/dataStore";
+import { useErrorLogger } from "@/lib/useErrorLogger";
 
 export type { Handoff } from "@/lib/types";
 
@@ -35,6 +36,7 @@ export default function Home() {
   const [agentSettings, setAgentSettings] = useState<AllAgentSettings>({});
   const [errorTyped, setErrorTyped] = useState("");
 
+  useErrorLogger();
   useEffect(() => { setAgentSettings(loadAgentSettings()); }, []);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);

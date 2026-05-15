@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { MessageCircle, Terminal, CheckSquare, Square } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Terminal, CheckSquare, Square, AlertTriangle, RefreshCw } from "lucide-react";
 import { AgentDef } from "@/lib/agents";
 import ChatPanel from "./ChatPanel";
 
-type Tab = "checklist" | "terminal";
+type Tab = "checklist" | "terminal" | "logs";
 
 const DEPLOY_CHECKS = [
   { id: "env",     label: "환경변수 확인",         desc: ".env.production 체크" },
@@ -17,6 +17,133 @@ const DEPLOY_CHECKS = [
   { id: "monitor", label: "모니터링 알림 확인",    desc: "에러율·레이턴시 정상" },
   { id: "rollback",label: "롤백 플랜 준비",        desc: "이전 버전 태그 확인" },
 ];
+
+type LogEntry = {
+  id: string;
+  level: "error" | "warn" | "info";
+  source: string;
+  message: string;
+  stack_trace: string | null;
+  session_id: string | null;
+  created_at: string;
+};
+
+const LEVEL_COLOR: Record<string, string> = {
+  error: "#f87171",
+  warn: "#fbbf24",
+  info: "#60a5fa",
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  pipeline: "파이프라인",
+  agent: "에이전트",
+  api: "API",
+  frontend: "프론트",
+};
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${diff}초 전`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  return new Date(iso).toLocaleDateString("ko-KR");
+}
+
+function LogsTab({ agent }: { agent: AgentDef }) {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [levelFilter, setLevelFilter] = useState<string>("error");
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/logs?level=${levelFilter}&limit=50`);
+      if (res.ok) setLogs(await res.json());
+    } catch { /* 무시 */ }
+    finally { setLoading(false); }
+  }, [levelFilter]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 필터 + 새로고침 */}
+      <div className="shrink-0 flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+        {["error", "warn", "info"].map((lv) => (
+          <button
+            key={lv}
+            onClick={() => setLevelFilter(lv)}
+            className="px-3 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all"
+            style={levelFilter === lv
+              ? { background: `${LEVEL_COLOR[lv]}18`, color: LEVEL_COLOR[lv], border: `1px solid ${LEVEL_COLOR[lv]}40` }
+              : { color: "#475569", border: "1px solid transparent" }}
+          >
+            {lv.toUpperCase()}
+          </button>
+        ))}
+        <button
+          onClick={fetchLogs}
+          className="ml-auto text-slate-600 hover:text-slate-400 transition-colors"
+          disabled={loading}
+        >
+          <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {/* 로그 목록 */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1.5 scrollbar-hide">
+        {logs.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <AlertTriangle size={18} className="text-slate-700" />
+            <p className="text-[11px] text-slate-700">에러 없음. 시스템 정상.</p>
+          </div>
+        )}
+        {logs.map((log) => (
+          <div
+            key={log.id}
+            className="rounded-xl px-3 py-2.5 cursor-pointer transition-all"
+            style={{
+              background: expanded === log.id ? `${LEVEL_COLOR[log.level]}08` : "rgba(255,255,255,0.02)",
+              border: `1px solid ${LEVEL_COLOR[log.level]}${expanded === log.id ? "30" : "15"}`,
+            }}
+            onClick={() => setExpanded(expanded === log.id ? null : log.id)}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className="text-[8px] font-bold tracking-widest shrink-0 px-1.5 py-0.5 rounded"
+                style={{ background: `${LEVEL_COLOR[log.level]}18`, color: LEVEL_COLOR[log.level] }}
+              >
+                {log.level.toUpperCase()}
+              </span>
+              <span className="text-[9px] text-slate-600 shrink-0">
+                {SOURCE_LABEL[log.source] ?? log.source}
+              </span>
+              <span className="text-[10px] text-slate-400 truncate flex-1">{log.message}</span>
+              <span className="text-[9px] text-slate-700 shrink-0">{timeAgo(log.created_at)}</span>
+            </div>
+
+            {expanded === log.id && (
+              <div className="mt-2 space-y-1">
+                {log.session_id && (
+                  <p className="text-[9px] text-slate-600">
+                    세션: <span className="text-slate-500 font-mono">{log.session_id.slice(0, 8)}...</span>
+                  </p>
+                )}
+                {log.stack_trace && (
+                  <pre className="text-[8px] text-slate-600 whitespace-pre-wrap break-all leading-relaxed max-h-32 overflow-y-auto scrollbar-hide mt-1 p-2 rounded-lg"
+                    style={{ background: "rgba(0,0,0,0.3)" }}>
+                    {log.stack_trace.slice(0, 800)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function RootWorkspace({ agent }: { agent: AgentDef }) {
   const [tab, setTab] = useState<Tab>("checklist");
@@ -35,6 +162,7 @@ export default function RootWorkspace({ agent }: { agent: AgentDef }) {
 
   const TABS = [
     { id: "checklist" as Tab, label: "배포 체크리스트", icon: CheckSquare },
+    { id: "logs"      as Tab, label: "에러 로그",       icon: AlertTriangle },
     { id: "terminal"  as Tab, label: "터미널 채팅",     icon: Terminal },
   ];
 
@@ -54,7 +182,8 @@ export default function RootWorkspace({ agent }: { agent: AgentDef }) {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {tab === "terminal" && <ChatPanel agent={agent} mono={true} />}
+        {tab === "terminal"  && <ChatPanel agent={agent} mono={true} />}
+        {tab === "logs"      && <LogsTab agent={agent} />}
 
         {tab === "checklist" && (
           <div className="h-full overflow-y-auto px-6 py-5 scrollbar-hide">
