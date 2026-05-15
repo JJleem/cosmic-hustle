@@ -175,6 +175,28 @@ cd web && npm install && npm run dev   # → http://localhost:3000
   - `GET/POST /api/logs` (level/source/session_id 필터)
   - 프론트 `console.error` 인터셉트 훅 (`useErrorLogger`)
   - Root 에이전트 워크스페이스 — 에러 로그 탭 (level 필터, stack_trace 펼치기)
+- **파이프라인 안정성 강화 (2026-05-15)**
+  - Fact Option B: 팩트는 피드백만 전달(passed 항상 true), 라이터 2회 실행 구조로 변경
+  - 팩트 루프 2회 → writer 1회+fact+writer 1회 고정 흐름 (불필요한 반복 제거)
+  - 포케 max_turns 5→8: ToolSearch+WebSearch n회 후 JSON 출력 턴 부족 문제 수정
+  - `result` 이벤트 subtype 무관 캡처: max_turns 초과 시 포케 JSON 유실 방지
+  - `stage_plan` try/except 추가: 플랜 실패해도 fallback으로 파이프라인 계속 진행
+  - wiki_update 경로 수정: `wiki-llm/concepts/` → `wiki/concepts/` (sync 경로 일치)
+  - `find_claude()` 플랫폼 분기: macOS `.bin/claude` 우선, Windows `claude.exe` 우선
+  - stderr drain 추가: subprocess 버퍼 블로킹 방지
+  - 프론트 에러 이벤트: 3초 타이머 제거, 즉시 idle 전환 + finally 경쟁 조건 해결
+  - MemoBoard 에러 UX: toast + 재시도 버튼 (sonner)
+  - WikiIngest silent fail 수정: inner try-catch가 에러 이벤트 삼키던 문제 해결
+
+### 파이프라인 핵심 동작 (현재)
+
+```
+writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 → 완료
+                                                  ↑ fact_feedback 반영
+```
+- 팩트는 절대 passed:false 반환 안 함 (프롬프트 강제)
+- 라이터는 항상 정확히 2번 실행 (1회 초안 → 1회 수정본)
+- 포케 max_turns=8 (ToolSearch 1 + WebSearch 최대 6 + JSON 출력 1)
 
 ### 남은 로드맵
 
@@ -270,7 +292,7 @@ CEO 입력 (채팅 pre-flight: 플랜 확인 → writer 스타일 질문 → 모
   → 포케  ──┘  (0-data 시 자동 재시도 1회)
   → 카(분석)
   → run | over | pixel | buzz (task_type에 따라 1명)
-  → 팩트(검토) → 피드백 루프 최대 3회, 각 버전 DB 저장
+  → 팩트(피드백 전달, 항상 통과) — writer 2회 고정 실행
   → 루트(dev 태스크만)
   → 핑 + 위키 동시(아이디어 + 위키 업데이트 + pgvector 동기화)
   → CEO
@@ -294,7 +316,7 @@ CEO 입력 (채팅 pre-flight: 플랜 확인 → writer 스타일 질문 → 모
 
 - 에이전트별 CLAUDE.md + cwd 격리 (`backend/agents/{id}/`) — 거대한 루트 CLAUDE.md 로딩 차단
 - 에이전트 간 전체 컨텍스트 전달 X, 구조화된 JSON 핸드오프만
-- maxTurns 제한 (팩트 1턴, 포케 5턴, 포케 재조사 3턴)
+- maxTurns 제한 (팩트 1턴, 포케 8턴, 포케 재조사/재시도 5턴)
 - 병렬 실행 구간: 위키+포케 동시, 핑+위키업데이트 동시
 
 ## 세션 지속성
