@@ -117,11 +117,12 @@ export default function Home() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const speak = useCallback((agentId: string, message: string) => {
-    agent.setLastMessage(agentId, message);
-    agent.setSpeaking(agentId, true);
+    const { setLastMessage, setSpeaking } = useAgentStore.getState();
+    setLastMessage(agentId, message);
+    setSpeaking(agentId, true);
     if (speakTimers.current[agentId]) clearTimeout(speakTimers.current[agentId]);
-    speakTimers.current[agentId] = setTimeout(() => agent.setSpeaking(agentId, false), 2500);
-  }, [agent]);
+    speakTimers.current[agentId] = setTimeout(() => useAgentStore.getState().setSpeaking(agentId, false), 2500);
+  }, []);
 
   // idle 랜덤 중얼거림
   useEffect(() => {
