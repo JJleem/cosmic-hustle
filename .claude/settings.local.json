@@ -83,7 +83,16 @@
       "Bash(PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make install)",
       "Bash(echo \"PID: $!\")",
       "Bash(mkdir -p /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/api/research/\\\\[sessionId\\\\]/pause)",
-      "Bash(mkdir -p /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/api/research/\\\\[sessionId\\\\]/restart)"
+      "Bash(mkdir -p /Users/molt/Desktop/molt_repository/cosmic-hustle/web/app/api/research/\\\\[sessionId\\\\]/restart)",
+      "Bash(.venv/bin/alembic stamp *)",
+      "Bash(awk '{print $9, $5}')",
+      "Bash(npm list *)",
+      "Bash(.venv/bin/pytest *)",
+      "Bash(npm ls *)",
+      "Bash(grep -E \"^/Users/molt.*backend/[^/]+\\\\.py$|main|app\")",
+      "Bash(claude -p --output-format stream-json --allowedTools \"WebSearch,WebFetch\" --max-turns 3 --verbose)",
+      "Bash(file /Users/molt/Desktop/molt_repository/cosmic-hustle/web/node_modules/@anthropic-ai/claude-code/bin/claude.exe head -3 /Users/molt/Desktop/molt_repository/cosmic-hustle/web/node_modules/@anthropic-ai/claude-code/bin/claude.exe)",
+      "Bash(file /Users/molt/Desktop/molt_repository/cosmic-hustle/web/node_modules/.bin/claude head -3 /Users/molt/Desktop/molt_repository/cosmic-hustle/web/node_modules/.bin/claude)"
     ]
   }
 }

@@ -7,6 +7,7 @@
 ## Machine Learning / AI
 
 - [LLM 모델 선택 전략 — Haiku vs Sonnet](concepts/LLM_모델_선택_전략.md)
+- [Claude Code 시장 분석 및 활용 전략](concepts/claude-code-market-analysis.md)
 
 ## Programming
 

@@ -25,6 +25,7 @@ export type ProjectConfig = {
   agentConfigs: AgentConfig[];
   mode: ProjectMode;
   reportStyle?: ReportStyle;
+  mock?: boolean;
 };
 
 type Props = {
@@ -213,13 +214,14 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
     }
   }
 
-  function handleStart() {
+  function handleStart(mock = false) {
     onStart({
-      topic: topic.trim(),
+      topic: mock ? (topic.trim() || "Mock 테스트") : topic.trim(),
       taskTypeId: taskTypeRef.current,
       agentConfigs: initConfigs(taskTypeRef.current, defaultSettings),
       mode: modeRef.current,
       reportStyle: styleRef.current,
+      mock,
     });
   }
 
@@ -260,19 +262,29 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
               onBlur={(e) => { e.target.style.borderColor = "#1e2a40"; }}
             />
             <div className="flex justify-between items-center mt-1.5">
-              <p className="text-[9px] text-slate-700">⌘ Enter</p>
               <button
-                onClick={handleTopicSubmit}
-                disabled={!topic.trim()}
-                className="text-xs font-bold px-5 py-2 rounded-full transition-all"
-                style={{
-                  background: topic.trim() ? "linear-gradient(135deg, #1e3a5f, #2a4f7c)" : "#1a2235",
-                  color: topic.trim() ? "#93c5fd" : "#334155",
-                  border: `1px solid ${topic.trim() ? "#2a5a9c" : "#1e2535"}`,
-                }}
+                onClick={() => handleStart(true)}
+                className="text-[11px] px-3 py-1.5 rounded-full transition-all"
+                style={{ background: "rgba(16,185,129,0.08)", color: "#6ee7b7", border: "1px solid rgba(16,185,129,0.2)" }}
+                title="0토큰 — fixture 데이터로 UI 테스트"
               >
-                →
+                🧪 Mock
               </button>
+              <div className="flex items-center gap-2">
+                <p className="text-[9px] text-slate-700">⌘ Enter</p>
+                <button
+                  onClick={handleTopicSubmit}
+                  disabled={!topic.trim()}
+                  className="text-xs font-bold px-5 py-2 rounded-full transition-all"
+                  style={{
+                    background: topic.trim() ? "linear-gradient(135deg, #1e3a5f, #2a4f7c)" : "#1a2235",
+                    color: topic.trim() ? "#93c5fd" : "#334155",
+                    border: `1px solid ${topic.trim() ? "#2a5a9c" : "#1e2535"}`,
+                  }}
+                >
+                  →
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -353,15 +365,19 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
           </div>
 
           {phase === "ready" && (
-            <div className="shrink-0 px-10 py-5 border-t border-slate-800/60 flex justify-end">
+            <div className="shrink-0 px-10 py-5 border-t border-slate-800/60 flex items-center justify-between">
               <button
-                onClick={handleStart}
+                onClick={() => handleStart(true)}
+                className="text-[11px] px-4 py-2 rounded-full transition-all"
+                style={{ background: "rgba(16,185,129,0.08)", color: "#6ee7b7", border: "1px solid rgba(16,185,129,0.2)" }}
+                title="에이전트 실행 없이 fixture 데이터로 UI만 테스트"
+              >
+                🧪 Mock 테스트
+              </button>
+              <button
+                onClick={() => handleStart(false)}
                 className="text-xs font-bold px-6 py-2.5 rounded-full transition-all"
-                style={{
-                  background: "linear-gradient(135deg, #1e3a5f, #2a4f7c)",
-                  color: "#93c5fd",
-                  border: "1px solid #2a5a9c",
-                }}
+                style={{ background: "linear-gradient(135deg, #1e3a5f, #2a4f7c)", color: "#93c5fd", border: "1px solid #2a5a9c" }}
               >
                 🚀 프로젝트 시작합니다
               </button>

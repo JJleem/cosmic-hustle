@@ -11,6 +11,8 @@ import ProjectWorkView from "@/components/ProjectWorkView";
 import { Idea } from "@/components/AgentWorkspace";
 import ProjectSetupModal, { ProjectConfig } from "@/components/ProjectSetupModal";
 import ReportBoard from "@/components/dashboard/ReportBoard";
+import ReportViewer from "@/components/dashboard/ReportViewer";
+import { type Report } from "@/lib/reportUtils";
 import HistoryIdeaPanel from "@/components/dashboard/HistoryIdeaPanel";
 import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
@@ -35,6 +37,7 @@ export default function Home() {
 
   const [agentSettings, setAgentSettings] = useState<AllAgentSettings>({});
   const [errorTyped, setErrorTyped] = useState("");
+  const [viewingReport, setViewingReport] = useState<Report | null>(null);
 
   useErrorLogger();
   useEffect(() => { setAgentSettings(loadAgentSettings()); }, []);
@@ -224,6 +227,8 @@ export default function Home() {
           localStorage.removeItem("cosmicHustleSession");
           session.setPhase("done");
           speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
+          const latestReport = useDataStore.getState().reports.at(-1);
+          if (latestReport) setViewingReport(latestReport);
           if (Notification.permission === "granted") {
             new Notification("🪐 Cosmic Hustle", { body: `"${inputTopic}" 리서치가 완료됐어요.`, icon: "/favicon.ico" });
           }
@@ -277,7 +282,8 @@ export default function Home() {
     let errorHandled = false;
 
     try {
-      const res = await fetch("/api/research", {
+      const researchUrl = config.mock ? "/api/research?mock=true" : "/api/research";
+      const res = await fetch(researchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: config.topic, taskTypeId: config.taskTypeId, agentConfigs: config.agentConfigs, mode: config.mode, reportStyle: config.reportStyle }),
@@ -635,10 +641,8 @@ export default function Home() {
             {sideDrawerTab === "reports" && (
               <ReportBoard
                 reports={reports}
-                drafts={reportDrafts}
+                onSelect={setViewingReport}
                 onDelete={(id) => data.deleteReport(id)}
-                onUpdate={(updated) => data.updateReport(updated)}
-                onDeepDive={(t) => { session.setInitialTopic(t); session.setSideDrawerOpen(false); session.setShowSetup(true); }}
               />
             )}
             {sideDrawerTab === "history" && (
@@ -713,6 +717,17 @@ export default function Home() {
           agentStartTs={agentStartTs.current}
           sessionStartTs={sessionStartTsRef.current}
           onStop={stopResearch}
+        />
+      )}
+
+      {viewingReport && (
+        <ReportViewer
+          report={viewingReport}
+          drafts={reportDrafts}
+          onClose={() => setViewingReport(null)}
+          onDelete={(id) => { data.deleteReport(id); setViewingReport(null); }}
+          onUpdate={(updated) => { data.updateReport(updated); setViewingReport(updated); }}
+          onDeepDive={(t) => { setViewingReport(null); session.setInitialTopic(t); session.setShowSetup(true); }}
         />
       )}
 

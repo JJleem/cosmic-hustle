@@ -423,7 +423,8 @@ class _Pipeline:
                     no_tools=True, max_turns=2, agent_id=writer_agent_id,
                 )
                 if writer_raw.strip():
-                    draft = writer_raw
+                    parsed = parse_json(writer_raw, {})
+                    draft = parsed.get("content") if isinstance(parsed, dict) and parsed.get("content") else writer_raw
                 await asyncio.sleep(1.8)
                 self.emit("agent_done", agentId=writer_agent_id,
                           message=("구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")

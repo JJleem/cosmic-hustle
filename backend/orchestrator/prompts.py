@@ -160,6 +160,29 @@ WebSearch 최소 3회. 공식 문서·GitHub·기술 블로그 위주. 버전·�
 팩트: {facts}.
 {feedback}기술 분석 리포트. ## 구조. 장단점 비교 포함. 800~1200자.""",
 
+    "over_dev_plan": """오버 사원. 기술 기획자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}
+규칙:
+- 팩트·인사이트를 근거로 구체적으로 작성
+- 면책 문구 절대 금지. 기술 수치·일정 근거 포함
+개발 기획서. ## 구조로: 배경 및 목적 → 목표 및 성공 지표 → 기술 스택 선정 이유 → 구현 범위 → 일정 계획 → 리스크. 1000~1500자.""",
+
+    "over_dev_spec": """오버 사원. 기술 기획자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}
+규칙:
+- 팩트·인사이트를 근거로 구체적으로 작성
+- 마크다운 테이블 적극 활용 (기능 목록, 입출력, 우선순위)
+- 면책 문구 절대 금지
+기능 명세서. ## 구조로: 개요 → 기능 목록(테이블) → 기능별 상세 명세(입력/출력/예외) → API 엔드포인트(있을 경우) → 데이터 모델 → 우선순위 및 의존관계. 1000~1500자.""",
+
     "over_blog": """오버 사원. 블로그 작가.
 주제: "{topic}".
 인사이트: {insights}.
@@ -185,6 +208,35 @@ Velog·티스토리 스타일 블로그 포스팅. 도입부(훅)→본문→마
 결론: {conclusion}.
 팩트: {facts}.
 {feedback}디자인 관점 가이드 문서. 와이어프레임 구조·컴포넌트 목록·비주얼 방향성·색상 팔레트 포함. 마크다운 ## 구조. 800~1200자.""",
+
+    "pixel_ux": """픽셀 사원. UX 디자이너.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}
+규칙:
+- 팩트·인사이트를 근거로 사용자 관점에서 작성
+- 면책 문구 절대 금지. 수치·사례 반드시 포함
+UX 리서치 리포트. ## 구조로: 사용자 퍼소나 → 핵심 페인포인트 → 사용자 여정 맵 → 개선 방향 → 우선순위 제안. 1000~1500자.""",
+
+    "pixel_ui": """픽셀 사원. UI 개발자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}
+규칙:
+- 반드시 완성된 단일 HTML 파일을 ```html 코드블록으로 출력
+- 인라인 CSS 포함 (외부 파일 없이 동작해야 함)
+- 모던·반응형 디자인. 실제 데이터·수치 활용
+- HTML 앞뒤로 설명 텍스트 없음. 코드블록만 출력
+```html
+<!DOCTYPE html>
+<html lang="ko">
+...
+</html>
+```""",
 
     "run": """런 사원. 개발자.
 주제: "{topic}".
@@ -241,15 +293,17 @@ TASK_CONFIG = {
     "blog":      {"pocke": "pocke",          "ka": "ka",          "writer": "over_blog"},
     "tech":      {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_tech"},
     "marketing": {"pocke": "pocke_marketing","ka": "ka_marketing","writer": "over_marketing"},
-    "design_ux": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel"},
-    "design_ui": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel"},
+    "design_ux": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel_ux"},
+    "design_ui": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel_ui"},
     "dev":       {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "run"},
-    "dev_plan":  {"pocke": "pocke",          "ka": "ka",          "writer": "over"},
-    "dev_spec":  {"pocke": "pocke",          "ka": "ka",          "writer": "over"},
+    "dev_plan":  {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_dev_plan"},
+    "dev_spec":  {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_dev_spec"},
 }
 
 WRITER_AGENT_ID = {
     "over": "over", "over_blog": "over", "over_tech": "over",
+    "over_dev_plan": "over", "over_dev_spec": "over",
     "over_marketing": "buzz", "buzz": "buzz",
-    "pixel": "pixel", "run": "run",
+    "pixel": "pixel", "pixel_ux": "pixel", "pixel_ui": "pixel",
+    "run": "run",
 }

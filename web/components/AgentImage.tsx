@@ -24,6 +24,15 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
   const [blinkFrame, setBlinkFrame] = useState<string | null>(null);
   const [talkFrame, setTalkFrame]   = useState<string | null>(null);
 
+  // 마운트 시 모든 프레임 preload → 애니메이션 중 깜빡임 방지
+  useEffect(() => {
+    const base = defaultSrc.replace("default.png", "");
+    ["talk_0", "talk_1", "talk_2", "blink_half", "blink", "done", "err"].forEach(f => {
+      const img = new window.Image();
+      img.src = `${base}${f}.png`;
+    });
+  }, [defaultSrc]);
+
   const initial = getImageSrc(defaultSrc, status, expression);
   const [bottom, setBottom] = useState(initial);
   const [top, setTop]       = useState(initial);

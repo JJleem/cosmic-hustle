@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 from datetime import timezone
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -11,6 +11,7 @@ from db.connection import get_db
 from db import models
 from db.models import SessionCheckpoint  # noqa: F401 — ensure model is loaded
 from orchestrator.pipeline import run_pipeline, pending_responses, cancelled_sessions, paused_sessions
+from orchestrator.mock_pipeline import run_mock_pipeline
 
 router = APIRouter(prefix="/api")
 
@@ -89,19 +90,27 @@ class CheckinResponse(BaseModel):
 
 
 @router.post("/research")
-async def start_research(body: ResearchRequest, db: Session = Depends(get_db)):
-    topic = body.topic.strip()
-    if not topic:
+async def start_research(body: ResearchRequest, db: Session = Depends(get_db), mock: bool = Query(False)):
+    topic = body.topic.strip() or "Mock 테스트"
+    if not mock and not topic:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "topic required"}, status_code=400)
+
+    session_id = str(uuid.uuid4())
+    db.add(models.Session(id=session_id, topic=topic, status="working"))
+    db.commit()
+
+    if mock:
+        async def mock_gen():
+            async for event in run_mock_pipeline(session_id, topic):
+                yield {"data": json.dumps(event, ensure_ascii=False)}
+            db.query(models.Session).filter(models.Session.id == session_id).update({"status": "done"})
+            db.commit()
+        return EventSourceResponse(mock_gen())
 
     task_type = body.taskTypeId or body.taskType
     mode = body.mode
     report_style = {"length": body.reportStyle.length, "tone": body.reportStyle.tone} if body.reportStyle else None
-    session_id = str(uuid.uuid4())
-
-    db.add(models.Session(id=session_id, topic=topic, status="working"))
-    db.commit()
 
     generator = _sse_generator(session_id, topic, db, {
         "session_id": session_id, "topic": topic,

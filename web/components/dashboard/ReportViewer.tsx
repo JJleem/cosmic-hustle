@@ -190,7 +190,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl max-h-[88vh] mx-6 rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
+        className="relative w-[92vw] max-w-6xl max-h-[95vh] rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
