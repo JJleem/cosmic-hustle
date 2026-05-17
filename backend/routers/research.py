@@ -100,15 +100,27 @@ async def start_research(body: ResearchRequest, db: Session = Depends(get_db), m
     db.add(models.Session(id=session_id, topic=topic, status="working"))
     db.commit()
 
+    task_type = body.taskTypeId or body.taskType
+
     if mock:
         async def mock_gen():
-            async for event in run_mock_pipeline(session_id, topic):
+            async for event in run_mock_pipeline(session_id, topic, task_type=task_type):
+                if event.get("type") == "report":
+                    try:
+                        db.add(models.Report(
+                            id=event.get("reportId", str(uuid.uuid4())),
+                            session_id=session_id,
+                            agent_id=event.get("agentId", ""),
+                            topic=topic,
+                            content=event.get("content", ""),
+                        ))
+                        db.commit()
+                    except Exception:
+                        pass
                 yield {"data": json.dumps(event, ensure_ascii=False)}
             db.query(models.Session).filter(models.Session.id == session_id).update({"status": "done"})
             db.commit()
         return EventSourceResponse(mock_gen())
-
-    task_type = body.taskTypeId or body.taskType
     mode = body.mode
     report_style = {"length": body.reportStyle.length, "tone": body.reportStyle.tone} if body.reportStyle else None
 
