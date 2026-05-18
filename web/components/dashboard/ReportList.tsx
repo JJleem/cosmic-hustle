@@ -20,6 +20,13 @@ const DATE_FILTERS = [
 ] as const;
 
 type DateFilter = "today" | "week" | "month";
+type SortBy = "newest" | "oldest" | "name";
+
+const SORT_OPTIONS: { id: SortBy; label: string }[] = [
+  { id: "newest", label: "최신순" },
+  { id: "oldest", label: "오래된순" },
+  { id: "name",   label: "이름순" },
+];
 
 type Props = {
   reports: Report[];
@@ -31,6 +38,7 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
   const [search, setSearch] = useState("");
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState<DateFilter | null>(null);
+  const [sortBy, setSortBy] = useState<SortBy>("newest");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = reports.filter((r) => {
@@ -49,6 +57,10 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return r.topic.toLowerCase().includes(q) || r.content.toLowerCase().includes(q);
+  }).sort((a, b) => {
+    if (sortBy === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (sortBy === "name") return a.topic.localeCompare(b.topic, "ko");
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
   const handleDelete = async (id: string) => {
@@ -124,6 +136,21 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
               className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
               style={filterDate === id
                 ? { background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" }
+                : { color: "#374151", border: "1px solid #1a2235" }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[8px] text-slate-700 font-bold tracking-wider uppercase">정렬</span>
+          {SORT_OPTIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setSortBy(id)}
+              className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+              style={sortBy === id
+                ? { background: "#1e2a40", color: "#93c5fd", border: "1px solid #2a4a6a" }
                 : { color: "#374151", border: "1px solid #1a2235" }}
             >
               {label}
