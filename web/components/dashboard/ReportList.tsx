@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Search, Trash2 } from "lucide-react";
+import { Search, Trash2, Loader2 } from "lucide-react";
 import { AGENT_MAP } from "@/lib/agents";
 import { type Report, stripMarkdown } from "@/lib/reportUtils";
 
@@ -40,28 +40,38 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
   const [filterDate, setFilterDate] = useState<DateFilter | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>("newest");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [serverResults, setServerResults] = useState<Report[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = reports.filter((r) => {
-    if (filterAgent && r.agentId !== filterAgent) return false;
-    if (filterDate) {
-      const now = new Date();
-      const date = new Date(r.createdAt);
-      if (filterDate === "today") {
-        if (date.toDateString() !== now.toDateString()) return false;
-      } else if (filterDate === "week") {
-        if (date < new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)) return false;
-      } else if (filterDate === "month") {
-        if (date < new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)) return false;
+  const hasFilter = !!(search.trim() || filterAgent || filterDate || sortBy !== "newest");
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!hasFilter) { setServerResults(null); return; }
+
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set("q", search.trim());
+        if (filterAgent) params.set("agent", filterAgent);
+        if (filterDate) params.set("date", filterDate);
+        params.set("sort", sortBy);
+        const res = await fetch(`/api/reports?${params}`);
+        if (res.ok) {
+          const data = (await res.json()) as Array<{ id: string; sessionId: string; agentId: string; topic: string; content: string; createdAt: string }>;
+          setServerResults(data.map((r) => ({ ...r, createdAt: new Date(r.createdAt) })));
+        }
+      } finally {
+        setSearching(false);
       }
-    }
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return r.topic.toLowerCase().includes(q) || r.content.toLowerCase().includes(q);
-  }).sort((a, b) => {
-    if (sortBy === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    if (sortBy === "name") return a.topic.localeCompare(b.topic, "ko");
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
+    }, 300);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filterAgent, filterDate, sortBy]);
+
+  const filtered = serverResults ?? reports;
 
   const handleDelete = async (id: string) => {
     setDeletingId(id);
@@ -86,9 +96,10 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="보고서 검색..."
-            className="w-full pl-7 pr-3 py-1.5 rounded-lg text-[11px] text-slate-300 placeholder:text-slate-700 focus:outline-none"
+            className="w-full pl-7 pr-7 py-1.5 rounded-lg text-[11px] text-slate-300 placeholder:text-slate-700 focus:outline-none"
             style={{ background: "#0c1220", border: "1px solid #1e2a3a" }}
           />
+          {searching && <Loader2 size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 animate-spin" />}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button

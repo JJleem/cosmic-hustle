@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -238,13 +238,43 @@ def get_sessions(db: Session = Depends(get_db)):
 
 
 @router.get("/reports")
-def get_reports(db: Session = Depends(get_db)):
-    rows = (
-        db.query(models.Report)
-        .order_by(models.Report.created_at.desc())
-        .limit(100)
-        .all()
-    )
+def get_reports(
+    q: str = Query(default=""),
+    agent: str = Query(default=""),
+    date: str = Query(default=""),
+    sort: str = Query(default="newest"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Report)
+
+    if q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            models.Report.topic.ilike(term) | models.Report.content.ilike(term)
+        )
+    if agent.strip():
+        query = query.filter(models.Report.agent_id == agent.strip())
+    if date.strip():
+        now = datetime.now(timezone.utc)
+        if date == "today":
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date == "week":
+            cutoff = now - timedelta(days=7)
+        elif date == "month":
+            cutoff = now - timedelta(days=30)
+        else:
+            cutoff = None
+        if cutoff:
+            query = query.filter(models.Report.created_at >= cutoff)
+
+    if sort == "oldest":
+        query = query.order_by(models.Report.created_at.asc())
+    elif sort == "name":
+        query = query.order_by(models.Report.topic.asc())
+    else:
+        query = query.order_by(models.Report.created_at.desc())
+
+    rows = query.limit(200).all()
     return [
         {
             "id": r.id,
