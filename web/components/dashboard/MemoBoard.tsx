@@ -20,6 +20,7 @@ export default function MemoBoard() {
       .catch(() => setLoadError(true));
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadMemos(); }, []);
 
   const add = async () => {

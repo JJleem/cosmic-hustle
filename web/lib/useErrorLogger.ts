@@ -1,10 +1,7 @@
 "use client";
 import { useEffect } from "react";
-import { useSessionStore } from "@/lib/stores/sessionStore";
 
 export function useErrorLogger() {
-  const sessionId = useSessionStore((s) => s.topic);
-
   useEffect(() => {
     const orig = console.error.bind(console);
     console.error = (...args: unknown[]) => {

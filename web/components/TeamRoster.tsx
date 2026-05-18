@@ -48,6 +48,7 @@ export default function TeamRoster({ agentStatus }: Props) {
                     : `0 4px 16px rgba(0,0,0,0.55)`,
                 }}
               >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/id/${agent.id}.png`}
                   alt={agent.name}

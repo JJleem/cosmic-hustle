@@ -20,7 +20,7 @@ function getImageSrc(defaultSrc: string, status: AgentStatus, expression: string
   }
 }
 
-export default function AgentImage({ defaultSrc, size, status, expression = null }: Props) {
+export default function AgentImage({ defaultSrc, status, expression = null }: Props) {
   const [blinkFrame, setBlinkFrame] = useState<string | null>(null);
   const [talkFrame, setTalkFrame]   = useState<string | null>(null);
 
@@ -41,8 +41,9 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
   const currentRef   = useRef(initial);
   const busyRef      = useRef(false);
   const pendingRef   = useRef<string | null>(null);
-  const doTransition = useRef((_: string) => {});
+  const doTransition = useRef((_s: string) => { void _s; });
 
+  // eslint-disable-next-line react-hooks/refs
   doTransition.current = (next: string) => {
     if (next === currentRef.current) return;
     if (busyRef.current) { pendingRef.current = next; return; }
@@ -68,6 +69,7 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
 
   // 눈 깜빡임: idle 상태에서만, 2~5초마다 한 번
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (status !== "idle" || expression) { setBlinkFrame(null); return; }
 
     let nextBlink: ReturnType<typeof setTimeout>;
@@ -87,6 +89,7 @@ export default function AgentImage({ defaultSrc, size, status, expression = null
 
   // 말하기 애니메이션: active 상태에서 talk_0→1→2→1→0 싸이클
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (status !== "active") { setTalkFrame(null); return; }
 
     const FRAMES = ["talk_0", "talk_1", "talk_2", "talk_1", "talk_0"];

@@ -176,6 +176,7 @@ export default function DeptRoom({
         animate={{ filter: "brightness(0.4) saturate(1)" }}
         transition={{ duration: 0.7, ease: "easeOut" }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`/departments/${dept.id}.png`}
           alt={dept.label}

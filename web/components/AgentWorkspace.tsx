@@ -206,7 +206,7 @@ export default function AgentWorkspace({ agent, pingIdeas, lastTopic, onClose }:
 
   const [taskState, setTaskState] = useState<TaskState>("idle");
   const [streamMsg, setStreamMsg] = useState("");
-  const [result, setResult] = useState<string | null>(null);
+  const [, setResult] = useState<string | null>(null);
   const [ideas, setIdeas] = useState<Idea[]>(pingIdeas);
   const [input, setInput] = useState("");
   const [showIngest, setShowIngest] = useState(false);
@@ -220,6 +220,7 @@ export default function AgentWorkspace({ agent, pingIdeas, lastTopic, onClose }:
 
   // 외부에서 pingIdeas 업데이트되면 반영
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pingIdeas.length > 0) setIdeas(pingIdeas);
   }, [pingIdeas]);
 

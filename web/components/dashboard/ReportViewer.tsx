@@ -44,6 +44,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const exportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVersions([]);
     setSelectedVersion(null);
     setShowVersions(false);

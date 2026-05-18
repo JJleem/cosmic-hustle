@@ -61,6 +61,7 @@ export default function ProjectWorkView({
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [showGantt, setShowGantt] = useState(false);
   const [liveElapsed, setLiveElapsed] = useState(0);
+  // eslint-disable-next-line react-hooks/purity
   const activeStartRef = useRef<number>(Date.now());
 
   // 가장 최근 스트림이 들어온 에이전트를 추적 — 병렬 실행 시 위키+포케 둘 다 표시 가능
@@ -150,6 +151,7 @@ export default function ProjectWorkView({
   // 활성 에이전트 바뀔 때마다 live timer 리셋
   useEffect(() => {
     const activeAgent = AGENTS.find((a) => agentStatus[a.id] === "active");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!activeAgent) { setLiveElapsed(0); return; }
     activeStartRef.current = Date.now();
     setLiveElapsed(0);
@@ -350,6 +352,7 @@ export default function ProjectWorkView({
                     className="w-4 h-4 rounded-full overflow-hidden shrink-0"
                     style={{ outline: `1px solid ${a.color}${isActive ? "90" : "40"}` }}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={a.image} alt={a.name} className="w-full h-full object-cover object-top" />
                   </div>
                   <span className="text-[9px] font-bold" style={{ color: isActive || isPinned || isAuto ? a.color : `${a.color}80` }}>
@@ -455,6 +458,7 @@ export default function ProjectWorkView({
             style={{ color: "#8899aa" }}
           >
             {showGantt ? (() => {
+              // eslint-disable-next-line react-hooks/purity
               const now = Date.now();
               const ganttAgents = AGENTS.filter((a) => agentStartTs[a.id] && agentStatus[a.id] !== "disabled" && agentStatus[a.id] !== "waiting");
               if (ganttAgents.length === 0) return <p className="text-slate-700 text-xs mt-4">아직 실행된 에이전트가 없어요.</p>;

@@ -25,7 +25,7 @@ type Props = {
 };
 
 export default function OfficePage({
-  agentStatus, agentExpression, speaking, lastMessage, pingIdeas, lastTopic, chatFeed = [], onPlanClick, streamLog = {}, thinkingHint = {},
+  agentStatus, agentExpression, speaking, lastMessage, lastTopic, chatFeed = [], onPlanClick, streamLog = {}, thinkingHint = {},
 }: Props) {
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [hoveredDeptId, setHoveredDeptId]   = useState<string | null>(null);
@@ -35,9 +35,6 @@ export default function OfficePage({
   const activeStageIdx = PIPELINE.findIndex((s) =>
     s.ids.some((id) => agentStatus[id] === "active")
   );
-  const doneCount = activeStageIdx === -1
-    ? PIPELINE.filter((_, i) => PIPELINE.every((s) => s.ids.every((id) => agentStatus[id] === "done")) ? true : false).length
-    : activeStageIdx;
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
@@ -171,6 +168,7 @@ export default function OfficePage({
                     }}
                     transition={{ duration: 0.3 }}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={`/departments/${dept.id}.png`}
                       alt={dept.label}

@@ -97,6 +97,7 @@ export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
             style={{ border: `2px solid ${agent?.color ?? "#334155"}50` }}
           >
             {agent?.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={agent.image} alt={agent.name} className="w-full h-full object-cover object-top" />
             ) : (
               <div className="w-full h-full" style={{ background: agent?.color ?? "#334155" }} />

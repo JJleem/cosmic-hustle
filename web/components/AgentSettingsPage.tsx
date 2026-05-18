@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { AGENTS } from "@/lib/agents";
 import { AllAgentSettings, AgentPersistentSettings, saveAgentSettings } from "@/lib/agentSettings";
@@ -29,7 +29,10 @@ export default function AgentSettingsPage({ settings, onChange }: Props) {
   const [saved, setSaved] = useState(false);
 
   const agent = AGENTS.find((a) => a.id === selectedId)!;
-  const current: AgentPersistentSettings = settings[selectedId] ?? { instruction: "" };
+  const current = useMemo<AgentPersistentSettings>(
+    () => settings[selectedId] ?? { instruction: "" },
+    [settings, selectedId],
+  );
   const turnsConfig = MAX_TURNS_CONFIG[selectedId];
   const defaultPrompt = DEFAULT_PROMPTS[selectedId] ?? "";
   const varsHint = PROMPT_VARS_HINT[selectedId] ?? [];

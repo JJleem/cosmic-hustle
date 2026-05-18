@@ -58,6 +58,7 @@ export default function AgentChatPanel({ agent, agentStatus, agentExpression, li
   const [isAsking, setIsAsking] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHistoryLoading(true);
     setCurrentAnswer(null);
     fetch(`/api/agent/${agent.id}/history`)

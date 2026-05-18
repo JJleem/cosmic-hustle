@@ -88,7 +88,7 @@ function ResultCard({ entry, color }: { entry: SearchEntry; color: string }) {
         <div className="flex items-center gap-3 mb-4">
           <div className="w-5 h-5 rounded-full border-2 animate-spin shrink-0" style={{ borderColor: `${color}30`, borderTopColor: color }} />
           <div>
-            <p className="text-xs font-semibold text-slate-300">"{entry.query}" 검색 중...</p>
+            <p className="text-xs font-semibold text-slate-300">&quot;{entry.query}&quot; 검색 중...</p>
             <p className="text-[10px] text-slate-600 mt-0.5 animate-pulse">볼따구 채우는 중이에요 🐹</p>
           </div>
         </div>
@@ -104,7 +104,7 @@ function ResultCard({ entry, color }: { entry: SearchEntry; color: string }) {
   if (entry.error || !entry.result) {
     return (
       <div className="rounded-2xl p-4" style={{ background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.15)" }}>
-        <p className="text-xs text-red-400">"{entry.query}" 검색 실패</p>
+        <p className="text-xs text-red-400">&quot;{entry.query}&quot; 검색 실패</p>
         <p className="text-[10px] text-slate-600 mt-1">{entry.rawText || "오류가 발생했어요."}</p>
       </div>
     );
@@ -122,7 +122,7 @@ function ResultCard({ entry, color }: { entry: SearchEntry; color: string }) {
           <Zap size={13} style={{ color, marginTop: 2, flexShrink: 0 }} />
           <div>
             <p className="text-[10px] font-bold mb-0.5" style={{ color }}>{comment}</p>
-            <p className="text-[9px] text-slate-600">"{entry.query}"</p>
+            <p className="text-[9px] text-slate-600">&quot;{entry.query}&quot;</p>
           </div>
         </div>
       </div>

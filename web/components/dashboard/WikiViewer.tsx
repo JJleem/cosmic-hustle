@@ -55,6 +55,7 @@ export default function WikiViewer() {
     finally { setLoading(false); }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
@@ -62,6 +63,7 @@ export default function WikiViewer() {
   // 검색어 디바운스 → 전문 검색
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (search.length < 2) { setFullMatches([]); setFullSearched(false); return; }
     searchTimer.current = setTimeout(async () => {
       setFullSearching(true);
@@ -197,7 +199,7 @@ export default function WikiViewer() {
       {showFullResults && (
         <div className="shrink-0">
           <p className="text-[9px] text-slate-600 mb-2">
-            <span className="text-slate-500 font-bold">"{search}"</span> 내용 검색 결과 · {fullMatches.length}개
+            <span className="text-slate-500 font-bold">&quot;{search}&quot;</span> 내용 검색 결과 · {fullMatches.length}개
           </p>
         </div>
       )}
@@ -217,7 +219,7 @@ export default function WikiViewer() {
       ) : showFullResults ? (
         <div className="flex-1 overflow-y-auto space-y-1.5 scrollbar-hide">
           {fullMatches.length === 0
-            ? <div className="flex-1 flex items-center justify-center py-12"><p className="text-slate-500 text-xs">"{search}" 내용 없음</p></div>
+            ? <div className="flex-1 flex items-center justify-center py-12"><p className="text-slate-500 text-xs">&quot;{search}&quot; 내용 없음</p></div>
             : fullMatches.map(m => (
               <button key={m.path} onClick={() => void openFile(m.path, m.name, m.category)}
                 className="w-full text-left flex flex-col gap-1.5 px-3 py-2.5 rounded-xl transition-all group"

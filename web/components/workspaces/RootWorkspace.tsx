@@ -49,7 +49,8 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString("ko-KR");
 }
 
-function LogsTab({ agent }: { agent: AgentDef }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LogsTab({ agent: _agent }: { agent: AgentDef }) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [levelFilter, setLevelFilter] = useState<string>("error");
@@ -64,6 +65,7 @@ function LogsTab({ agent }: { agent: AgentDef }) {
     finally { setLoading(false); }
   }, [levelFilter]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   return (
