@@ -44,7 +44,7 @@ async def search_topic(topic: str, keywords: list[str] | None = None) -> list[di
     seen: set[str] = set()
     merged: list[dict] = []
     for batch in results_list:
-        if isinstance(batch, Exception):
+        if not isinstance(batch, list):
             continue
         for r in batch:
             url = r.get("url", "")

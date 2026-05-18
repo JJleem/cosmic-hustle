@@ -3,7 +3,7 @@
 db/agent_runner 등 외부 의존성을 sys.modules에서 먼저 패치해 pipeline import가 실패하지 않도록 함.
 """
 import sys
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 
 # DB 관련 모듈 패치 (PostgreSQL 연결 불필요)
 _db_mock = MagicMock()

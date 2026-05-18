@@ -1,4 +1,3 @@
-import asyncio
 import json
 import uuid
 from datetime import timezone
@@ -178,7 +177,7 @@ async def restart_session(session_id: str, db: Session = Depends(get_db)):
     if not checkpoint_row:
         return _JSONResponse({"error": "checkpoint not found"}, status_code=404)
 
-    checkpoint = json.loads(checkpoint_row.payload)
+    checkpoint = json.loads(str(checkpoint_row.payload))
     topic = checkpoint.get("topic", "")
     new_session_id = str(uuid.uuid4())
 
@@ -214,7 +213,7 @@ def get_events(session_id: str, since: int = 0, db: Session = Depends(get_db)):
 
     return {
         "status": session.status,
-        "events": [{"seq": e.seq, "event": json.loads(e.payload)} for e in events],
+        "events": [{"seq": e.seq, "event": json.loads(str(e.payload))} for e in events],
     }
 
 

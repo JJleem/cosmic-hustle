@@ -72,7 +72,7 @@ def _export_pdf(report: models.Report) -> Response:
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": _safe_filename(report.topic, "pdf")},
+        headers={"Content-Disposition": _safe_filename(str(report.topic), "pdf")},
     )
 
 
@@ -130,7 +130,7 @@ def _export_excel(report: models.Report) -> Response:
     return Response(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": _safe_filename(report.topic, "xlsx")},
+        headers={"Content-Disposition": _safe_filename(str(report.topic), "xlsx")},
     )
 
 

@@ -2,7 +2,6 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import pytest
 from orchestrator.prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID, PROMPTS
 
 

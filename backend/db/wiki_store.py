@@ -35,9 +35,9 @@ def upsert_wiki_entry(filename: str, title: str, content: str) -> None:
         emb = embed(content)
         entry = db.query(WikiEntry).filter(WikiEntry.filename == filename).first()
         if entry:
-            entry.content = content
-            entry.title = title
-            entry.embedding = emb
+            entry.content = content  # type: ignore[assignment]
+            entry.title = title  # type: ignore[assignment]
+            entry.embedding = emb  # type: ignore[assignment]
         else:
             db.add(WikiEntry(
                 id=str(uuid.uuid4()),

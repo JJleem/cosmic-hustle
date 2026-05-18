@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 
 from .agent_runner import run_agent, parse_json, WIKI_DIR
 from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
-from .types import PlanResult, WikiResult, PockeResult, KaResult, Insight, FactResult, PingResult, PingIdea
+from .types import PlanResult, WikiResult, PockeResult, KaResult, FactResult, PingResult
 from db.wiki_store import semantic_search, sync_concepts_dir
 from db.connection import SessionLocal
 from db.models import ReportVersion
@@ -424,7 +424,7 @@ class _Pipeline:
                 )
                 if writer_raw.strip():
                     parsed = parse_json(writer_raw, {})
-                    draft = parsed.get("content") if isinstance(parsed, dict) and parsed.get("content") else writer_raw
+                    draft = str(parsed.get("content")) if isinstance(parsed, dict) and parsed.get("content") else writer_raw
                 await asyncio.sleep(1.8)
                 self.emit("agent_done", agentId=writer_agent_id,
                           message=("구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")
@@ -440,9 +440,9 @@ class _Pipeline:
             self.send({"type": "report_version", "version": attempt, "content": draft, "prevFeedback": fact_feedback})
 
             if attempt == 1:
-                draft_lines = [l.strip() for l in draft.splitlines() if l.strip()][:8]
+                draft_lines = [ln.strip() for ln in draft.splitlines() if ln.strip()][:8]
                 await self.maybe_checkin(writer_agent_id, "초안이 완성됐어요. 내용을 확인해주세요.",
-                                         [l[:110] for l in draft_lines])
+                                         [ln[:110] for ln in draft_lines])
                 _, fact_feedback, live_pocke = await self._stage_fact(
                     draft, live_pocke, writer_agent_id, msgs, attempt, is_dev_task
                 )
@@ -455,9 +455,9 @@ class _Pipeline:
 
         self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": None})
 
-        final_lines = [l.strip() for l in draft.splitlines() if l.strip()][:8]
+        final_lines = [ln.strip() for ln in draft.splitlines() if ln.strip()][:8]
         await self.maybe_checkin("fact", "검토까지 완료됐어요. 최종 결과물 확인해주세요.",
-                                 [l[:110] for l in final_lines])
+                                 [ln[:110] for ln in final_lines])
         return draft, draft_versions, False
 
     async def _stage_fact(self, draft: str, live_pocke: PockeResult, writer_agent_id: str,
@@ -532,9 +532,9 @@ class _Pipeline:
             if root_raw.strip():
                 draft += f"\n\n---\n\n{root_raw}"
             self.emit("agent_done", agentId="root", message="파이프라인 준비됐어요. 자동화 완료.")
-            root_lines = [l.strip() for l in root_raw.splitlines() if l.strip()][:6]
+            root_lines = [ln.strip() for ln in root_raw.splitlines() if ln.strip()][:6]
             await self.maybe_checkin("root", "배포 파이프라인 설계까지 완료됐어요.",
-                                     [l[:110] for l in root_lines])
+                                     [ln[:110] for ln in root_lines])
         except Exception:
             self.emit("agent_done", agentId="root", message="배포 계획 완료.")
         return draft
