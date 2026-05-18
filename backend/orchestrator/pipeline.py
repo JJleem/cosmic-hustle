@@ -42,6 +42,13 @@ WRITER_INTRO: dict[str, str] = {
     "buzz":  "데이터 받았어요. 바이럴 각 보일 것 같은데요?",
 }
 
+WRITER_WAITING: dict[str, str] = {
+    "run":   "카 과장님 분석 기다리는 중... 코드 구조 미리 생각해둘게요.",
+    "over":  "카 과장님 분석 기다리는 중... 서론부터 구상해볼게요.",
+    "pixel": "카 과장님 분석 기다리는 중... 레이아웃 머릿속에 그리고 있어요.",
+    "buzz":  "카 과장님 분석 기다리는 중... 훅 문구 구상 중이에요.",
+}
+
 WRITER_SKIP: dict[str, str] = {
     "run":   "이번엔 코드 없어요.",
     "over":  "이번 태스크는 다른 팀원 담당.",
@@ -334,6 +341,13 @@ class _Pipeline:
 
     # ── Stage 3: 카 분석 ──────────────────────────────────────────────────
 
+    async def _writer_warmup(self, writer_agent_id: str) -> None:
+        """카 분석 중 writer 워밍업 — 5초 후 대기 메시지 발송 (overlap 효과)."""
+        await asyncio.sleep(5.0)
+        if not self.is_cancelled():
+            self.send({"type": "agent_message", "agentId": writer_agent_id,
+                       "message": WRITER_WAITING.get(writer_agent_id, "분석 기다리는 중...")})
+
     async def stage_analysis(self, config: dict, pocke: PockeResult) -> KaResult:
         """카 분석 실행. KaResult 반환."""
         resume_stage = self.checkpoint.get("stage")
@@ -392,7 +406,7 @@ class _Pipeline:
 
         self.send({"type": "agent_message", "agentId": writer_agent_id,
                    "message": WRITER_INTRO.get(writer_agent_id, "인사이트 받았어요.")})
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(0.2)
 
         for attempt in range(1, 3):
             if self.is_cancelled():
@@ -634,13 +648,20 @@ class _Pipeline:
             })
             return
 
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(0.2)
         self.send({"type": "agent_message", "agentId": "ka",
                    "message": f"포케가 팩트 {len(pocke.key_facts)}개 넘겼어. ...흥미롭네."})
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(0.2)
 
-        # ── 3. 카 ─────────────────────────────────────────────────────────
+        # ── 3. 카 + writer warmup 병렬 ────────────────────────────────────
+        # writer_warmup: 5초 후 writer에게 "대기 중" 메시지 발송 (카 분석 중 overlap)
+        warmup_task = asyncio.create_task(self._writer_warmup(writer_agent_id))
         ka = await self.stage_analysis(config, pocke)
+        warmup_task.cancel()
+        try:
+            await warmup_task
+        except asyncio.CancelledError:
+            pass
 
         if self.is_cancelled():
             return
@@ -652,8 +673,6 @@ class _Pipeline:
                 "wiki_raw": wiki_raw, "pocke_raw": pocke_raw,
             })
             return
-
-        await asyncio.sleep(0.4)
 
         # ── 4. Writer + Fact 루프 ─────────────────────────────────────────
         draft, draft_versions, was_paused = await self.stage_writing(
