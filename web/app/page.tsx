@@ -14,7 +14,7 @@ import ReportBoard from "@/components/dashboard/ReportBoard";
 import ReportViewer from "@/components/dashboard/ReportViewer";
 import { type Report } from "@/lib/reportUtils";
 import HistoryIdeaPanel from "@/components/dashboard/HistoryIdeaPanel";
-import { ProjectRecord } from "@/components/dashboard/ProjectHistory";
+
 import MemoWikiPanel from "@/components/dashboard/MemoWikiPanel";
 import AgentSettingsPage from "@/components/AgentSettingsPage";
 import CeoCheckin from "@/components/CeoCheckin";
@@ -35,12 +35,11 @@ export default function Home() {
   const session = useSessionStore();
   const data = useDataStore();
 
-  const [agentSettings, setAgentSettings] = useState<AllAgentSettings>({});
+  const [agentSettings, setAgentSettings] = useState<AllAgentSettings>(() => loadAgentSettings());
   const [errorTyped, setErrorTyped] = useState("");
   const [viewingReport, setViewingReport] = useState<Report | null>(null);
 
   useErrorLogger();
-  useEffect(() => { setAgentSettings(loadAgentSettings()); }, []);
 
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -57,12 +56,13 @@ export default function Home() {
     Object.values(speakTimers.current).forEach(clearTimeout);
   }, []);
 
-  // 에러 배너 타이핑 효과
+  // 에러 배너 타이핑 효과 (session.researchError가 없으면 displayError로 빈값 처리)
   useEffect(() => {
-    if (!session.researchError) { setErrorTyped(""); return; }
+    if (!session.researchError) return;
     const full = session.researchError.detail
       ? `${session.researchError.title} — ${session.researchError.detail}`
       : session.researchError.title;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setErrorTyped("");
     let i = 0;
     const timer = setInterval(() => {
@@ -394,7 +394,6 @@ export default function Home() {
     }
 
     agent.setAllStatus(newStatus);
-    agent.streamLog; // accessed to satisfy exhaustive
     useAgentStore.setState({ streamLog: newStreamLog, lastMessage: newLastMsg });
     newReports.filter((r) => !data.reports.some((p) => p.id === r.id)).forEach((r) => data.addReport(r));
     data.setPingIdeas(newIdeas);
@@ -508,7 +507,8 @@ export default function Home() {
 
   const { phase, topic, sideDrawerOpen, sideDrawerTab, showSettings, showSetup, researchError, resumeInfo, pausedInfo, ceoCheckin, currentMode, initialTopic } = session;
   const { status: agentStatus, expression: agentExpression, speaking, lastMessage, streamLog, thinkingHint, durations: agentDurations, selectedAgent } = agent;
-  const { reports, history, handoffs: _handoffs, pingIdeas, chatFeed, reportDrafts, liveDraft, draftVersions } = data;
+  const { reports, history, pingIdeas, chatFeed, reportDrafts, liveDraft, draftVersions } = data;
+  const displayError = researchError ? errorTyped : "";
 
   return (
     <div className="h-dvh cosmic-bg text-white flex flex-col overflow-hidden" style={{ position: "relative" }}>
@@ -592,8 +592,8 @@ export default function Home() {
             <AgentImage defaultSrc="/characters/root/default.png" size={32} status="active" />
           </div>
           <div className="flex-1 min-w-0 text-xs">
-            <span className="text-red-300 font-medium">{errorTyped}</span>
-            {errorTyped.length < (researchError.detail ? `${researchError.title} — ${researchError.detail}` : researchError.title).length && (
+            <span className="text-red-300 font-medium">{displayError}</span>
+            {displayError.length < (researchError.detail ? `${researchError.title} — ${researchError.detail}` : researchError.title).length && (
               <span className="inline-block w-0.5 h-3 bg-red-400 ml-0.5 animate-pulse align-middle" />
             )}
           </div>
@@ -714,7 +714,9 @@ export default function Home() {
           agentDurations={agentDurations}
           thinkingHint={thinkingHint}
           draftVersions={draftVersions}
+          // eslint-disable-next-line react-hooks/refs
           agentStartTs={agentStartTs.current}
+          // eslint-disable-next-line react-hooks/refs
           sessionStartTs={sessionStartTsRef.current}
           onStop={stopResearch}
         />

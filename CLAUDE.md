@@ -135,7 +135,7 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 
 ---
 
-## 현재 상태 (2026-05-15)
+## 현재 상태 (2026-05-18)
 
 ### 완료된 기능
 
@@ -187,6 +187,13 @@ cd web && npm install && npm run dev   # → http://localhost:3000
   - 프론트 에러 이벤트: 3초 타이머 제거, 즉시 idle 전환 + finally 경쟁 조건 해결
   - MemoBoard 에러 UX: toast + 재시도 버튼 (sonner)
   - WikiIngest silent fail 수정: inner try-catch가 에러 이벤트 삼키던 문제 해결
+- **태스크 중단·재시작** — pause/restart endpoint + checkpoint 저장
+  - `POST /api/research/{id}/pause` / `POST /api/research/{id}/restart`
+  - `_save_checkpoint()`: after_plan / after_research / after_analysis 단계별 저장
+  - pipeline.py 각 스테이지에서 pause 체크포인트 삽입
+- **사원증 UI** — TeamRoster.tsx, `/public/id/*.png` 11개 활용
+  - 호버 시 scale + glow 효과 (에이전트별 컬러)
+  - 활성/비활성/완료 상태 뱃지 표시
 
 ### 파이프라인 핵심 동작 (현재)
 
@@ -203,12 +210,10 @@ writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 �
 ```
 파이프라인 개선
 [ ] 병렬 실행 확대 — 카 완료 후 writer 준비 overlap (현재 순차)
-[ ] 태스크 중단·재시작 — 런 사원 dev 태스크용
 [ ] 배경 리서치 — CEO가 다른 일 하는 동안 실행, 완료 알림
 
 새 기능
-[ ] 사원증 UI — /public/id/ PNG 활용, 사이드 드로어 팀원 탭 or 호버 팝업 (누끼 작업 필요)
-[ ] 에이전트 expression 시스템 (sad/err/happy 이미지 파일 추가)
+[ ] 에이전트 expression 시스템 — 기본 구조(agentStore + SSE) 완료, sad/err/happy 이미지 파일만 추가하면 됨 (현재 항상 null 발신)
 [ ] 리포트 → Notion/슬랙 내보내기
 [ ] 정기 리서치 예약 — cron 기반 ("매주 월요일 경쟁사 동향")
 [ ] 멀티 프로젝트 동시 실행 (현재 1개만)
@@ -228,6 +233,8 @@ POST   /api/research                        # 리서치 시작 (SSE 스트림)
 GET    /api/research/{id}/events?since=N    # 이벤트 재생
 POST   /api/research/{id}/respond           # CEO 체크인 응답
 POST   /api/research/{id}/cancel            # 취소
+POST   /api/research/{id}/pause             # 일시정지 (checkpoint 저장)
+POST   /api/research/{id}/restart           # 재시작 (checkpoint에서 복구)
 GET    /api/reports                         # 리포트 목록
 GET    /api/reports/{id}                    # 리포트 상세
 PATCH  /api/reports/{id}                    # 리포트 수정
