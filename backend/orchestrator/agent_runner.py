@@ -69,8 +69,10 @@ async def run_agent(
     cwd: str | None = None,
     max_turns: int | None = None,
     on_stream: Callable[[str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> tuple[str, str]:
-    """Claude CLI를 asyncio 서브프로세스로 실행. stdout을 실시간 라인 단위로 읽어 on_stream 호출."""
+    """Claude CLI를 asyncio 서브프로세스로 실행. stdout을 실시간 라인 단위로 읽어 on_stream 호출.
+    should_stop()이 True를 반환하면 subprocess를 즉시 kill하고 지금까지 받은 결과를 반환."""
     args = [
         CLAUDE_BIN, "-p",
         "--verbose",
@@ -153,6 +155,10 @@ async def run_agent(
                                         on_stream(tool_line)
                 except Exception:
                     pass
+
+                if should_stop and should_stop():
+                    proc.kill()
+                    break
     except TimeoutError:
         proc.kill()
 

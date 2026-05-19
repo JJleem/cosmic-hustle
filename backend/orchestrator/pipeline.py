@@ -162,6 +162,7 @@ class _Pipeline:
             add_dirs=[WIKI_DIR], max_turns=max_turns,
             cwd=agent_dir,
             on_stream=_on_stream if agent_id else None,
+            should_stop=self.is_paused,
         )
 
     async def maybe_checkin(self, agent_id: str, summary: str, key_facts: list[str]):
@@ -439,6 +440,8 @@ class _Pipeline:
                 if writer_raw.strip():
                     parsed = parse_json(writer_raw, {})
                     draft = str(parsed.get("content")) if isinstance(parsed, dict) and parsed.get("content") else writer_raw
+                if self.is_paused():
+                    return draft, draft_versions, True
                 await asyncio.sleep(1.8)
                 self.emit("agent_done", agentId=writer_agent_id,
                           message=("구현 완료. 팩트 부장님 리뷰 받을게요." if is_dev_task else "완성. 팩트 부장님께.")
@@ -460,6 +463,8 @@ class _Pipeline:
                 _, fact_feedback, live_pocke = await self._stage_fact(
                     draft, live_pocke, writer_agent_id, msgs, attempt, is_dev_task
                 )
+                if self.is_paused():
+                    return draft, draft_versions, True
                 # 팩트는 피드백만 전달 (항상 통과) — 라이터가 한 번 수정
                 await asyncio.sleep(0.4)
                 self.send({"type": "agent_message", "agentId": writer_agent_id,
@@ -490,6 +495,8 @@ class _Pipeline:
                              sources=json.dumps(live_pocke.sources[:5], ensure_ascii=False)),
                 no_tools=True, max_turns=1, agent_id="fact",
             )
+            if self.is_paused():
+                return True, "", live_pocke
             await asyncio.sleep(0.8)
             fact = _parse_typed(fact_raw, FactResult, FactResult())
             fact_feedback = fact.feedback
