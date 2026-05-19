@@ -177,8 +177,8 @@ export default function Home() {
           if (agentStartTs.current[doneId]) {
             speak(doneId, event.message as string);
             agent.setDuration(doneId, ((event.ts as number | undefined) ?? Date.now()) - agentStartTs.current[doneId]);
+            data.addChat({ id: uid(), agentId: doneId, text: `[완료] ${event.message as string}`, at: new Date() });
           }
-          data.addChat({ id: uid(), agentId: doneId, text: `[완료] ${event.message as string}`, at: new Date() });
           const stageIdx = PIPELINE.findIndex((s) => s.ids.includes(doneId));
           const nextStage = stageIdx !== -1 ? PIPELINE[stageIdx + 1] : null;
           if (nextStage) {
@@ -471,6 +471,7 @@ export default function Home() {
     session.setMode("full");
     session.setTopic(info.topic);
     agent.setAllStatus(Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"])));
+    agentStartTs.current = {};  // eslint-disable-line react-hooks/refs
 
     const abort = new AbortController();
     abortRef.current = abort;

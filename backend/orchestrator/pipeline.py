@@ -350,8 +350,8 @@ class _Pipeline:
             self.send({"type": "agent_message", "agentId": writer_agent_id,
                        "message": WRITER_WAITING.get(writer_agent_id, "분석 기다리는 중...")})
 
-    async def stage_analysis(self, config: dict, pocke: PockeResult) -> KaResult:
-        """카 분석 실행. KaResult 반환."""
+    async def stage_analysis(self, config: dict, pocke: PockeResult) -> tuple[KaResult, str]:
+        """카 분석 실행. (KaResult, ka_raw) 반환."""
         resume_stage = self.checkpoint.get("stage")
         ka_fallback = (f'{{"insights": [{{"title": "주요 동향", "description": "{self.topic}의 핵심 흐름"}}],'
                        f' "conclusion": "{self.topic}에 대한 분석 결과입니다.", "data_quality": "medium"}}')
@@ -389,7 +389,7 @@ class _Pipeline:
             [*([f"결론: {ka.conclusion[:120]}"] if ka.conclusion else []),
              *[f"💡 {i.title}: {i.description[:80]}" for i in ka.insights[:4]]],
         )
-        return ka
+        return ka, ka_raw
 
     # ── Stage 4: Writer + Fact 루프 ───────────────────────────────────────
 
@@ -615,7 +615,7 @@ class _Pipeline:
 
         resume_stage = self.checkpoint.get("stage")
 
-        if resume_stage in ("after_research", "after_analysis"):
+        if resume_stage in ("after_plan", "after_research", "after_analysis"):
             # 체크포인트 복구 시 plan 스킵 — 저장된 task_type 사용
             resolved_task_type = str(self.checkpoint.get("resolved_task_type") or self.task_type or "research")
             if resolved_task_type not in TASK_CONFIG:
@@ -674,7 +674,7 @@ class _Pipeline:
         # ── 3. 카 + writer warmup 병렬 ────────────────────────────────────
         # writer_warmup: 5초 후 writer에게 "대기 중" 메시지 발송 (카 분석 중 overlap)
         warmup_task = asyncio.create_task(self._writer_warmup(writer_agent_id))
-        ka = await self.stage_analysis(config, pocke)
+        ka, ka_raw = await self.stage_analysis(config, pocke)
         warmup_task.cancel()
         try:
             await warmup_task
@@ -688,7 +688,7 @@ class _Pipeline:
                 "stage": "after_analysis", "topic": self.topic,
                 "resolved_task_type": resolved_task_type, "ceo_notes": self.ceo_notes,
                 "mode": self.mode, "report_style": self.report_style,
-                "wiki_raw": wiki_raw, "pocke_raw": pocke_raw,
+                "wiki_raw": wiki_raw, "pocke_raw": pocke_raw, "ka_raw": ka_raw,
             })
             return
 
@@ -704,7 +704,7 @@ class _Pipeline:
                 "stage": "after_analysis", "topic": self.topic,
                 "resolved_task_type": resolved_task_type, "ceo_notes": self.ceo_notes,
                 "mode": self.mode, "report_style": self.report_style,
-                "wiki_raw": wiki_raw, "pocke_raw": pocke_raw,
+                "wiki_raw": wiki_raw, "pocke_raw": pocke_raw, "ka_raw": ka_raw,
             })
             return
 

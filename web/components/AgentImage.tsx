@@ -43,7 +43,7 @@ export default function AgentImage({ defaultSrc, status, expression = null }: Pr
   // 눈 깜빡임: idle 상태에서만
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (status !== "idle" || expression) { setBlinkFrame(null); return; }
+    if (status !== "idle" || expression) { setBlinkFrame(null); setTalkFrame(null); return; }
     let t: ReturnType<typeof setTimeout>;
     function scheduleBlink() {
       t = setTimeout(() => {
