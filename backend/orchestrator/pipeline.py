@@ -7,6 +7,15 @@ from typing import AsyncGenerator
 
 from .agent_runner import run_agent, parse_json, WIKI_DIR
 from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
+
+# 에이전트별 모델 — Haiku: 단순 포맷팅/단일턴, Sonnet: 분석·창작·도구사용
+AGENT_MODEL: dict[str, str] = {
+    "wiki":  "claude-haiku-4-5-20251001",
+    "fact":  "claude-haiku-4-5-20251001",
+    "ping":  "claude-haiku-4-5-20251001",
+    "root":  "claude-haiku-4-5-20251001",
+    # 나머지(plan·pocke·ka·over·pixel·buzz·run)는 Sonnet 기본값
+}
 from .types import PlanResult, WikiResult, PockeResult, KaResult, FactResult, PingResult
 from db.wiki_store import semantic_search, sync_concepts_dir
 from db.connection import SessionLocal
@@ -163,6 +172,7 @@ class _Pipeline:
             cwd=agent_dir,
             on_stream=_on_stream if agent_id else None,
             should_stop=self.is_paused,
+            model=AGENT_MODEL.get(agent_id) if agent_id else None,
         )
 
     async def maybe_checkin(self, agent_id: str, summary: str, key_facts: list[str]):

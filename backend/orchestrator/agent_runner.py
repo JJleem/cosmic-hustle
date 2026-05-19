@@ -72,6 +72,7 @@ async def run_agent(
     max_turns: int | None = None,
     on_stream: Callable[[str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
+    model: str | None = None,
 ) -> tuple[str, str]:
     """Claude CLI를 asyncio 서브프로세스로 실행. stdout을 실시간 라인 단위로 읽어 on_stream 호출.
     should_stop()이 True를 반환하면 subprocess를 즉시 kill하고 지금까지 받은 결과를 반환."""
@@ -82,6 +83,8 @@ async def run_agent(
         "--include-partial-messages",
         "--dangerously-skip-permissions",
     ]
+    if model:
+        args += ["--model", model]
     if max_turns is not None:
         args += ["--max-turns", str(max_turns)]
     if no_tools:
