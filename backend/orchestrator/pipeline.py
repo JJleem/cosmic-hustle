@@ -604,22 +604,31 @@ class _Pipeline:
         if self.is_cancelled() or self.is_paused():
             return
 
-        plan, semantic_task = await self.stage_plan()
-        await asyncio.sleep(0.4)
+        resume_stage = self.checkpoint.get("stage")
 
-        if self.is_cancelled():
-            return
-        if self.is_paused():
-            _save_checkpoint(self.session_id, "after_plan", {
-                "stage": "after_plan", "topic": self.topic,
-                "resolved_task_type": plan.resolved_task_type,
-                "ceo_notes": self.ceo_notes, "mode": self.mode,
-                "report_style": self.report_style,
-            })
-            return
+        if resume_stage in ("after_research", "after_analysis"):
+            # 체크포인트 복구 시 plan 스킵 — 저장된 task_type 사용
+            resolved_task_type = str(self.checkpoint.get("resolved_task_type") or self.task_type or "research")
+            if resolved_task_type not in TASK_CONFIG:
+                resolved_task_type = "research"
+            semantic_task = asyncio.get_event_loop().run_in_executor(None, lambda: None)
+            self.emit("session_start", topic=self.topic)
+            self.emit("agent_done", agentId="plan", message="기획 데이터 복원됨. 이어서 진행할게요.")
+        else:
+            plan, semantic_task = await self.stage_plan()
+            await asyncio.sleep(0.4)
 
-        # 태스크 타입 + writer 결정
-        resolved_task_type = plan.resolved_task_type
+            if self.is_cancelled():
+                return
+            if self.is_paused():
+                _save_checkpoint(self.session_id, "after_plan", {
+                    "stage": "after_plan", "topic": self.topic,
+                    "resolved_task_type": plan.resolved_task_type,
+                    "ceo_notes": self.ceo_notes, "mode": self.mode,
+                    "report_style": self.report_style,
+                })
+                return
+            resolved_task_type = plan.resolved_task_type
         config = dict(TASK_CONFIG.get(resolved_task_type, TASK_CONFIG["research"]))
         is_dev_task = resolved_task_type == "dev"
         config["_is_dev"] = is_dev_task

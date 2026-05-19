@@ -173,11 +173,12 @@ export default function Home() {
         case "agent_done": {
           const doneId = event.agentId as string;
           agent.setStatus(doneId, "done");
-          speak(doneId, event.message as string);
-          data.addChat({ id: uid(), agentId: doneId, text: `[완료] ${event.message as string}`, at: new Date() });
+          // agent_start 없이 agent_done만 오는 경우(WRITER_SKIP 등)는 speak 생략 — 깜빡임 방지
           if (agentStartTs.current[doneId]) {
+            speak(doneId, event.message as string);
             agent.setDuration(doneId, ((event.ts as number | undefined) ?? Date.now()) - agentStartTs.current[doneId]);
           }
+          data.addChat({ id: uid(), agentId: doneId, text: `[완료] ${event.message as string}`, at: new Date() });
           const stageIdx = PIPELINE.findIndex((s) => s.ids.includes(doneId));
           const nextStage = stageIdx !== -1 ? PIPELINE[stageIdx + 1] : null;
           if (nextStage) {
@@ -398,6 +399,7 @@ export default function Home() {
     newReports.filter((r) => !data.reports.some((p) => p.id === r.id)).forEach((r) => data.addReport(r));
     data.setPingIdeas(newIdeas);
     session.setTopic(resumeTopic);
+    session.setMode("full");
     session.setPhase(status === "done" ? "done" : "working");
     sessionIdRef.current = sessionId;
 
