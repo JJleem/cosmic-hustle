@@ -165,7 +165,7 @@ async def pause_session(session_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/research/{session_id}/restart")
-async def restart_session(session_id: str, db: Session = Depends(get_db)):
+async def restart_session(session_id: str, db: Session = Depends(get_db), fresh: bool = Query(False)):
     from fastapi.responses import JSONResponse as _JSONResponse
 
     checkpoint_row = (
@@ -175,7 +175,25 @@ async def restart_session(session_id: str, db: Session = Depends(get_db)):
         .first()
     )
     if not checkpoint_row:
-        return _JSONResponse({"error": "checkpoint not found"}, status_code=404)
+        if not fresh:
+            # 원본 세션 topic 반환 — 프론트가 fresh=true로 재시도하거나 새 임무 안내
+            original = db.query(models.Session).filter(models.Session.id == session_id).first()
+            topic = original.topic if original else ""
+            return _JSONResponse({"error": "checkpoint not found", "topic": topic}, status_code=404)
+        # fresh=true: 체크포인트 없이 처음부터 재실행
+        original = db.query(models.Session).filter(models.Session.id == session_id).first()
+        if not original:
+            return _JSONResponse({"error": "session not found"}, status_code=404)
+        topic = str(original.topic)
+        paused_sessions.discard(session_id)
+        new_session_id = str(uuid.uuid4())
+        db.add(models.Session(id=new_session_id, topic=topic, status="working"))
+        db.commit()
+        generator = _sse_generator(new_session_id, topic, db, {
+            "session_id": new_session_id, "topic": topic,
+            "task_type": "research", "mode": "full",
+        })
+        return EventSourceResponse(generator())
 
     checkpoint = json.loads(str(checkpoint_row.payload))
     topic = checkpoint.get("topic", "")

@@ -464,10 +464,11 @@ export default function Home() {
     reset();
   };
 
-  const restartFromPaused = async (info: { sessionId: string; topic: string }) => {
+  const restartFromPaused = async (info: { sessionId: string; topic: string }, fresh = false) => {
     session.setPausedInfo(null);
     if (idleTimerRef.current) clearInterval(idleTimerRef.current);
     session.setPhase("working");
+    session.setMode("full");
     session.setTopic(info.topic);
     agent.setAllStatus(Object.fromEntries(AGENTS.map((a) => [a.id, "waiting"])));
 
@@ -476,10 +477,21 @@ export default function Home() {
     let errorHandled = false;
 
     try {
-      const res = await fetch(`/api/research/${info.sessionId}/restart`, { method: "POST", signal: abort.signal });
+      const url = fresh
+        ? `/api/research/${info.sessionId}/restart?fresh=true`
+        : `/api/research/${info.sessionId}/restart`;
+      const res = await fetch(url, { method: "POST", signal: abort.signal });
+      if (res.status === 404 && !fresh) {
+        // 체크포인트 없음 — pausedInfo 복원 + noCheckpoint 플래그로 배너에 "처음부터 시작" 표시
+        errorHandled = true;
+        session.setPhase("idle");
+        session.setPausedInfo({ ...info, noCheckpoint: true });
+        return;
+      }
       if (!res.ok || !res.body) {
         errorHandled = true;
-        showError(`재시작 오류 (${res.status})`, "체크포인트를 찾을 수 없어요. 새 임무를 시작해주세요.");
+        session.setPhase("idle");
+        showError(`재시작 오류 (${res.status})`, "잠시 후 다시 시도해주세요.");
         return;
       }
       const reader = res.body.getReader();
@@ -578,11 +590,14 @@ export default function Home() {
 
       {/* 일시정지 재시작 배너 */}
       {pausedInfo && (
-        <div className="shrink-0 px-6 py-2 flex items-center gap-3 text-xs animate-fadeIn" style={{ background: "rgba(251,146,60,0.04)", borderBottom: "1px solid rgba(251,146,60,0.15)" }}>
-          <span className="text-[11px]">⏸</span>
-          <span className="text-slate-500">일시정지된 임무:</span>
+        <div className="shrink-0 px-6 py-2 flex items-center gap-3 text-xs animate-fadeIn" style={{ background: pausedInfo.noCheckpoint ? "rgba(239,68,68,0.04)" : "rgba(251,146,60,0.04)", borderBottom: `1px solid ${pausedInfo.noCheckpoint ? "rgba(239,68,68,0.2)" : "rgba(251,146,60,0.15)"}` }}>
+          <span className="text-[11px]">{pausedInfo.noCheckpoint ? "⚠️" : "⏸"}</span>
+          <span className="text-slate-500">{pausedInfo.noCheckpoint ? "저장된 진행상황 없음:" : "일시정지된 임무:"}</span>
           <span className="text-slate-300 font-medium max-w-xs truncate">{pausedInfo.topic}</span>
-          <button onClick={() => void restartFromPaused(pausedInfo)} className="ml-2 px-3 py-1 rounded-full text-xs font-medium transition-all" style={{ background: "rgba(251,146,60,0.1)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}>재시작</button>
+          {!pausedInfo.noCheckpoint && (
+            <button onClick={() => void restartFromPaused(pausedInfo)} className="ml-2 px-3 py-1 rounded-full text-xs font-medium transition-all" style={{ background: "rgba(251,146,60,0.1)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}>이어서 재시작</button>
+          )}
+          <button onClick={() => void restartFromPaused(pausedInfo, true)} className="px-3 py-1 rounded-full text-xs font-medium transition-all" style={{ background: "rgba(99,102,241,0.1)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }}>처음부터 시작</button>
           <button onClick={() => session.setPausedInfo(null)} className="text-slate-600 hover:text-slate-400 transition-colors">✕</button>
         </div>
       )}

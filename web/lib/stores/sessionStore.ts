@@ -12,7 +12,7 @@ interface SessionStore {
   initialTopic: string;
   ceoCheckin: CeoCheckinState | null;
   resumeInfo: { sessionId: string; topic: string } | null;
-  pausedInfo: { sessionId: string; topic: string } | null;
+  pausedInfo: { sessionId: string; topic: string; noCheckpoint?: boolean } | null;
   researchError: { title: string; detail: string } | null;
   sideDrawerOpen: boolean;
   sideDrawerTab: DrawerTab;
@@ -25,7 +25,7 @@ interface SessionStore {
   setInitialTopic: (t: string) => void;
   setCeoCheckin: (c: CeoCheckinState | null) => void;
   setResumeInfo: (r: { sessionId: string; topic: string } | null) => void;
-  setPausedInfo: (p: { sessionId: string; topic: string } | null) => void;
+  setPausedInfo: (p: { sessionId: string; topic: string; noCheckpoint?: boolean } | null) => void;
   setError: (e: { title: string; detail: string } | null) => void;
   setSideDrawerOpen: (o: boolean) => void;
   setSideDrawerTab: (t: DrawerTab) => void;
