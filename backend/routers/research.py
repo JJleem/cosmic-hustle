@@ -242,6 +242,7 @@ def get_reports(
     q: str = Query(default=""),
     agent: str = Query(default=""),
     date: str = Query(default=""),
+    tag: str = Query(default=""),
     sort: str = Query(default="newest"),
     db: Session = Depends(get_db),
 ):
@@ -254,6 +255,8 @@ def get_reports(
         )
     if agent.strip():
         query = query.filter(models.Report.agent_id == agent.strip())
+    if tag.strip():
+        query = query.filter(models.Report.tags.ilike(f'%"{tag.strip()}"%'))
     if date.strip():
         now = datetime.now(timezone.utc)
         if date == "today":
@@ -275,17 +278,7 @@ def get_reports(
         query = query.order_by(models.Report.created_at.desc())
 
     rows = query.limit(200).all()
-    return [
-        {
-            "id": r.id,
-            "sessionId": r.session_id,
-            "agentId": r.agent_id,
-            "topic": r.topic,
-            "content": r.content,
-            "createdAt": _ts(r.created_at),
-        }
-        for r in rows
-    ]
+    return [_serialize_report(r) for r in rows]
 
 
 @router.get("/reports/{report_id}")
@@ -294,13 +287,25 @@ def get_report(report_id: str, db: Session = Depends(get_db)):
     if not r:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "not found"}, status_code=404)
-    return {"id": r.id, "sessionId": r.session_id, "agentId": r.agent_id,
-            "topic": r.topic, "content": r.content, "createdAt": _ts(r.created_at)}
+    return _serialize_report(r)
 
 
 class ReportUpdate(BaseModel):
     topic: str | None = None
     content: str | None = None
+    tags: list[str] | None = None
+
+
+def _serialize_report(r: models.Report) -> dict:
+    return {
+        "id": r.id,
+        "sessionId": r.session_id,
+        "agentId": r.agent_id,
+        "topic": r.topic,
+        "content": r.content,
+        "tags": json.loads(str(r.tags)) if r.tags else [],
+        "createdAt": _ts(r.created_at),
+    }
 
 
 @router.patch("/reports/{report_id}")
@@ -310,6 +315,8 @@ def update_report(report_id: str, body: ReportUpdate, db: Session = Depends(get_
         updates["topic"] = body.topic
     if body.content is not None:
         updates["content"] = body.content
+    if body.tags is not None:
+        updates["tags"] = json.dumps(body.tags, ensure_ascii=False)
     if not updates:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "no fields to update"}, status_code=400)
@@ -319,8 +326,7 @@ def update_report(report_id: str, body: ReportUpdate, db: Session = Depends(get_
     if not r:
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "not found"}, status_code=404)
-    return {"id": r.id, "sessionId": r.session_id, "agentId": r.agent_id,
-            "topic": r.topic, "content": r.content, "createdAt": _ts(r.created_at)}
+    return _serialize_report(r)
 
 
 @router.delete("/reports/{report_id}")

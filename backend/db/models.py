@@ -21,6 +21,7 @@ class Report(Base):
     agent_id = Column(String, nullable=False)
     topic = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
+    tags = Column(Text, nullable=True)  # JSON array string, e.g. '["AI","트렌드"]'
     created_at = Column(DateTime, server_default=func.now())
 
 

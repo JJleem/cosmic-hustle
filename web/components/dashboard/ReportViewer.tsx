@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table, Tag, Plus } from "lucide-react";
 import { AGENT_MAP } from "@/lib/agents";
 import {
   type Report, type ReportVersion,
@@ -37,11 +37,18 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const [wikiSaving, setWikiSaving] = useState(false);
   const [wikiSaved, setWikiSaved] = useState(false);
   const [wikiMsg, setWikiMsg] = useState("");
+  const [tags, setTags] = useState<string[]>(report.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
   const [versions, setVersions] = useState<ReportVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTags(report.tags ?? []);
+  }, [report.id, report.tags]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -144,6 +151,28 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       setDeleting(false);
     }
   };
+
+  const saveTag = async (newTags: string[]) => {
+    setTags(newTags);
+    const res = await fetch(`/api/reports/${report.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: newTags }),
+    });
+    if (res.ok) {
+      const updated = await res.json() as Omit<Report, "createdAt"> & { createdAt: number | string };
+      onUpdate({ ...updated, createdAt: new Date(typeof updated.createdAt === "number" ? updated.createdAt * 1000 : updated.createdAt) });
+    }
+  };
+
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (!t || tags.includes(t)) { setTagInput(""); return; }
+    void saveTag([...tags, t]);
+    setTagInput("");
+  };
+
+  const removeTag = (tag: string) => void saveTag(tags.filter((t) => t !== tag));
 
   const saveToWiki = async () => {
     if (wikiSaving) return;
@@ -404,20 +433,47 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         )}
 
         {/* 푸터 */}
-        <div className="shrink-0 px-8 py-3 border-t border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] text-slate-600">{report.content.length.toLocaleString()}자</span>
-            {wikiMsg && (
-              <span className="flex items-center gap-1.5 text-[10px]" style={{ color: wikiSaved ? "#a78bfa" : "#64748b" }}>
-                {wikiSaving && <Loader2 size={9} className="animate-spin" />}
-                {wikiSaved && <Check size={9} />}
-                {wikiMsg}
+        <div className="shrink-0 px-8 py-3 border-t border-slate-800 flex flex-col gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Tag size={10} className="text-slate-600 shrink-0" />
+            {tags.map((tag) => (
+              <span key={tag} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-medium"
+                style={{ background: "rgba(99,102,241,0.12)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)" }}>
+                {tag}
+                <button onClick={() => removeTag(tag)} className="hover:text-red-400 transition-colors leading-none">
+                  <X size={8} />
+                </button>
               </span>
-            )}
+            ))}
+            <form onSubmit={(e) => { e.preventDefault(); addTag(); }} className="flex items-center gap-1">
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                placeholder="태그 추가..."
+                className="text-[9px] text-slate-400 placeholder:text-slate-700 bg-transparent focus:outline-none w-16 focus:w-24 transition-all"
+              />
+              {tagInput.trim() && (
+                <button type="submit" className="text-slate-500 hover:text-indigo-400 transition-colors">
+                  <Plus size={9} />
+                </button>
+              )}
+            </form>
           </div>
-          <button onClick={onClose} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
-            닫기 (Esc)
-          </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-slate-600">{report.content.length.toLocaleString()}자</span>
+              {wikiMsg && (
+                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: wikiSaved ? "#a78bfa" : "#64748b" }}>
+                  {wikiSaving && <Loader2 size={9} className="animate-spin" />}
+                  {wikiSaved && <Check size={9} />}
+                  {wikiMsg}
+                </span>
+              )}
+            </div>
+            <button onClick={onClose} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
+              닫기 (Esc)
+            </button>
+          </div>
         </div>
       </div>
     </div>

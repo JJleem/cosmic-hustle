@@ -6,6 +6,7 @@ export type Report = {
   agentId: string;
   topic: string;
   content: string;
+  tags?: string[];
   createdAt: Date;
 };
 

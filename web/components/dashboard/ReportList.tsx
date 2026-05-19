@@ -28,6 +28,12 @@ const SORT_OPTIONS: { id: SortBy; label: string }[] = [
   { id: "name",   label: "이름순" },
 ];
 
+function getAllTags(reports: Report[]): string[] {
+  const set = new Set<string>();
+  for (const r of reports) for (const t of (r.tags ?? [])) set.add(t);
+  return [...set].sort();
+}
+
 type Props = {
   reports: Report[];
   onSelect: (report: Report) => void;
@@ -38,13 +44,14 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
   const [search, setSearch] = useState("");
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState<DateFilter | null>(null);
+  const [filterTag, setFilterTag] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>("newest");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [serverResults, setServerResults] = useState<Report[] | null>(null);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hasFilter = !!(search.trim() || filterAgent || filterDate || sortBy !== "newest");
+  const hasFilter = !!(search.trim() || filterAgent || filterDate || filterTag || sortBy !== "newest");
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -58,10 +65,11 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
         if (search.trim()) params.set("q", search.trim());
         if (filterAgent) params.set("agent", filterAgent);
         if (filterDate) params.set("date", filterDate);
+        if (filterTag) params.set("tag", filterTag);
         params.set("sort", sortBy);
         const res = await fetch(`/api/reports?${params}`);
         if (res.ok) {
-          const data = (await res.json()) as Array<{ id: string; sessionId: string; agentId: string; topic: string; content: string; createdAt: string }>;
+          const data = (await res.json()) as Array<{ id: string; sessionId: string; agentId: string; topic: string; content: string; tags?: string[]; createdAt: string }>;
           setServerResults(data.map((r) => ({ ...r, createdAt: new Date(r.createdAt) })));
         }
       } finally {
@@ -69,7 +77,7 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
       }
     }, 300);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, filterAgent, filterDate, sortBy]);
+  }, [search, filterAgent, filterDate, filterTag, sortBy]);
 
   const filtered = serverResults ?? reports;
 
@@ -153,6 +161,32 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
             </button>
           ))}
         </div>
+        {getAllTags(reports).length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[8px] text-slate-700 font-bold tracking-wider uppercase">태그</span>
+            <button
+              onClick={() => setFilterTag(null)}
+              className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+              style={!filterTag
+                ? { background: "#1a2030", color: "#64748b", border: "1px solid #2a3545" }
+                : { color: "#374151", border: "1px solid #1a2235" }}
+            >
+              전체
+            </button>
+            {getAllTags(reports).map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+                className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all"
+                style={filterTag === tag
+                  ? { background: "rgba(99,102,241,0.2)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.4)" }
+                  : { color: "#374151", border: "1px solid #1a2235" }}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <span className="text-[8px] text-slate-700 font-bold tracking-wider uppercase">정렬</span>
           {SORT_OPTIONS.map(({ id, label }) => (
@@ -215,6 +249,16 @@ export default function ReportList({ reports, onSelect, onDelete }: Props) {
                 </div>
                 <p className="text-xs text-white font-semibold truncate">{r.topic}</p>
                 <p className="text-[11px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">{highlightPreview}</p>
+                {(r.tags ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {(r.tags ?? []).map((tag) => (
+                      <span key={tag} className="px-1.5 py-0.5 rounded-full text-[8px] font-medium"
+                        style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex justify-end mt-1.5">
                   <button
                     onClick={(e) => { e.stopPropagation(); void handleDelete(r.id); }}
