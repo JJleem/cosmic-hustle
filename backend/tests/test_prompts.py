@@ -1,8 +1,9 @@
 """orchestrator/prompts.py — build_prompt 및 설정 단위 테스트."""
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from orchestrator.prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID, PROMPTS
+from orchestrator.prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID, PROMPTS  # noqa
 
 
 # ── build_prompt ──────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ REQUIRED_TASK_TYPES = [
     "research", "blog", "tech", "marketing",
     "design_ux", "design_ui", "dev", "dev_plan", "dev_spec",
 ]
+
 
 class TestTaskConfig:
     def test_all_task_types_present(self):

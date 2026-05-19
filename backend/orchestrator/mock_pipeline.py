@@ -189,19 +189,19 @@ Next.js는 생태계, Remix는 철학. 신규 프로젝트 기준 Next.js 15 App
   <title>AI 코딩 도구 비교 대시보드</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Pretendard', -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    body { font-family: 'Pretendard', -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }  # noqa: E501
     h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; color: #f8fafc; }
     .subtitle { font-size: 0.875rem; color: #64748b; margin-bottom: 2rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }  # noqa: E501
     .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; }
-    .card-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .card-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }  # noqa: E501
     .card-value { font-size: 2rem; font-weight: 700; color: #f8fafc; }
     .card-sub { font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem; }
-    .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }  # noqa: E501
     .badge-green { background: #064e3b; color: #6ee7b7; }
     .badge-blue { background: #1e3a5f; color: #93c5fd; }
     table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
-    th { background: #0f172a; padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    th { background: #0f172a; padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }  # noqa: E501
     td { padding: 0.875rem 1rem; border-top: 1px solid #334155; font-size: 0.875rem; }
     tr:hover td { background: #263348; }
     .bar-wrap { background: #334155; border-radius: 9999px; height: 6px; width: 100%; }
@@ -253,14 +253,14 @@ Next.js는 생태계, Remix는 철학. 신규 프로젝트 기준 Next.js 15 App
         <td>54.2%</td>
         <td>29%</td>
         <td>$10/월</td>
-        <td><div class="bar-wrap"><div class="bar" style="width:54.2%; background: linear-gradient(90deg,#0ea5e9,#38bdf8)"></div></div></td>
+        <td><div class="bar-wrap"><div class="bar" style="width:54.2%; background: linear-gradient(90deg,#0ea5e9,#38bdf8)"></div></div></td>  # noqa: E501
       </tr>
       <tr>
         <td>Cursor</td>
         <td>61.7%</td>
         <td>18%</td>
         <td>$20/월</td>
-        <td><div class="bar-wrap"><div class="bar" style="width:61.7%; background: linear-gradient(90deg,#10b981,#34d399)"></div></div></td>
+        <td><div class="bar-wrap"><div class="bar" style="width:61.7%; background: linear-gradient(90deg,#10b981,#34d399)"></div></div></td>  # noqa: E501
       </tr>
     </tbody>
   </table>
@@ -481,7 +481,7 @@ def _build_events(task_type: str, writer_id: str) -> list[tuple[float, dict]]:
         (0.3, {"type": "agent_done",    "agentId": "pocke", "message": pocke_done}),
         # ka
         (0.2, {"type": "agent_start",   "agentId": "ka",    "message": ka_msg}),
-        (0.3, {"type": "agent_thinking","agentId": "ka",    "chunk": "상관관계 분석 중..."}),
+        (0.3, {"type": "agent_thinking", "agentId": "ka",    "chunk": "상관관계 분석 중..."}),
         (0.5, {"type": "agent_stream",  "agentId": "ka",    "chunk": "인사이트 도출 중..."}),
         (0.5, {"type": "agent_done",    "agentId": "ka",    "message": "찾았다!!! 핵심 인사이트 잡음."}),
         # writer attempt 1
@@ -502,7 +502,7 @@ def _build_events(task_type: str, writer_id: str) -> list[tuple[float, dict]]:
         # fact
         (0.1, {"type": "agent_message", "agentId": "fact", "message": "...검토 시작."}),
         (0.2, {"type": "agent_start",   "agentId": "fact", "message": "..."}),
-        (0.3, {"type": "agent_thinking","agentId": "fact", "chunk": "초안 분석 중..."}),
+        (0.3, {"type": "agent_thinking", "agentId": "fact", "chunk": "초안 분석 중..."}),
         (0.5, {"type": "agent_done",    "agentId": "fact", "message": "피드백 전달. 수정 부탁해요."}),
         # writer attempt 2
         (0.2, {"type": "agent_message", "agentId": writer_id, "message": "팩트 피드백 반영해서 다듬을게요."}),
@@ -539,12 +539,12 @@ async def run_mock_pipeline(session_id: str, topic: str, task_type: str = "resea
         yield event
         # writer 1차 완료 직후 draft_report + version 1 발행
         if event.get("agentId") == writer_id and event.get("type") == "agent_done" and \
-                sum(1 for _, e in events[:i + 1] if e.get("agentId") == writer_id and e.get("type") == "agent_done") == 1:
+                sum(1 for _, e in events[:i + 1] if e.get("agentId") == writer_id and e.get("type") == "agent_done") == 1:  # noqa: E501
             yield {"type": "draft_report", "agentId": writer_id, "content": mock_content}
             yield {"type": "report_version", "version": 1, "content": mock_content, "prevFeedback": ""}
         # writer 2차 완료 직후 version 2 발행
         elif event.get("agentId") == writer_id and event.get("type") == "agent_done" and \
-                sum(1 for _, e in events[:i + 1] if e.get("agentId") == writer_id and e.get("type") == "agent_done") == 2:
+                sum(1 for _, e in events[:i + 1] if e.get("agentId") == writer_id and e.get("type") == "agent_done") == 2:  # noqa: E501
             yield {"type": "report_version", "version": 2, "content": mock_content, "prevFeedback": "수치 출처 보강 필요"}
 
     await asyncio.sleep(0.2)

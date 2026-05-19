@@ -75,7 +75,7 @@ WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이�
 소스 URL 필수. 없으면 "검증불가".
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_retry": """포케 대리. 재시도 모드.
@@ -83,7 +83,7 @@ WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이�
 한국어·영어 각 1회 이상. 불확실해도 "(추정)" 표기 후 포함. key_facts 최소 3개 필수.
 ⚠️ 검색 완료 즉시 아래 JSON만 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_recheck": """포케 대리. 팩트 재조사 모드.
@@ -93,7 +93,7 @@ WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이�
 각 쿼리마다 WebSearch 실행. 못 찾으면 "공식 확인 불가" 명시. 빈 배열 금지.
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["재확인 팩트1 (출처)", "팩트2", "팩트3"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["재확인 팩트1 (출처)", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_marketing": """포케 대리. 시장 조사 리서처.
@@ -101,7 +101,7 @@ WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이�
 WebSearch 최소 3회. 시장 규모·경쟁사·트렌드·소비자 반응 중심 검색. 수치·날짜 팩트 우선.
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_tech": """포케 대리. 기술 리서처.
@@ -109,28 +109,28 @@ WebSearch 최소 3회. 시장 규모·경쟁사·트렌드·소비자 반응 중
 WebSearch 최소 3회. 공식 문서·GitHub·기술 블로그 위주. 버전·성능 수치·릴리즈 날짜 팩트 추출.
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}
+{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "ka": """카 과장. 분석가.
 주제: "{topic}". 팩트: {facts}.
 {ceo_notes}패턴·인사이트 혼잣말 3~4문장 후 JSON:
 ```json
-{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "핵심 결론 2문장", "data_quality": "high|medium|low"}}
+{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "핵심 결론 2문장", "data_quality": "high|medium|low"}}  # noqa: E501
 ```""",
 
     "ka_marketing": """카 과장. 마케팅 분석가.
 주제: "{topic}". 팩트: {facts}.
 {ceo_notes}시장 기회·경쟁 우위·타겟 고객 관점에서 혼잣말 3~4문장 후 JSON:
 ```json
-{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "마케팅 전략 방향 2문장", "data_quality": "high|medium|low"}}
+{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "마케팅 전략 방향 2문장", "data_quality": "high|medium|low"}}  # noqa: E501
 ```""",
 
     "ka_tech": """카 과장. 기술 분석가.
 주제: "{topic}". 팩트: {facts}.
 {ceo_notes}아키텍처 패턴·장단점·도입 고려사항 관점에서 혼잣말 3~4문장 후 JSON:
 ```json
-{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "기술 채택 결론 2문장", "data_quality": "high|medium|low"}}
+{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "기술 채택 결론 2문장", "data_quality": "high|medium|low"}}  # noqa: E501
 ```""",
 
     "over": """오버 사원. 작가.
@@ -253,7 +253,7 @@ UX 리서치 리포트. ## 구조로: 사용자 퍼소나 → 핵심 페인포�
 passed: 무조건 true. feedback에 구체적 수정 의견만 기록 (없으면 "이상 없음").
 needs_research: 무조건 false.
 ```json
-{{"passed": true, "issues": [], "feedback": "수정 의견 또는 이상 없음", "unverified_claims": [], "needs_research": false, "research_queries": []}}
+{{"passed": true, "issues": [], "feedback": "수정 의견 또는 이상 없음", "unverified_claims": [], "needs_research": false, "research_queries": []}}  # noqa: E501
 ```""",
 
     "fact_dev": """팩트 부장. 코드 리뷰어.
@@ -264,7 +264,7 @@ needs_research: 무조건 false.
 passed: 무조건 true. feedback에 구체적 수정 의견만 기록 (없으면 "이상 없음").
 needs_research: 무조건 false.
 ```json
-{{"passed": true, "issues": [], "feedback": "수정 의견 또는 이상 없음", "unverified_claims": [], "needs_research": false, "research_queries": []}}
+{{"passed": true, "issues": [], "feedback": "수정 의견 또는 이상 없음", "unverified_claims": [], "needs_research": false, "research_queries": []}}  # noqa: E501
 ```""",
 
     "ping": """핑 인턴. 아이디어 수집가.
@@ -292,7 +292,7 @@ TASK_CONFIG = {
     "research":  {"pocke": "pocke",          "ka": "ka",          "writer": "over"},
     "blog":      {"pocke": "pocke",          "ka": "ka",          "writer": "over_blog"},
     "tech":      {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_tech"},
-    "marketing": {"pocke": "pocke_marketing","ka": "ka_marketing","writer": "over_marketing"},
+    "marketing": {"pocke": "pocke_marketing", "ka": "ka_marketing", "writer": "over_marketing"},  # noqa: E501
     "design_ux": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel_ux"},
     "design_ui": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel_ui"},
     "dev":       {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "run"},

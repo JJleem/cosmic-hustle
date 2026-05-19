@@ -3,6 +3,7 @@ from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from .connection import Base
 
+
 class Session(Base):
     __tablename__ = "sessions"
 

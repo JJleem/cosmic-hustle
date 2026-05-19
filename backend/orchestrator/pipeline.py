@@ -29,10 +29,10 @@ MURMURS: dict[str, list[str]] = {
 }
 
 WRITER_MESSAGES: dict[str, dict[str, str]] = {
-    "run":   {"start1": "코드 작성 시작.", "start2": "...수정할게요.", "retry": "...다시 짤게요.", "done": "통과. 배포 가능.", "final": "...배포합니다."},
-    "over":  {"start1": "이 숫자 뒤에 얼마나 많은 이야기가...", "start2": "...알겠습니다. 수정할게요.", "retry": "...다시요? (상처받음)", "done": "통과라고 했다... 역시 걸작.", "final": "...감사합니다."},
-    "pixel": {"start1": "이 여백 어떻게 쓸지 감 잡혔어요. 디자인 시작할게요.", "start2": "...그리드부터 다시 잡을게요.", "retry": "...레이아웃 다시요? (눈 충혈)", "done": "통과. 폰트는 제가 결정했어요.", "final": "...올릴게요."},
-    "buzz":  {"start1": "바이럴 각 잡혔어요! 전략 써볼게요.", "start2": "...타겟 다시 잡고 수정할게요.", "retry": "...다시요? 타겟 재설정할게요.", "done": "통과. 이거 퍼질 것 같은데요.", "final": "...올릴게요."},
+    "run":   {"start1": "코드 작성 시작.", "start2": "...수정할게요.", "retry": "...다시 짤게요.", "done": "통과. 배포 가능.", "final": "...배포합니다."},  # noqa: E501
+    "over":  {"start1": "이 숫자 뒤에 얼마나 많은 이야기가...", "start2": "...알겠습니다. 수정할게요.", "retry": "...다시요? (상처받음)", "done": "통과라고 했다... 역시 걸작.", "final": "...감사합니다."},  # noqa: E501
+    "pixel": {"start1": "이 여백 어떻게 쓸지 감 잡혔어요. 디자인 시작할게요.", "start2": "...그리드부터 다시 잡을게요.", "retry": "...레이아웃 다시요? (눈 충혈)", "done": "통과. 폰트는 제가 결정했어요.", "final": "...올릴게요."},  # noqa: E501
+    "buzz":  {"start1": "바이럴 각 잡혔어요! 전략 써볼게요.", "start2": "...타겟 다시 잡고 수정할게요.", "retry": "...다시요? 타겟 재설정할게요.", "done": "통과. 이거 퍼질 것 같은데요.", "final": "...올릴게요."},  # noqa: E501
 }
 
 WRITER_INTRO: dict[str, str] = {
@@ -61,9 +61,9 @@ _STYLE_NOTE: dict[tuple[str, str], str] = {
     ("standard",  "formal"):    "분량: ~700자. 문체: 공식적·격식체. ## 소제목 구조.\n",
     ("brief",     "casual"):    "분량: ~400자. 문체: 친근하고 쉬운 말투. 핵심 포인트만. 불릿·화살표 권장.\n",
     ("standard",  "casual"):    "분량: ~700자. 문체: 친근하고 쉬운 말투.\n",
-    ("standard",  "analytical"):"분량: ~700자. 문체: 분석적·수치 중심.\n",
+    ("standard",  "analytical"): "분량: ~700자. 문체: 분석적·수치 중심.\n",
     ("brief",     "formal"):    "분량: ~400자. 문체: 공식적·격식체. 핵심만.\n",
-    ("brief",     "analytical"):"분량: ~400자. 문체: 분석적. 수치 중심 요약.\n",
+    ("brief",     "analytical"): "분량: ~400자. 문체: 분석적. 수치 중심 요약.\n",
     ("detailed",  "formal"):    "분량: ~1200자 이상. 문체: 공식적·격식체. ## 섹션 구분.\n",
     ("detailed",  "casual"):    "분량: ~1200자 이상. 문체: 친근하고 쉬운 말투. 섹션 구분.\n",
 }
@@ -249,7 +249,7 @@ class _Pipeline:
             self.emit("agent_done", agentId="pocke", message="볼따구 데이터 복원됨. 카 과장한테 넘길게요.")
             await asyncio.sleep(0.3)
         else:
-            wiki_raw, pocke_raw = await self._run_wiki_pocke_parallel(config, semantic_task, default_wiki, default_pocke)
+            wiki_raw, pocke_raw = await self._run_wiki_pocke_parallel(config, semantic_task, default_wiki, default_pocke)  # noqa: E501
 
         wiki = _parse_typed(wiki_raw, WikiResult, WikiResult())
         pocke = _parse_typed(pocke_raw, PockeResult, PockeResult())
@@ -262,7 +262,8 @@ class _Pipeline:
             *([f"맥락: {wiki.context[:100]}"] if wiki.context else []),
             *[f"🔑 키워드: {k}" for k in wiki.keywords[:3]],
         ])
-        await self.maybe_checkin("pocke",
+        await self.maybe_checkin(
+            "pocke",
             f"소스 {len(pocke.sources)}개, 팩트 {len(pocke.key_facts)}개 수집됐어요.",
             [f"📌 {f}" for f in pocke.key_facts[:4]] +
             [f"🔗 {s['title']}" for s in pocke.sources[:3] if isinstance(s, dict)],
@@ -382,7 +383,8 @@ class _Pipeline:
                 stop_ka()
 
         ka = _parse_typed(ka_raw, KaResult, KaResult())
-        await self.maybe_checkin("ka",
+        await self.maybe_checkin(
+            "ka",
             f"인사이트 {len(ka.insights)}개 도출됐어요." if ka.insights else "분석 완료.",
             [*([f"결론: {ka.conclusion[:120]}"] if ka.conclusion else []),
              *[f"💡 {i.title}: {i.description[:80]}" for i in ka.insights[:4]]],
@@ -392,7 +394,7 @@ class _Pipeline:
     # ── Stage 4: Writer + Fact 루프 ───────────────────────────────────────
 
     async def stage_writing(self, config: dict, ka: KaResult, pocke: PockeResult,
-                             writer_agent_id: str, writer_key: str) -> tuple[str, list, bool]:
+                            writer_agent_id: str, writer_key: str) -> tuple[str, list, bool]:
         """Writer+Fact 루프 (최대 3회). (draft, draft_versions, paused) 반환."""
         is_dev_task = config.get("_is_dev", False)
         insights_str = "; ".join(f"{i.title}: {i.description}" for i in ka.insights)
@@ -420,7 +422,7 @@ class _Pipeline:
             if attempt == 2:
                 self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": None})
 
-            stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), self.send, interval_sec=11.0)
+            stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), self.send, interval_sec=11.0)  # noqa: E501
             try:
                 feedback_parts = []
                 if style_note:
@@ -439,7 +441,7 @@ class _Pipeline:
                 )
                 if writer_raw.strip():
                     parsed = parse_json(writer_raw, {})
-                    draft = str(parsed.get("content")) if isinstance(parsed, dict) and parsed.get("content") else writer_raw
+                    draft = str(parsed.get("content")) if isinstance(parsed, dict) and parsed.get("content") else writer_raw  # noqa: E501
                 if self.is_paused():
                     return draft, draft_versions, True
                 await asyncio.sleep(1.8)
@@ -480,7 +482,7 @@ class _Pipeline:
         return draft, draft_versions, False
 
     async def _stage_fact(self, draft: str, live_pocke: PockeResult, writer_agent_id: str,
-                           msgs: dict, attempt: int, is_dev_task: bool) -> tuple[bool, str, PockeResult]:
+                          msgs: dict, attempt: int, is_dev_task: bool) -> tuple[bool, str, PockeResult]:
         """팩트 검토 1회차. (passed, feedback, updated_live_pocke) 반환."""
         await asyncio.sleep(0.4)
         self.send({"type": "agent_message", "agentId": "fact", "message": "...검토 시작."})
@@ -503,7 +505,7 @@ class _Pipeline:
 
             self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
             self.emit("agent_done", agentId="fact",
-                      message="피드백 전달. 수정 부탁해요." if fact_feedback and fact_feedback.strip() and fact_feedback != "이상 없음" else "이상 없음. 수정 후 완료.")
+                      message="피드백 전달. 수정 부탁해요." if fact_feedback and fact_feedback.strip() and fact_feedback != "이상 없음" else "이상 없음. 수정 후 완료.")  # noqa: E501
 
             return True, fact_feedback, live_pocke
         except Exception as e:

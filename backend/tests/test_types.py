@@ -1,8 +1,9 @@
 """orchestrator/types.py — Pydantic 모델 단위 테스트."""
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from orchestrator.types import (
+from orchestrator.types import (  # noqa
     PlanResult, WikiResult, PockeResult,
     Insight, KaResult,
     FactResult, PingIdea, PingResult,

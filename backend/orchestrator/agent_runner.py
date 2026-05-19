@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+
 def find_claude() -> str:
     backend_dir = Path(__file__).parent.parent
     web_dir = backend_dir.parent / "web"
@@ -33,6 +34,7 @@ def find_claude() -> str:
             return str(p)
     return fallback
 
+
 CLAUDE_BIN = find_claude()
 WIKI_DIR = str(Path(__file__).parent.parent.parent / "wiki-llm")
 
@@ -42,11 +44,11 @@ print(f"[agent_runner] claude binary: {CLAUDE_BIN}")
 def format_tool_use(name: str, input_data: dict) -> str:
     mapping = {
         "WebSearch": lambda i: f"\n🔍 검색: \"{i.get('query', '')}\"\n",
-        "WebFetch":  lambda i: f"\n🌐 페이지 읽는 중: {i.get('url', '')}\n",
-        "Read":      lambda i: f"\n📖 파일 읽는 중: {i.get('file_path', '')}\n",
-        "Write":     lambda i: f"\n✏️ 파일 작성: {i.get('file_path', '')}\n",
-        "Grep":      lambda i: f"\n🔎 검색: \"{i.get('pattern', '')}\"\n",
-        "Glob":      lambda i: f"\n📂 파일 탐색: {i.get('pattern', '')}\n",
+        "WebFetch": lambda i: f"\n🌐 페이지 읽는 중: {i.get('url', '')}\n",
+        "Read": lambda i: f"\n📖 파일 읽는 중: {i.get('file_path', '')}\n",
+        "Write": lambda i: f"\n✏️ 파일 작성: {i.get('file_path', '')}\n",
+        "Grep": lambda i: f"\n🔎 검색: \"{i.get('pattern', '')}\"\n",
+        "Glob": lambda i: f"\n📂 파일 탐색: {i.get('pattern', '')}\n",
     }
     fn = mapping.get(name)
     return fn(input_data) if fn else f"\n⚙️ {name}\n"

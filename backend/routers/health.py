@@ -4,6 +4,7 @@ from db.connection import SessionLocal
 
 router = APIRouter()
 
+
 @router.get("/health")
 def health_check():
     try:

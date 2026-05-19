@@ -1,13 +1,14 @@
 """orchestrator/pipeline.py — _parse_typed 및 _Pipeline 유틸리티 단위 테스트."""
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import pytest
-from orchestrator.pipeline import (
+import pytest  # noqa
+from orchestrator.pipeline import (  # noqa
     _parse_typed, _Pipeline,
     cancelled_sessions, paused_sessions,
 )
-from orchestrator.types import PlanResult, WikiResult, PockeResult, KaResult, FactResult, PingResult
+from orchestrator.types import PlanResult, WikiResult, PockeResult, KaResult, FactResult, PingResult  # noqa
 
 
 # ── _parse_typed ──────────────────────────────────────────────────────────
@@ -40,7 +41,7 @@ class TestParseTyped:
         assert result.conclusion == "기본 결론"
 
     def test_valid_ka_result(self):
-        raw = '```json\n{"insights": [{"title": "발견", "description": "설명"}], "conclusion": "결론", "data_quality": "high"}\n```'
+        raw = '```json\n{"insights": [{"title": "발견", "description": "설명"}], "conclusion": "결론", "data_quality": "high"}\n```'  # noqa
         result = _parse_typed(raw, KaResult, KaResult())
         assert result.conclusion == "결론"
         assert result.data_quality == "high"
@@ -53,7 +54,7 @@ class TestParseTyped:
         assert result.feedback == "이상 없음"
 
     def test_valid_fact_result_failed(self):
-        raw = '{"passed": false, "issues": ["수치 미검증"], "feedback": "재확인 필요", "needs_research": true, "research_queries": ["검색어"]}'
+        raw = '{"passed": false, "issues": ["수치 미검증"], "feedback": "재확인 필요", "needs_research": true, "research_queries": ["검색어"]}'  # noqa
         result = _parse_typed(raw, FactResult, FactResult())
         assert result.passed is False
         assert result.needs_research is True
@@ -77,6 +78,7 @@ class TestParseTyped:
 class TestPipelineUtils:
     def _make_pipeline(self, session_id="test-session", mode="full"):
         events = []
+
         def send(event):
             events.append(event)
         p = _Pipeline(
