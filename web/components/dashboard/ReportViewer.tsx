@@ -210,8 +210,9 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
+      let saved = false;
       let serverError: string | null = null;
-      outer: while (true) {
+      while (true) {
         const { done, value } = await reader.read();
         if (value) buf += decoder.decode(value, { stream: true });
         const lines = buf.split("\n"); buf = lines.pop() ?? "";
@@ -220,13 +221,15 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
           try {
             const ev = JSON.parse(line.slice(6)) as { type: string; message?: string };
             if (ev.type === "agent_message" && ev.message) setWikiMsg(ev.message);
-            else if (ev.type === "complete") { setWikiSaved(true); setWikiMsg("위키에 저장됐어요!"); break outer; }
-            else if (ev.type === "error") { serverError = ev.message ?? "ingest 실패"; break outer; }
-          } catch { /* JSON parse 실패 무시 */ }
+            else if (ev.type === "agent_done") saved = true;
+            else if (ev.type === "complete") saved = true;
+            else if (ev.type === "error") serverError = ev.message ?? "ingest 실패";
+          } catch { /* ignore */ }
         }
         if (done) break;
       }
       if (serverError) throw new Error(serverError);
+      if (saved) { setWikiSaved(true); setWikiMsg("위키에 저장됐어요!"); }
     } catch {
       setWikiMsg("저장 실패. 다시 시도해줘요.");
     } finally {
