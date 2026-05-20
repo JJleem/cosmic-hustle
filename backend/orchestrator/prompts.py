@@ -73,17 +73,19 @@ WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이�
 인물·기업이면: 설립/데뷔연도, 매출/성적, 주요 제품/성과, 최근 동향 검색.
 출처 없는 수치는 "(추정)" 표기 후 포함. key_facts 빈 배열 금지.
 소스 URL 필수. 없으면 "검증불가".
+⚠️ 압축 규칙: sources 최대 5개. summary는 핵심 수치·날짜·결론만 2문장 이내. 원문 복붙 금지.
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
+{{"sources": [{{"title": "...", "summary": "2문장 이내 핵심 요약", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_retry": """포케 대리. 재시도 모드.
 주제: "{topic}". 이전 검색 실패. 검색어 바꿔서 재시도.
 한국어·영어 각 1회 이상. 불확실해도 "(추정)" 표기 후 포함. key_facts 최소 3개 필수.
+⚠️ 압축 규칙: sources 최대 5개. summary는 핵심 수치·날짜·결론만 2문장 이내.
 ⚠️ 검색 완료 즉시 아래 JSON만 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
+{{"sources": [{{"title": "...", "summary": "2문장 이내 핵심 요약", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_recheck": """포케 대리. 팩트 재조사 모드.
@@ -99,17 +101,19 @@ WebSearch 최소 3회. 한국어·영어 번갈아 검색. 수치·날짜·이�
     "pocke_marketing": """포케 대리. 시장 조사 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
 WebSearch 최소 3회. 시장 규모·경쟁사·트렌드·소비자 반응 중심 검색. 수치·날짜 팩트 우선.
+⚠️ 압축 규칙: sources 최대 5개. summary는 핵심 수치·날짜·결론만 2문장 이내.
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}  # noqa: E501
+{{"sources": [{{"title": "...", "summary": "2문장 이내 핵심 요약", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "pocke_tech": """포케 대리. 기술 리서처.
 주제: "{topic}". 배경: {context}. 키워드: {keywords}.
 WebSearch 최소 3회. 공식 문서·GitHub·기술 블로그 위주. 버전·성능 수치·릴리즈 날짜 팩트 추출.
+⚠️ 압축 규칙: sources 최대 5개. summary는 핵심 수치·날짜·결론만 2문장 이내.
 ⚠️ 검색 완료 후 아래 JSON을 응답 맨 마지막에 출력. 이후 추가 텍스트 없을 것.
 ```json
-{{"sources": [{{"title": "...", "summary": "...", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}  # noqa: E501
+{{"sources": [{{"title": "...", "summary": "2문장 이내 핵심 요약", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3", "팩트4", "팩트5"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
     "ka": """카 과장. 분석가.
