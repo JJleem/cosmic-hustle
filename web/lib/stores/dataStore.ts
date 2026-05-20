@@ -7,6 +7,21 @@ import type { Handoff } from "@/lib/types";
 type ChatEntry = { id: string; agentId: string; text: string; at: Date };
 type DraftVersion = { version: number; content: string; prevFeedback: string };
 
+export type AgentTokenUsage = {
+  agentId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  model: string;
+};
+
+export type TokenUsageSummary = {
+  agents: AgentTokenUsage[];
+  total: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUsd: number };
+};
+
 interface DataStore {
   reports: Report[];
   history: ProjectRecord[];
@@ -16,6 +31,7 @@ interface DataStore {
   reportDrafts: Record<string, string>;
   liveDraft: { agentId: string; topic: string; content: string } | null;
   draftVersions: DraftVersion[];
+  lastTokenUsage: TokenUsageSummary | null;
 
   setReports: (r: Report[]) => void;
   addReport: (r: Report) => void;
@@ -29,6 +45,7 @@ interface DataStore {
   setReportDraft: (reportId: string, draft: string) => void;
   setLiveDraft: (d: { agentId: string; topic: string; content: string } | null) => void;
   addDraftVersion: (v: DraftVersion) => void;
+  setLastTokenUsage: (u: TokenUsageSummary | null) => void;
   reset: () => void;
 }
 
@@ -41,6 +58,7 @@ export const useDataStore = create<DataStore>((set) => ({
   reportDrafts: {},
   liveDraft: null,
   draftVersions: [],
+  lastTokenUsage: null,
 
   setReports: (r) => set({ reports: r }),
   addReport: (r) => set((st) => ({ reports: [r, ...st.reports] })),
@@ -62,6 +80,7 @@ export const useDataStore = create<DataStore>((set) => ({
     const filtered = st.draftVersions.filter((x) => x.version !== v.version);
     return { draftVersions: [...filtered, v].sort((a, b) => a.version - b.version) };
   }),
+  setLastTokenUsage: (u) => set({ lastTokenUsage: u }),
   reset: () => set({
     handoffs: [], pingIdeas: [], chatFeed: [],
     reportDrafts: {}, liveDraft: null, draftVersions: [],

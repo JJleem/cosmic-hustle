@@ -225,6 +225,7 @@ export default function Home() {
         case "complete": {
           const completedSid = sessionIdRef.current;
           data.addHistory({ id: completedSid || uid(), topic: inputTopic, completedAt: new Date() });
+          if (event.tokenUsage) data.setLastTokenUsage(event.tokenUsage as import("@/lib/stores/dataStore").TokenUsageSummary);
           localStorage.removeItem("cosmicHustleSession");
           session.setPhase("done");
           speak("wiki", "리서치 완료. 보고서가 준비됐어요.");

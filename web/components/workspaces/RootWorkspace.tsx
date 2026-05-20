@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Terminal, CheckSquare, Square, AlertTriangle, RefreshCw } from "lucide-react";
-import { AgentDef } from "@/lib/agents";
+import { Terminal, CheckSquare, Square, AlertTriangle, RefreshCw, Banknote } from "lucide-react";
+import { AgentDef, AGENTS } from "@/lib/agents";
+import { useDataStore, type AgentTokenUsage } from "@/lib/stores/dataStore";
 import ChatPanel from "./ChatPanel";
 
-type Tab = "checklist" | "terminal" | "logs";
+type Tab = "checklist" | "terminal" | "logs" | "salary";
 
 const DEPLOY_CHECKS = [
   { id: "env",     label: "환경변수 확인",         desc: ".env.production 체크" },
@@ -147,6 +148,115 @@ function LogsTab({ agent: _agent }: { agent: AgentDef }) {
   );
 }
 
+const AGENT_NAME: Record<string, string> = Object.fromEntries(
+  AGENTS.map((a) => [a.id, `${a.name} ${a.title}`])
+);
+
+function fmtUsd(v: number): string {
+  return v < 0.001 ? `$${(v * 1000).toFixed(4)}m` : `$${v.toFixed(4)}`;
+}
+
+function SalaryRow({ row, color }: { row: AgentTokenUsage; color: string }) {
+  const [hovered, setHovered] = useState(false);
+  const name = AGENT_NAME[row.agentId] ?? row.agentId;
+  const totalTokens = row.inputTokens + row.outputTokens;
+
+  return (
+    <div
+      className="relative rounded-xl px-4 py-3 transition-all cursor-default"
+      style={{
+        background: hovered ? `${color}08` : "rgba(255,255,255,0.02)",
+        border: `1px solid ${hovered ? color + "30" : "rgba(255,255,255,0.05)"}`,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-slate-300">{name}</span>
+        <span className="text-[12px] font-bold tabular-nums" style={{ color }}>
+          {fmtUsd(row.costUsd)}
+        </span>
+      </div>
+
+      {/* hover 시 토큰 내역 */}
+      {hovered && (
+        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5">
+          <span className="text-[9px] text-slate-600">입력 토큰</span>
+          <span className="text-[9px] text-slate-400 text-right tabular-nums">{row.inputTokens.toLocaleString()}</span>
+          <span className="text-[9px] text-slate-600">출력 토큰</span>
+          <span className="text-[9px] text-slate-400 text-right tabular-nums">{row.outputTokens.toLocaleString()}</span>
+          {row.cacheReadTokens > 0 && <>
+            <span className="text-[9px] text-slate-600">캐시 절약</span>
+            <span className="text-[9px] text-right tabular-nums" style={{ color: "#34d399" }}>{row.cacheReadTokens.toLocaleString()}</span>
+          </>}
+          <span className="text-[9px] text-slate-600">총 토큰</span>
+          <span className="text-[9px] text-slate-400 text-right tabular-nums">{totalTokens.toLocaleString()}</span>
+          {row.model && (
+            <span className="text-[8px] text-slate-700 col-span-2 mt-0.5 truncate">{row.model}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SalaryTab({ agentColor }: { agentColor: string }) {
+  const lastTokenUsage = useDataStore((s) => s.lastTokenUsage);
+
+  if (!lastTokenUsage || lastTokenUsage.agents.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3">
+        <Banknote size={24} className="text-slate-700" />
+        <p className="text-[11px] text-slate-600">아직 월급날이 아니에요.</p>
+        <p className="text-[10px] text-slate-700">리서치 완료 후 이번 달 월급이 정산됩니다.</p>
+      </div>
+    );
+  }
+
+  const { agents, total } = lastTokenUsage;
+  const sorted = [...agents].sort((a, b) => b.costUsd - a.costUsd);
+
+  return (
+    <div className="h-full overflow-y-auto px-5 py-4 scrollbar-hide space-y-3">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[9px] text-slate-600 tracking-widest uppercase font-bold">이번 달 월급 명세서</p>
+        <span className="text-[9px] text-slate-700">hover → 토큰 내역</span>
+      </div>
+
+      {/* 직원별 월급 */}
+      <div className="space-y-1.5">
+        {sorted.map((row) => (
+          <SalaryRow key={row.agentId} row={row} color={agentColor} />
+        ))}
+      </div>
+
+      {/* 합계 */}
+      <div className="mt-3 rounded-xl px-4 py-3" style={{ background: `${agentColor}10`, border: `1px solid ${agentColor}30` }}>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold text-slate-300">총 월급 지출</span>
+          <span className="text-[15px] font-bold tabular-nums" style={{ color: agentColor }}>
+            {fmtUsd(total.costUsd)}
+          </span>
+        </div>
+        <div className="mt-1.5 flex gap-4">
+          <span className="text-[9px] text-slate-600">
+            입력 <span className="text-slate-400">{total.inputTokens.toLocaleString()}</span>
+          </span>
+          <span className="text-[9px] text-slate-600">
+            출력 <span className="text-slate-400">{total.outputTokens.toLocaleString()}</span>
+          </span>
+          {total.cacheReadTokens > 0 && (
+            <span className="text-[9px] text-slate-600">
+              캐시 절약 <span style={{ color: "#34d399" }}>{total.cacheReadTokens.toLocaleString()}</span>
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RootWorkspace({ agent }: { agent: AgentDef }) {
   const [tab, setTab] = useState<Tab>("checklist");
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -165,6 +275,7 @@ export default function RootWorkspace({ agent }: { agent: AgentDef }) {
   const TABS = [
     { id: "checklist" as Tab, label: "배포 체크리스트", icon: CheckSquare },
     { id: "logs"      as Tab, label: "에러 로그",       icon: AlertTriangle },
+    { id: "salary"    as Tab, label: "월급",            icon: Banknote },
     { id: "terminal"  as Tab, label: "터미널 채팅",     icon: Terminal },
   ];
 
@@ -186,6 +297,7 @@ export default function RootWorkspace({ agent }: { agent: AgentDef }) {
       <div className="flex-1 overflow-hidden">
         {tab === "terminal"  && <ChatPanel agent={agent} mono={true} />}
         {tab === "logs"      && <LogsTab agent={agent} />}
+        {tab === "salary"    && <SalaryTab agentColor={agent.color} />}
 
         {tab === "checklist" && (
           <div className="h-full overflow-y-auto px-6 py-5 scrollbar-hide">

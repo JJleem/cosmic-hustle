@@ -589,6 +589,37 @@ class _Pipeline:
 
     # ── Stage 6: 핑 + 위키 ────────────────────────────────────────────────
 
+    def _get_token_usage_summary(self) -> dict:
+        """세션 토큰 사용량 합계 조회."""
+        db = SessionLocal()
+        try:
+            from db.models import TokenUsage
+            rows = db.query(TokenUsage).filter(TokenUsage.session_id == self.session_id).all()
+            agents = [
+                {
+                    "agentId": r.agent_id,
+                    "inputTokens": r.input_tokens or 0,
+                    "outputTokens": r.output_tokens or 0,
+                    "cacheReadTokens": r.cache_read_tokens or 0,
+                    "cacheCreationTokens": r.cache_creation_tokens or 0,
+                    "costUsd": r.cost_usd or 0.0,
+                    "model": r.model or "",
+                }
+                for r in rows
+            ]
+            total = {
+                "inputTokens": sum(a["inputTokens"] for a in agents),
+                "outputTokens": sum(a["outputTokens"] for a in agents),
+                "cacheReadTokens": sum(a["cacheReadTokens"] for a in agents),
+                "cacheCreationTokens": sum(a["cacheCreationTokens"] for a in agents),
+                "costUsd": round(sum(a["costUsd"] for a in agents), 6),
+            }
+            return {"agents": agents, "total": total}
+        except Exception:
+            return {"agents": [], "total": {"inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0, "cacheCreationTokens": 0, "costUsd": 0.0}}
+        finally:
+            db.close()
+
     async def stage_finalize(self, report_id: str, ka: KaResult, draft: str):
         """핑 + 위키 업데이트 동시 실행 후 complete 이벤트."""
         insights_str = "; ".join(f"{i.title}: {i.description}" for i in ka.insights)
@@ -629,7 +660,8 @@ class _Pipeline:
                 self.emit("agent_done", agentId="wiki", message="기록 완료.")
 
         await asyncio.gather(_ping(), _wiki_update(), return_exceptions=True)
-        self.emit("complete", reportId=report_id, topic=self.topic)
+        token_usage = await asyncio.get_event_loop().run_in_executor(None, self._get_token_usage_summary)
+        self.emit("complete", reportId=report_id, topic=self.topic, tokenUsage=token_usage)
 
     # ── 메인 오케스트레이터 ────────────────────────────────────────────────
 

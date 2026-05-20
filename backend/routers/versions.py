@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from db.connection import get_db
-from db.models import ReportVersion
+from db.models import ReportVersion, TokenUsage
 
 router = APIRouter(prefix="/api/sessions")
 
@@ -23,3 +23,33 @@ def get_versions(session_id: str, db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
+
+@router.get("/{session_id}/token-usage")
+def get_token_usage(session_id: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(TokenUsage)
+        .filter(TokenUsage.session_id == session_id)
+        .order_by(TokenUsage.ts)
+        .all()
+    )
+    agents = [
+        {
+            "agentId": r.agent_id,
+            "inputTokens": r.input_tokens or 0,
+            "outputTokens": r.output_tokens or 0,
+            "cacheReadTokens": r.cache_read_tokens or 0,
+            "cacheCreationTokens": r.cache_creation_tokens or 0,
+            "costUsd": r.cost_usd or 0.0,
+            "model": r.model or "",
+        }
+        for r in rows
+    ]
+    total = {
+        "inputTokens": sum(a["inputTokens"] for a in agents),
+        "outputTokens": sum(a["outputTokens"] for a in agents),
+        "cacheReadTokens": sum(a["cacheReadTokens"] for a in agents),
+        "cacheCreationTokens": sum(a["cacheCreationTokens"] for a in agents),
+        "costUsd": round(sum(a["costUsd"] for a in agents), 6),
+    }
+    return {"agents": agents, "total": total}
