@@ -5,7 +5,6 @@ import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table, Tag, Plus, ImagePlus } from "lucide-react";
 import { AGENT_MAP } from "@/lib/agents";
-import { useAgentStore } from "@/lib/stores/agentStore";
 import {
   type Report, type ReportVersion, type ThumbnailPrompt,
   extractHtml, stripMarkdown,
@@ -47,7 +46,10 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const [thumbnailPrompts, setThumbnailPrompts] = useState<ThumbnailPrompt[] | null>(report.thumbnailPrompts ?? null);
   const [showThumbnail, setShowThumbnail] = useState(false);
   const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
-  const agentStore = useAgentStore();
+  const [pixelMsg, setPixelMsg] = useState("");
+  const [pixelToastVisible, setPixelToastVisible] = useState(false);
+  const [talkFrame, setTalkFrame] = useState(0);
+  const talkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const translateAbortRef = useRef<AbortController | null>(null);
@@ -93,8 +95,12 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
     if (thumbnailPrompts) { setShowThumbnail((v) => !v); setShowVersions(false); return; }
     setThumbnailLoading(true);
     setShowVersions(false);
-    agentStore.setStatus("pixel", "active");
-    agentStore.clearStream("pixel");
+    setPixelToastVisible(true);
+    setPixelMsg("썸네일 디자인 구상 시작! 캔버스 16:9로 펼쳤어요.");
+    setTalkFrame(0);
+    talkIntervalRef.current = setInterval(() => {
+      setTalkFrame((f) => (f + 1) % 3);
+    }, 300);
     try {
       const res = await fetch(`/api/reports/${report.id}/thumbnail-prompt`, { method: "POST" });
       if (!res.ok || !res.body) throw new Error();
@@ -111,17 +117,11 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           try {
-            const ev = JSON.parse(line.slice(6)) as { type: string; agentId?: string; message?: string; chunk?: string; prompts?: ThumbnailPrompt[] };
-            if (ev.type === "agent_start") {
-              agentStore.setStatus("pixel","active");
-              if (ev.message) agentStore.setLastMessage("pixel", ev.message);
-            } else if (ev.type === "agent_stream" && ev.chunk) {
-              agentStore.appendStream("pixel", ev.chunk);
-            } else if (ev.type === "agent_message" && ev.message) {
-              agentStore.setLastMessage("pixel", ev.message);
+            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string; prompts?: ThumbnailPrompt[] };
+            if ((ev.type === "agent_start" || ev.type === "agent_message") && ev.message) {
+              setPixelMsg(ev.message);
             } else if (ev.type === "agent_done") {
-              agentStore.setStatus("pixel","done");
-              if (ev.message) agentStore.setLastMessage("pixel", ev.message);
+              if (ev.message) setPixelMsg(ev.message);
               if (ev.prompts) prompts = ev.prompts;
             }
           } catch { /* ignore */ }
@@ -130,14 +130,15 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       setThumbnailPrompts(prompts);
       setShowThumbnail(true);
       onUpdate({ ...report, thumbnailPrompts: prompts });
-      setTimeout(() => agentStore.setStatus("pixel","idle"), 3000);
+      setTimeout(() => setPixelToastVisible(false), 2500);
     } catch {
       setThumbnailPrompts([]);
-      agentStore.setStatus("pixel","idle");
+      setPixelToastVisible(false);
     } finally {
+      if (talkIntervalRef.current) clearInterval(talkIntervalRef.current);
       setThumbnailLoading(false);
     }
-  }, [thumbnailLoading, thumbnailPrompts, report, agentStore, onUpdate]);
+  }, [thumbnailLoading, thumbnailPrompts, report, onUpdate]);
 
   const handleTranslate = useCallback(async () => {
     if (translating) {
@@ -301,6 +302,10 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm"
       onClick={onClose}
     >
+      {/* 픽셀 토스트 */}
+      {pixelToastVisible && (
+        <PixelToast message={pixelMsg} frame={talkFrame} done={!thumbnailLoading} />
+      )}
       <div
         className="relative w-[92vw] max-w-6xl max-h-[95vh] rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
@@ -692,6 +697,32 @@ function ThumbnailView({ prompts, copiedIdx, onCopy }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PixelToast({ message, frame, done }: { message: string; frame: number; done: boolean }) {
+  const talkSrc = `/characters/pixel/talk_${frame}.png`;
+  const finalSrc = done ? "/characters/pixel/done.png" : talkSrc;
+  return (
+    <div
+      className="fixed bottom-8 right-8 z-[60] flex items-end gap-3 animate-fadeIn pointer-events-none"
+      style={{ filter: "drop-shadow(0 8px 32px rgba(0,0,0,0.7))" }}
+    >
+      {/* 말풍선 */}
+      <div className="relative max-w-[220px] rounded-2xl rounded-br-sm px-4 py-3 text-[11px] text-slate-200 leading-relaxed"
+        style={{ background: "#111827", border: "1px solid rgba(253,186,116,0.25)" }}>
+        <span className="text-orange-300 font-semibold text-[9px] block mb-1 tracking-wide">PIXEL</span>
+        {message}
+        {/* 말풍선 꼬리 */}
+        <span className="absolute -bottom-[6px] right-3 w-3 h-3 block"
+          style={{ background: "#111827", clipPath: "polygon(0 0, 100% 0, 100% 100%)", borderRight: "1px solid rgba(253,186,116,0.25)", borderBottom: "1px solid rgba(253,186,116,0.25)" }} />
+      </div>
+      {/* 픽셀 아바타 */}
+      <div className="w-14 h-14 rounded-full overflow-hidden shrink-0"
+        style={{ outline: "2px solid rgba(253,186,116,0.4)", outlineOffset: 2 }}>
+        <Image src={finalSrc} alt="pixel" width={56} height={56} className="w-full h-full object-cover" unoptimized />
+      </div>
     </div>
   );
 }
