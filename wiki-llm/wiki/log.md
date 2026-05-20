@@ -4,6 +4,18 @@
 
 ---
 
+## [2026-05-20] ingest | test_debug
+
+- sources/test_debug.md 생성 (테스트 문서, 내용 없음)
+- index.md — Uncategorized 섹션에 링크 추가
+- 개념 페이지 없음 (추출 가능한 지식 내용 부재)
+
+## [2026-05-20] ingest | Report_펩_과르디올라의_일생_일대기에대해_리서치해줘
+
+- sources/Report_펩_과르디올라의_일생_일대기에대해_리서치해줘.md 생성
+- concepts/pep-guardiola-biography.md 보강 (frontmatter 추가, 내용 확장, 소스 링크 연결)
+- index.md — Sports/Leadership 카테고리 신설, Research Reports 섹션 신설
+
 ## [2026-04-22] ingest | KakaoTalk_Chat_[캐슬] AI 정보 공유방_2026-04-22-12-40-45.csv (6028개 메시지)
 
 ## [2026-04-21] ingest | 슈퍼센트 1차 면접 준비 스크립트

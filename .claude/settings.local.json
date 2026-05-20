@@ -122,7 +122,14 @@
       "Bash(python3.12 -c \"import backend.orchestrator.pipeline\")",
       "Bash(npx next *)",
       "Bash(kill %1)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(gh label *)",
+      "Bash(gh issue *)",
+      "Bash(node_modules/.bin/claude -p --output-format stream-json --dangerously-skip-permissions \"hello\")",
+      "Bash(node_modules/.bin/claude -p --output-format stream-json --dangerously-skip-permissions --max-turns 1 \"hi\")",
+      "Bash(node_modules/.bin/claude -p --verbose --output-format stream-json --dangerously-skip-permissions --max-turns 1 \"hi\")",
+      "Bash(kill 11775)",
+      "Bash(backend/.venv/bin/python -m pytest backend/tests/ -q)"
     ]
   }
 }
