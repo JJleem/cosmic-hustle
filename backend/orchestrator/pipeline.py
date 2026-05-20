@@ -621,45 +621,44 @@ class _Pipeline:
             db.close()
 
     async def stage_finalize(self, report_id: str, ka: KaResult, draft: str):
-        """핑 + 위키 업데이트 동시 실행 후 complete 이벤트."""
+        """핑 → 위키 순차 실행 후 complete 이벤트."""
         insights_str = "; ".join(f"{i.title}: {i.description}" for i in ka.insights)
         await asyncio.sleep(0.3)
+
+        # ── 핑 먼저 ──────────────────────────────────────────────────────────
         self.emit("agent_start", agentId="ping", message="이거랑 저거 합치면?! ✨ 안테나 반짝!")
+        try:
+            ping_raw, _ = await self.run_a(
+                build_prompt("ping", topic=self.topic, conclusion=ka.conclusion[:400]),
+                no_tools=True, max_turns=1, agent_id="ping",
+            )
+            await asyncio.sleep(0.6)
+            ping_data = _parse_typed(ping_raw, PingResult, PingResult())
+            if ping_data.ideas:
+                self.send({"type": "ping_ideas", "agentId": "ping",
+                           "ideas": [i.model_dump() for i in ping_data.ideas]})
+            self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
+            ping_lines = [f"💡 {i.title}: {i.spark}" for i in ping_data.ideas[:5]]
+            await self.maybe_checkin("ping", f"아이디어 {len(ping_data.ideas)}개 캡처됐어요.", ping_lines)
+        except Exception as e:
+            log_error(f"핑 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+            self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
+
+        # ── 위키 업데이트 (핑 완료 후) ────────────────────────────────────────
         self.emit("agent_start", agentId="wiki", message="리서치 기록 업데이트 중...")
+        try:
+            await self.run_a(
+                build_prompt("wiki_update", topic=self.topic,
+                             conclusion=ka.conclusion[:200],
+                             insights=insights_str),
+                tools=["Read", "Write", "Edit"], max_turns=2, agent_id="wiki",
+            )
+            synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
+            self.emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
+        except Exception as e:
+            log_error(f"위키 업데이트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+            self.emit("agent_done", agentId="wiki", message="기록 완료.")
 
-        async def _ping():
-            try:
-                ping_raw, _ = await self.run_a(
-                    build_prompt("ping", topic=self.topic, conclusion=ka.conclusion[:400]),
-                    no_tools=True, max_turns=1, agent_id="ping",
-                )
-                await asyncio.sleep(0.6)
-                ping_data = _parse_typed(ping_raw, PingResult, PingResult())
-                if ping_data.ideas:
-                    self.send({"type": "ping_ideas", "agentId": "ping",
-                               "ideas": [i.model_dump() for i in ping_data.ideas]})
-                self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
-                ping_lines = [f"💡 {i.title}: {i.spark}" for i in ping_data.ideas[:5]]
-                await self.maybe_checkin("ping", f"아이디어 {len(ping_data.ideas)}개 캡처됐어요.", ping_lines)
-            except Exception as e:
-                log_error(f"핑 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
-                self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
-
-        async def _wiki_update():
-            try:
-                await self.run_a(
-                    build_prompt("wiki_update", topic=self.topic,
-                                 conclusion=ka.conclusion[:200],
-                                 insights=insights_str),
-                    tools=["Read", "Write", "Edit", "Glob", "Grep"], max_turns=4, agent_id="wiki",
-                )
-                synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
-                self.emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
-            except Exception as e:
-                log_error(f"위키 업데이트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
-                self.emit("agent_done", agentId="wiki", message="기록 완료.")
-
-        await asyncio.gather(_ping(), _wiki_update(), return_exceptions=True)
         token_usage = await asyncio.get_event_loop().run_in_executor(None, self._get_token_usage_summary)
         self.emit("complete", reportId=report_id, topic=self.topic, tokenUsage=token_usage)
 
@@ -709,11 +708,6 @@ class _Pipeline:
 
         self.checkin_gates.clear()
         self.checkin_gates.update({"plan", "root" if is_dev_task else "fact"})
-
-        for wid, skip_msg in WRITER_SKIP.items():
-            if wid != writer_agent_id:
-                self.send({"type": "agent_done", "agentId": wid, "message": skip_msg,
-                           "ts": int(time.time() * 1000)})
 
         # ── 1+2. 위키 + 포케 ──────────────────────────────────────────────
         wiki_raw, pocke_raw, wiki, pocke = await self.stage_research(config, semantic_task)
@@ -793,9 +787,6 @@ class _Pipeline:
         # ── 5. 루트 (dev 태스크만) ────────────────────────────────────────
         if is_dev_task:
             draft = await self.stage_root(draft)
-        else:
-            self.send({"type": "agent_done", "agentId": "root", "message": "이번엔 배포 없어요.",
-                       "ts": int(time.time() * 1000)})
 
         # ── 6. 핑 + 위키 ─────────────────────────────────────────────────
         await self.stage_finalize(report_id, ka, draft)
