@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from .connection import Base
@@ -75,6 +75,21 @@ class SystemLog(Base):
     stack_trace = Column(Text, nullable=True)
     session_id = Column(String, nullable=True)    # 어떤 리서치 중 발생했는지
     created_at = Column(DateTime, server_default=func.now())
+
+
+class TokenUsage(Base):
+    __tablename__ = "token_usage"
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
+    agent_id = Column(String, nullable=False)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cache_read_tokens = Column(Integer, default=0)
+    cache_creation_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+    model = Column(String, nullable=True)
+    ts = Column(DateTime, server_default=func.now())
 
 
 class WikiEntry(Base):

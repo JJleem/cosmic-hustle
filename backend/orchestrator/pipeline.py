@@ -19,7 +19,7 @@ AGENT_MODEL: dict[str, str] = {
 from .types import PlanResult, WikiResult, PockeResult, KaResult, FactResult, PingResult
 from db.wiki_store import semantic_search, sync_concepts_dir
 from db.connection import SessionLocal
-from db.models import ReportVersion
+from db.models import ReportVersion, TokenUsage
 from db.logger import log_error
 
 # ── Global state ───────────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ class _Pipeline:
             if _d.exists():
                 agent_dir = str(_d)
         try:
-            return await run_agent(
+            result, stream, usage = await run_agent(
                 prompt, allowed_tools=tools, no_tools=no_tools,
                 add_dirs=[WIKI_DIR], max_turns=max_turns,
                 cwd=agent_dir,
@@ -176,6 +176,9 @@ class _Pipeline:
                 model=AGENT_MODEL.get(agent_id) if agent_id else None,
                 timeout=timeout,
             )
+            if agent_id and usage:
+                self._save_token_usage(agent_id, usage)
+            return result, stream
         except TimeoutError:
             label = agent_id or "unknown"
             log_error(f"{label} 에이전트 타임아웃 ({timeout}초)", source="agent", session_id=self.session_id)
@@ -183,6 +186,26 @@ class _Pipeline:
                 self.emit("agent_done", agentId=agent_id, message=f"⏱ {timeout}초 초과")
                 self.send({"type": "error", "message": f"[{label}] 에이전트가 {timeout}초 안에 응답하지 않았습니다."})
             return "", ""
+
+    def _save_token_usage(self, agent_id: str, usage: dict):
+        db = SessionLocal()
+        try:
+            db.add(TokenUsage(
+                id=str(uuid.uuid4()),
+                session_id=self.session_id,
+                agent_id=agent_id,
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+                cache_read_tokens=usage.get("cache_read_tokens", 0),
+                cache_creation_tokens=usage.get("cache_creation_tokens", 0),
+                cost_usd=usage.get("cost_usd", 0.0),
+                model=usage.get("model", ""),
+            ))
+            db.commit()
+        except Exception:
+            pass
+        finally:
+            db.close()
 
     async def maybe_checkin(self, agent_id: str, summary: str, key_facts: list[str]):
         if self.mode != "checkin" or agent_id not in self.checkin_gates:

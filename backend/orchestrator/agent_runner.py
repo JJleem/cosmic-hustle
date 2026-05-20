@@ -74,9 +74,10 @@ async def run_agent(
     should_stop: Callable[[], bool] | None = None,
     model: str | None = None,
     timeout: int = 120,
-) -> tuple[str, str]:
+) -> tuple[str, str, dict]:
     """Claude CLI를 asyncio 서브프로세스로 실행. stdout을 실시간 라인 단위로 읽어 on_stream 호출.
-    should_stop()이 True를 반환하면 subprocess를 즉시 kill하고 지금까지 받은 결과를 반환."""
+    should_stop()이 True를 반환하면 subprocess를 즉시 kill하고 지금까지 받은 결과를 반환.
+    반환: (result_text, stream_text, usage_dict)"""
     args = [
         CLAUDE_BIN, "-p",
         "--verbose",
@@ -114,6 +115,7 @@ async def run_agent(
     final_result = ""
     last_text = ""
     stream_chunks: list[str] = []
+    usage: dict = {}
 
     assert proc.stdout is not None
     try:
@@ -130,6 +132,17 @@ async def run_agent(
                         r = event.get("result", "") or ""
                         if r:
                             final_result = r
+                        raw_usage = event.get("usage") or {}
+                        model_usage = event.get("modelUsage") or {}
+                        detected_model = next(iter(model_usage), None)
+                        usage = {
+                            "input_tokens": raw_usage.get("input_tokens", 0),
+                            "output_tokens": raw_usage.get("output_tokens", 0),
+                            "cache_read_tokens": raw_usage.get("cache_read_input_tokens", 0),
+                            "cache_creation_tokens": raw_usage.get("cache_creation_input_tokens", 0),
+                            "cost_usd": event.get("total_cost_usd", 0.0),
+                            "model": detected_model or model or "",
+                        }
 
                     elif etype == "stream_event":
                         se = event.get("event", {})
@@ -171,7 +184,7 @@ async def run_agent(
 
     await asyncio.gather(proc.wait(), _drain_stderr(proc))
     # stream_chunks는 tool-use 에이전트의 신뢰할 수 있는 fallback
-    return final_result or last_text or "".join(stream_chunks), "".join(stream_chunks)
+    return final_result or last_text or "".join(stream_chunks), "".join(stream_chunks), usage
 
 
 def parse_json(text: str, fallback):
