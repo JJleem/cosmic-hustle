@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Terminal, CheckSquare, Square, AlertTriangle, RefreshCw, Banknote } from "lucide-react";
 import { AgentDef, AGENTS } from "@/lib/agents";
-import { useDataStore, type AgentTokenUsage } from "@/lib/stores/dataStore";
+import { useDataStore, type AgentTokenUsage, type TokenUsageSummary } from "@/lib/stores/dataStore";
+import { useSessionStore } from "@/lib/stores/sessionStore";
 import ChatPanel from "./ChatPanel";
 
 type Tab = "checklist" | "terminal" | "logs" | "salary";
@@ -202,13 +203,40 @@ function SalaryRow({ row, color }: { row: AgentTokenUsage; color: string }) {
 
 function SalaryTab({ agentColor }: { agentColor: string }) {
   const lastTokenUsage = useDataStore((s) => s.lastTokenUsage);
+  const setLastTokenUsage = useDataStore((s) => s.setLastTokenUsage);
+  const currentSessionId = useSessionStore((s) => s.currentSessionId);
+  const [loading, setLoading] = useState(false);
+
+  const fetchFromApi = useCallback(async (sid: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/sessions/${sid}/token-usage`);
+      if (res.ok) {
+        const data: TokenUsageSummary = await res.json();
+        if (data.agents.length > 0) setLastTokenUsage(data);
+      }
+    } catch { /* 무시 */ }
+    finally { setLoading(false); }
+  }, [setLastTokenUsage]);
+
+  // lastTokenUsage 없고 sessionId 있으면 자동 조회
+  useEffect(() => {
+    if (!lastTokenUsage && currentSessionId) {
+      void fetchFromApi(currentSessionId);
+    }
+  }, [lastTokenUsage, currentSessionId, fetchFromApi]);
 
   if (!lastTokenUsage || lastTokenUsage.agents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <Banknote size={24} className="text-slate-700" />
-        <p className="text-[11px] text-slate-600">아직 월급날이 아니에요.</p>
-        <p className="text-[10px] text-slate-700">리서치 완료 후 이번 달 월급이 정산됩니다.</p>
+        {loading
+          ? <p className="text-[11px] text-slate-600">월급 계산 중...</p>
+          : <>
+              <p className="text-[11px] text-slate-600">아직 월급날이 아니에요.</p>
+              <p className="text-[10px] text-slate-700">리서치 완료 후 이번 달 월급이 정산됩니다.</p>
+            </>
+        }
       </div>
     );
   }
@@ -221,8 +249,24 @@ function SalaryTab({ agentColor }: { agentColor: string }) {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-1">
         <p className="text-[9px] text-slate-600 tracking-widest uppercase font-bold">이번 달 월급 명세서</p>
-        <span className="text-[9px] text-slate-700">hover → 토큰 내역</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-slate-700">hover → 토큰 내역</span>
+          {currentSessionId && (
+            <button
+              onClick={() => void fetchFromApi(currentSessionId)}
+              disabled={loading}
+              className="text-slate-700 hover:text-slate-500 transition-colors"
+            >
+              <RefreshCw size={9} className={loading ? "animate-spin" : ""} />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* 면책 문구 */}
+      <p className="text-[9px] text-slate-700 px-1">
+        참고 비용 (구독 요금제 기준) — 실제 과금과 다를 수 있어요.
+      </p>
 
       {/* 직원별 월급 */}
       <div className="space-y-1.5">

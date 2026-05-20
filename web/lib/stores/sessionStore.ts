@@ -10,6 +10,7 @@ interface SessionStore {
   topic: string;
   currentMode: Mode;
   initialTopic: string;
+  currentSessionId: string | null;
   ceoCheckin: CeoCheckinState | null;
   resumeInfo: { sessionId: string; topic: string } | null;
   pausedInfo: { sessionId: string; topic: string; noCheckpoint?: boolean } | null;
@@ -21,6 +22,7 @@ interface SessionStore {
 
   setPhase: (p: Phase) => void;
   setTopic: (t: string) => void;
+  setCurrentSessionId: (id: string | null) => void;
   setMode: (m: Mode) => void;
   setInitialTopic: (t: string) => void;
   setCeoCheckin: (c: CeoCheckinState | null) => void;
@@ -39,6 +41,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
   topic: "",
   currentMode: "checkin",
   initialTopic: "",
+  currentSessionId: null,
   ceoCheckin: null,
   resumeInfo: null,
   pausedInfo: null,
@@ -50,6 +53,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   setPhase: (p) => set({ phase: p }),
   setTopic: (t) => set({ topic: t }),
+  setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setMode: (m) => set({ currentMode: m }),
   setInitialTopic: (t) => set({ initialTopic: t }),
   setCeoCheckin: (c) => set({ ceoCheckin: c }),

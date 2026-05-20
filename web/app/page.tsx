@@ -144,6 +144,7 @@ export default function Home() {
       switch (event.type) {
         case "session_start":
           sessionIdRef.current = event.sessionId as string;
+          session.setCurrentSessionId(event.sessionId as string);
           sessionStartTsRef.current = Date.now();
           localStorage.setItem("cosmicHustleSession", JSON.stringify({
             sessionId: event.sessionId, topic: inputTopic,
