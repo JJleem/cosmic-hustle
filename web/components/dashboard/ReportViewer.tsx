@@ -206,14 +206,27 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, filename }),
       });
-      if (!res.ok) throw new Error("ingest 실패");
-      const json = await res.json() as { ok: boolean; filename?: string };
-      if (json.ok) {
-        setWikiSaved(true);
-        setWikiMsg("위키에 저장됐어요!");
-      } else {
-        throw new Error("ingest 실패");
+      if (!res.ok || !res.body) throw new Error("ingest 실패");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let serverError: string | null = null;
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (value) buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n"); buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string };
+            if (ev.type === "agent_message" && ev.message) setWikiMsg(ev.message);
+            else if (ev.type === "complete") { setWikiSaved(true); setWikiMsg("위키에 저장됐어요!"); break outer; }
+            else if (ev.type === "error") { serverError = ev.message ?? "ingest 실패"; break outer; }
+          } catch { /* JSON parse 실패 무시 */ }
+        }
+        if (done) break;
       }
+      if (serverError) throw new Error(serverError);
     } catch {
       setWikiMsg("저장 실패. 다시 시도해줘요.");
     } finally {
