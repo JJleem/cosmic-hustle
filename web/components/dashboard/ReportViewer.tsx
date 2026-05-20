@@ -114,8 +114,19 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           try {
-            const ev = JSON.parse(line.slice(6)) as { type: string; result?: { result?: string } };
-            if (ev.type === "complete" && ev.result?.result) result = ev.result.result;
+            const ev = JSON.parse(line.slice(6)) as {
+              type: string;
+              result?: unknown;
+            };
+            if (ev.type === "complete" || ev.type === "agent_done") {
+              const r = ev.result;
+              // result가 { result: string } 형태이거나 직접 string인 경우 모두 처리
+              const text = typeof r === "string" ? r
+                : typeof (r as Record<string,unknown>)?.result === "string"
+                  ? (r as Record<string,unknown>).result as string
+                  : null;
+              if (text) result = text;
+            }
           } catch { /* ignore */ }
         }
       }
