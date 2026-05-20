@@ -73,6 +73,7 @@ async def run_agent(
     on_stream: Callable[[str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     model: str | None = None,
+    timeout: int = 120,
 ) -> tuple[str, str]:
     """Claude CLI를 asyncio 서브프로세스로 실행. stdout을 실시간 라인 단위로 읽어 on_stream 호출.
     should_stop()이 True를 반환하면 subprocess를 즉시 kill하고 지금까지 받은 결과를 반환."""
@@ -116,7 +117,7 @@ async def run_agent(
 
     assert proc.stdout is not None
     try:
-        async with asyncio.timeout(600):
+        async with asyncio.timeout(timeout):
             async for raw_line in proc.stdout:
                 line = raw_line.decode("utf-8", errors="replace").strip()
                 if not line:
@@ -166,6 +167,7 @@ async def run_agent(
                     break
     except TimeoutError:
         proc.kill()
+        raise
 
     await asyncio.gather(proc.wait(), _drain_stderr(proc))
     # stream_chunks는 tool-use 에이전트의 신뢰할 수 있는 fallback

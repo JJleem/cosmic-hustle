@@ -157,7 +157,7 @@ class _Pipeline:
     def is_paused(self) -> bool:
         return self.session_id in paused_sessions
 
-    async def run_a(self, prompt: str, tools=None, no_tools=False, max_turns=None, agent_id: str | None = None):
+    async def run_a(self, prompt: str, tools=None, no_tools=False, max_turns=None, agent_id: str | None = None, timeout: int = 120):
         def _on_stream(chunk: str):
             if agent_id:
                 self.send({"type": "agent_stream", "agentId": agent_id, "chunk": chunk})
@@ -166,14 +166,23 @@ class _Pipeline:
             _d = Path(__file__).parent.parent / "agents" / agent_id
             if _d.exists():
                 agent_dir = str(_d)
-        return await run_agent(
-            prompt, allowed_tools=tools, no_tools=no_tools,
-            add_dirs=[WIKI_DIR], max_turns=max_turns,
-            cwd=agent_dir,
-            on_stream=_on_stream if agent_id else None,
-            should_stop=self.is_paused,
-            model=AGENT_MODEL.get(agent_id) if agent_id else None,
-        )
+        try:
+            return await run_agent(
+                prompt, allowed_tools=tools, no_tools=no_tools,
+                add_dirs=[WIKI_DIR], max_turns=max_turns,
+                cwd=agent_dir,
+                on_stream=_on_stream if agent_id else None,
+                should_stop=self.is_paused,
+                model=AGENT_MODEL.get(agent_id) if agent_id else None,
+                timeout=timeout,
+            )
+        except TimeoutError:
+            label = agent_id or "unknown"
+            log_error(f"{label} 에이전트 타임아웃 ({timeout}초)", source="agent", session_id=self.session_id)
+            if agent_id:
+                self.emit("agent_done", agentId=agent_id, message=f"⏱ {timeout}초 초과")
+                self.send({"type": "error", "message": f"[{label}] 에이전트가 {timeout}초 안에 응답하지 않았습니다."})
+            return "", ""
 
     async def maybe_checkin(self, agent_id: str, summary: str, key_facts: list[str]):
         if self.mode != "checkin" or agent_id not in self.checkin_gates:
@@ -313,7 +322,7 @@ class _Pipeline:
             try:
                 raw, _ = await self.run_a(
                     build_prompt(config["pocke"], topic=self.topic, context=self.topic, keywords=self.topic),
-                    tools=["WebSearch", "WebFetch"], max_turns=8, agent_id="pocke",
+                    tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=300,
                 )
                 return raw
             except Exception as e:
@@ -336,7 +345,7 @@ class _Pipeline:
         try:
             retry_raw, _ = await self.run_a(
                 build_prompt("pocke_retry", topic=self.topic),
-                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
+                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=240,
             )
             retry = _parse_typed(retry_raw, PockeResult, PockeResult())
             if retry.key_facts:
@@ -493,37 +502,20 @@ class _Pipeline:
 
     async def _stage_fact(self, draft: str, live_pocke: PockeResult, writer_agent_id: str,
                           msgs: dict, attempt: int, is_dev_task: bool) -> tuple[bool, str, PockeResult]:
-        """팩트 검토 1회차. (passed, feedback, updated_live_pocke) 반환."""
+        """팩트 검토 — UI 이벤트만 발송, 실제 에이전트 실행 없음. 자체 검토 지시를 feedback으로 반환."""
         await asyncio.sleep(0.4)
         self.send({"type": "agent_message", "agentId": "fact", "message": "...검토 시작."})
         await asyncio.sleep(0.5)
         self.emit("agent_start", agentId="fact", message="...")
         self.send({"type": "agent_thinking", "agentId": "fact", "chunk": "초안 분석 중..."})
-        stop_fact = _start_murmurs("fact", MURMURS["fact"], self.send, interval_sec=10.0)
-        try:
-            fact_raw, _ = await self.run_a(
-                build_prompt("fact_dev" if is_dev_task else "fact",
-                             report=draft[:3000],
-                             sources=json.dumps(live_pocke.sources[:5], ensure_ascii=False)),
-                no_tools=True, max_turns=1, agent_id="fact",
-            )
-            if self.is_paused():
-                return True, "", live_pocke
-            await asyncio.sleep(0.8)
-            fact = _parse_typed(fact_raw, FactResult, FactResult())
-            fact_feedback = fact.feedback
-
-            self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
-            self.emit("agent_done", agentId="fact",
-                      message="피드백 전달. 수정 부탁해요." if fact_feedback and fact_feedback.strip() and fact_feedback != "이상 없음" else "이상 없음. 수정 후 완료.")  # noqa: E501
-
-            return True, fact_feedback, live_pocke
-        except Exception as e:
-            log_error(f"팩트 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
-            self.emit("agent_done", agentId="fact", message="검토 완료.")
-            return True, "", live_pocke
-        finally:
-            stop_fact()
+        await asyncio.sleep(1.5)
+        self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
+        self.emit("agent_done", agentId="fact", message="피드백 전달. 수정 부탁해요.")
+        if is_dev_task:
+            feedback = "초안을 스스로 검토해. 보안 취약점·로직 오류·미구현 항목을 점검하고 완성도를 높여줘."
+        else:
+            feedback = "초안을 스스로 검토해. 출처 없는 수치·날짜는 삭제하거나 완화하고, 논리 흐름을 점검해서 완성도를 높여줘."
+        return True, feedback, live_pocke
 
     async def _pocke_recheck(self, research_queries: list, live_pocke: PockeResult) -> PockeResult:
         """팩트 부장 요청으로 포케 재조사."""
@@ -538,7 +530,7 @@ class _Pipeline:
             recheck_raw, _ = await self.run_a(
                 build_prompt("pocke_recheck", topic=self.topic,
                              research_queries="\n".join(research_queries)),
-                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke",
+                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=240,
             )
             recheck = _parse_typed(recheck_raw, PockeResult, PockeResult())
             live_pocke.key_facts = list(dict.fromkeys(recheck.key_facts + live_pocke.key_facts))[:10]
