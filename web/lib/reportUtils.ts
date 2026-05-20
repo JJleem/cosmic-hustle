@@ -1,4 +1,5 @@
 import { AGENT_MAP } from "@/lib/agents";
+import { toast } from "sonner";
 
 export type Report = {
   id: string;
@@ -119,7 +120,11 @@ export function downloadTxt(report: Report) {
 
 export async function downloadExport(report: Report, format: "pdf" | "excel") {
   const res = await fetch(`/api/reports/${report.id}/export?format=${format}`);
-  if (!res.ok) return;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string };
+    toast.error(err.detail ?? "내보내기 실패");
+    return;
+  }
   const blob = await res.blob();
   const ext = format === "pdf" ? "pdf" : "xlsx";
   const name = report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_").slice(0, 50);

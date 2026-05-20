@@ -45,6 +45,7 @@ export default function Home() {
   const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionIdRef = useRef("");
+  const currentReportIdRef = useRef<string>("");
   const sessionStartTsRef = useRef(0);
   const pendingDraftsRef = useRef<Record<string, string>>({});
   const agentStartTs = useRef<Record<string, number>>({});
@@ -199,6 +200,7 @@ export default function Home() {
           break;
         case "report": {
           const rId = (event.reportId as string) ?? uid();
+          currentReportIdRef.current = rId;
           data.addReport({
             id: rId,
             sessionId: sessionIdRef.current || undefined,
@@ -230,8 +232,9 @@ export default function Home() {
           localStorage.removeItem("cosmicHustleSession");
           session.setPhase("done");
           speak("wiki", "리서치 완료. 보고서가 준비됐어요.");
-          const latestReport = useDataStore.getState().reports.at(-1);
-          if (latestReport) setViewingReport(latestReport);
+          const myReport = useDataStore.getState().reports.find(r => r.id === currentReportIdRef.current)
+            ?? useDataStore.getState().reports.at(-1);
+          if (myReport) setViewingReport(myReport);
           if (Notification.permission === "granted") {
             new Notification("🪐 Cosmic Hustle", { body: `"${inputTopic}" 리서치가 완료됐어요.`, icon: "/favicon.ico" });
           }
@@ -278,7 +281,12 @@ export default function Home() {
     session.setMode(config.mode);
     session.setTopic(config.topic);
     const enabledIds = new Set(config.agentConfigs.filter((c) => c.enabled).map((c) => c.agentId));
-    agent.setAllStatus(Object.fromEntries(AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "disabled"])));
+    const initStatus: Record<string, import("@/lib/agents").AgentStatus> = Object.fromEntries(
+      AGENTS.map((a) => [a.id, enabledIds.has(a.id) ? "waiting" : "disabled"] as [string, import("@/lib/agents").AgentStatus])
+    );
+    // writer 후보 3명은 task_type이 결정될 때까지 숨김 — agent_start에서 active로 전환됨
+    for (const w of ["over", "pixel", "buzz"] as const) initStatus[w] = "disabled";
+    agent.setAllStatus(initStatus);
 
     const abort = new AbortController();
     abortRef.current = abort;

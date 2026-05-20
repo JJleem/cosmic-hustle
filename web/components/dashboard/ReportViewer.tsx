@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table, Tag, Plus } from "lucide-react";
@@ -44,6 +44,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const [showVersions, setShowVersions] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const translateAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -81,9 +82,14 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
     return () => window.removeEventListener("keydown", handler);
   }, [editing, onClose]);
 
-  const handleTranslate = async () => {
-    if (translating) return;
+  const handleTranslate = useCallback(async () => {
+    if (translating) {
+      translateAbortRef.current?.abort();
+      return;
+    }
     if (translated) { setShowTranslated((v) => !v); return; }
+    const ctrl = new AbortController();
+    translateAbortRef.current = ctrl;
     setTranslating(true);
     try {
       const res = await fetch("/api/agent/over", {
@@ -92,6 +98,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         body: JSON.stringify({
           task: `Translate the following Korean research report into fluent English. Preserve all markdown formatting, headings, and structure exactly.\n\n${report.content}`,
         }),
+        signal: ctrl.signal,
       });
       if (!res.ok || !res.body) throw new Error();
       const reader = res.body.getReader();
@@ -114,13 +121,14 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       }
       setTranslated(result || "Translation failed.");
       setShowTranslated(true);
-    } catch {
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
       setTranslated("Translation failed.");
       setShowTranslated(true);
     } finally {
       setTranslating(false);
     }
-  };
+  }, [translating, translated, report.content]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -187,23 +195,13 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, filename }),
       });
-      if (!res.ok || !res.body) throw new Error("ingest 실패");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n"); buf = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string };
-            if (ev.type === "agent_message" && ev.message) setWikiMsg(ev.message);
-            else if (ev.type === "complete") { setWikiSaved(true); setWikiMsg("위키에 저장됐어요!"); }
-          } catch { /* ignore */ }
-        }
+      if (!res.ok) throw new Error("ingest 실패");
+      const json = await res.json() as { ok: boolean; filename?: string };
+      if (json.ok) {
+        setWikiSaved(true);
+        setWikiMsg("위키에 저장됐어요!");
+      } else {
+        throw new Error("ingest 실패");
       }
     } catch {
       setWikiMsg("저장 실패. 다시 시도해줘요.");
@@ -320,11 +318,11 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
                 <div className="w-px h-4 bg-slate-700" />
               </>
             )}
-            <button onClick={handleTranslate} disabled={translating}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
+            <button onClick={handleTranslate}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all"
               style={showTranslated ? { background: "#1e3a5f", color: "#93c5fd", border: "1px solid #2a5a9c" } : { color: "#94a3b8" }}>
               {translating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
-              <span>{translating ? "번역중..." : showTranslated ? "한국어" : "EN"}</span>
+              <span>{translating ? "취소" : showTranslated ? "한국어" : "EN"}</span>
             </button>
             <div className="w-px h-4 bg-slate-700" />
 
