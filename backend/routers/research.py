@@ -327,6 +327,7 @@ def _serialize_report(r: models.Report) -> dict:
         "topic": r.topic,
         "content": r.content,
         "tags": json.loads(str(r.tags)) if r.tags else [],
+        "thumbnailPrompts": json.loads(str(r.thumbnail_prompts)) if r.thumbnail_prompts else None,
         "createdAt": _ts(r.created_at),
     }
 

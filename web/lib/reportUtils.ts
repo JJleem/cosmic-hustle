@@ -1,6 +1,13 @@
 import { AGENT_MAP } from "@/lib/agents";
 import { toast } from "sonner";
 
+export type ThumbnailPrompt = {
+  style: string;
+  label: string;
+  prompt: string;
+  negative: string;
+};
+
 export type Report = {
   id: string;
   sessionId?: string;
@@ -8,6 +15,7 @@ export type Report = {
   topic: string;
   content: string;
   tags?: string[];
+  thumbnailPrompts?: ThumbnailPrompt[] | null;
   createdAt: Date;
 };
 

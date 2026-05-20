@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
-import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table, Tag, Plus } from "lucide-react";
+import { X, Download, Copy, Check, Printer, Languages, Loader2, Code, Monitor, Search, Trash2, Pencil, Save, ChevronDown, FileText, FileCode, BookOpen, Table, Tag, Plus, ImagePlus } from "lucide-react";
 import { AGENT_MAP } from "@/lib/agents";
+import { useAgentStore } from "@/lib/stores/agentStore";
 import {
-  type Report, type ReportVersion,
+  type Report, type ReportVersion, type ThumbnailPrompt,
   extractHtml, stripMarkdown,
   printReport, downloadMarkdown, downloadHtml, downloadTxt, downloadExport,
 } from "@/lib/reportUtils";
@@ -42,6 +43,11 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const [versions, setVersions] = useState<ReportVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
+  const [thumbnailPrompts, setThumbnailPrompts] = useState<ThumbnailPrompt[] | null>(report.thumbnailPrompts ?? null);
+  const [showThumbnail, setShowThumbnail] = useState(false);
+  const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
+  const agentStore = useAgentStore();
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const translateAbortRef = useRef<AbortController | null>(null);
@@ -81,6 +87,57 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [editing, onClose]);
+
+  const handleThumbnailPrompt = useCallback(async () => {
+    if (thumbnailLoading) return;
+    if (thumbnailPrompts) { setShowThumbnail((v) => !v); setShowVersions(false); return; }
+    setThumbnailLoading(true);
+    setShowVersions(false);
+    agentStore.setStatus("pixel", "active");
+    agentStore.clearStream("pixel");
+    try {
+      const res = await fetch(`/api/reports/${report.id}/thumbnail-prompt`, { method: "POST" });
+      if (!res.ok || !res.body) throw new Error();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let prompts: ThumbnailPrompt[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6)) as { type: string; agentId?: string; message?: string; chunk?: string; prompts?: ThumbnailPrompt[] };
+            if (ev.type === "agent_start") {
+              agentStore.setStatus("pixel","active");
+              if (ev.message) agentStore.setLastMessage("pixel", ev.message);
+            } else if (ev.type === "agent_stream" && ev.chunk) {
+              agentStore.appendStream("pixel", ev.chunk);
+            } else if (ev.type === "agent_message" && ev.message) {
+              agentStore.setLastMessage("pixel", ev.message);
+            } else if (ev.type === "agent_done") {
+              agentStore.setStatus("pixel","done");
+              if (ev.message) agentStore.setLastMessage("pixel", ev.message);
+              if (ev.prompts) prompts = ev.prompts;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+      setThumbnailPrompts(prompts);
+      setShowThumbnail(true);
+      onUpdate({ ...report, thumbnailPrompts: prompts });
+      setTimeout(() => agentStore.setStatus("pixel","idle"), 3000);
+    } catch {
+      setThumbnailPrompts([]);
+      agentStore.setStatus("pixel","idle");
+    } finally {
+      setThumbnailLoading(false);
+    }
+  }, [thumbnailLoading, thumbnailPrompts, report, agentStore, onUpdate]);
 
   const handleTranslate = useCallback(async () => {
     if (translating) {
@@ -411,6 +468,15 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
             </div>
             <div className="w-px h-4 bg-slate-700" />
 
+            {/* 썸네일 프롬프트 */}
+            <button onClick={() => void handleThumbnailPrompt()} disabled={thumbnailLoading}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
+              style={showThumbnail ? { background: "rgba(251,146,60,0.12)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" } : { color: "#94a3b8" }}>
+              {thumbnailLoading ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+              <span>{thumbnailLoading ? "생성 중..." : "썸네일 프롬프트"}</span>
+            </button>
+            <div className="w-px h-4 bg-slate-700" />
+
             {/* 위키에 저장 */}
             <button onClick={() => void saveToWiki()} disabled={wikiSaving || wikiSaved}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
@@ -446,6 +512,13 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
           </div>
         ) : showVersions && versions.length > 0 ? (
           <VersionView versions={versions} selectedVersion={selectedVersion} onSelectVersion={setSelectedVersion} />
+        ) : showThumbnail && thumbnailPrompts ? (
+          <ThumbnailView prompts={thumbnailPrompts} copiedIdx={copiedPromptIdx} onCopy={(i, text) => {
+            void navigator.clipboard.writeText(text).then(() => {
+              setCopiedPromptIdx(i);
+              setTimeout(() => setCopiedPromptIdx(null), 2000);
+            });
+          }} />
         ) : (
           <ContentView
             report={report}
@@ -563,6 +636,62 @@ function VersionView({ versions, selectedVersion, onSelectVersion }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const STYLE_COLORS: Record<string, { bg: string; border: string; color: string }> = {
+  minimal:   { bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.2)", color: "#94a3b8" },
+  tech:      { bg: "rgba(56,189,248,0.08)",  border: "rgba(56,189,248,0.2)",  color: "#38bdf8" },
+  editorial: { bg: "rgba(167,139,250,0.08)", border: "rgba(167,139,250,0.2)", color: "#a78bfa" },
+  dark:      { bg: "rgba(30,41,59,0.6)",     border: "rgba(71,85,105,0.4)",   color: "#64748b" },
+  bright:    { bg: "rgba(251,146,60,0.08)",  border: "rgba(251,146,60,0.2)",  color: "#fb923c" },
+};
+
+function ThumbnailView({ prompts, copiedIdx, onCopy }: {
+  prompts: ThumbnailPrompt[];
+  copiedIdx: number | null;
+  onCopy: (i: number, text: string) => void;
+}) {
+  if (prompts.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-[11px] text-slate-600">
+        프롬프트 생성에 실패했습니다. 다시 시도해주세요.
+      </div>
+    );
+  }
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 scrollbar-hide flex flex-col gap-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+        <ImagePlus size={11} className="text-orange-400" />
+        <span className="text-[10px] text-orange-400 font-medium">Gemini Imagen 썸네일 프롬프트 (16:9)</span>
+        <span className="text-[9px] text-slate-600 ml-auto">복사해서 Google AI Studio에 붙여넣기</span>
+      </div>
+      {prompts.map((p, i) => {
+        const c = STYLE_COLORS[p.style] ?? STYLE_COLORS.minimal;
+        const isCopied = copiedIdx === i;
+        return (
+          <div key={i} className="rounded-xl p-4 flex flex-col gap-3" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold tracking-wide uppercase" style={{ color: c.color }}>{p.label ?? p.style}</span>
+              <button onClick={() => onCopy(i, p.prompt)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] transition-all"
+                style={isCopied
+                  ? { background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }
+                  : { color: "#64748b", border: "1px solid rgba(255,255,255,0.06)" }}>
+                {isCopied ? <Check size={9} /> : <Copy size={9} />}
+                <span>{isCopied ? "복사됨!" : "복사"}</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed font-mono">{p.prompt}</p>
+            {p.negative && (
+              <p className="text-[10px] text-slate-600 leading-relaxed">
+                <span className="text-slate-700 mr-1">negative:</span>{p.negative}
+              </p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -295,6 +295,18 @@ needs_research: 무조건 false.
     "root": """루트 사원. DevOps.
 주제: "{topic}". 구현 결과: {report}
 CI/CD 파이프라인·배포 단계·자동화 스텝·환경변수·롤백 전략. ## 구조. 400~600자.""",
+
+    "pixel_thumbnail": """픽셀 사원. 썸네일 디자이너. Google Gemini Imagen 전문.
+주제: "{topic}"
+리포트 요약: {content_summary}
+
+블로그 썸네일(16:9) 용 Gemini Imagen 프롬프트 5개를 아래 JSON으로만 출력. 이외 텍스트 없음.
+스타일은 minimal·tech·editorial·dark·bright 각 1개.
+각 prompt: 영문 60~90단어, 시각 구성·조명·분위기·색상·피사체 구체적으로.
+negative: 피할 요소 영문 15단어 이내.
+```json
+{{"prompts": [{{"style": "minimal", "label": "미니멀", "prompt": "...", "negative": "..."}}]}}
+```""",
 }
 
 
