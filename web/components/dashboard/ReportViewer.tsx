@@ -308,7 +308,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         <PixelToast message={pixelMsg} frame={talkFrame} done={!thumbnailLoading} />
       )}
       <div
-        className="relative w-[92vw] max-w-6xl max-h-[95vh] rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
+        className="relative w-[92vw] max-w-6xl h-[90vh] rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
