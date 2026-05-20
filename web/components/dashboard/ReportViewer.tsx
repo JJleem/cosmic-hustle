@@ -93,6 +93,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const handleThumbnailPrompt = useCallback(async () => {
     if (thumbnailLoading) return;
     if (thumbnailPrompt) { setShowThumbnail((v) => !v); setShowVersions(false); return; }
+    setShowThumbnail(false);
     setThumbnailLoading(true);
     setShowVersions(false);
     setPixelToastVisible(true);
@@ -518,12 +519,17 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         ) : showVersions && versions.length > 0 ? (
           <VersionView versions={versions} selectedVersion={selectedVersion} onSelectVersion={setSelectedVersion} />
         ) : showThumbnail && thumbnailPrompt ? (
-          <ThumbnailView data={thumbnailPrompt} copied={copiedPrompt} onCopy={(text) => {
-            void navigator.clipboard.writeText(text).then(() => {
-              setCopiedPrompt(true);
-              setTimeout(() => setCopiedPrompt(false), 2000);
-            });
-          }} />
+          <ThumbnailView data={thumbnailPrompt} copied={copiedPrompt} loading={thumbnailLoading}
+            onCopy={(text) => {
+              void navigator.clipboard.writeText(text).then(() => {
+                setCopiedPrompt(true);
+                setTimeout(() => setCopiedPrompt(false), 2000);
+              });
+            }}
+            onRegenerate={() => {
+              setThumbnailPrompt(null);
+              void handleThumbnailPrompt();
+            }} />
         ) : (
           <ContentView
             report={report}
@@ -646,17 +652,24 @@ function VersionView({ versions, selectedVersion, onSelectVersion }: {
 }
 
 
-function ThumbnailView({ data, copied, onCopy }: {
+function ThumbnailView({ data, copied, loading, onCopy, onRegenerate }: {
   data: ThumbnailPrompt;
   copied: boolean;
+  loading: boolean;
   onCopy: (text: string) => void;
+  onRegenerate: () => void;
 }) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 scrollbar-hide flex flex-col gap-4">
       <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
         <ImagePlus size={11} className="text-orange-400" />
         <span className="text-[10px] text-orange-400 font-medium">Gemini Imagen 썸네일 프롬프트 (16:9)</span>
-        <span className="text-[9px] text-slate-600 ml-auto">Google AI Studio에 붙여넣기</span>
+        <button onClick={onRegenerate} disabled={loading}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] transition-all ml-auto disabled:opacity-40"
+          style={{ color: "#64748b", border: "1px solid rgba(255,255,255,0.06)" }}>
+          {loading ? <Loader2 size={9} className="animate-spin" /> : <ImagePlus size={9} />}
+          <span>{loading ? "생성 중..." : "재생성"}</span>
+        </button>
       </div>
       <div className="rounded-xl p-5 flex flex-col gap-4"
         style={{ background: "rgba(251,146,60,0.06)", border: "1px solid rgba(251,146,60,0.2)" }}>
