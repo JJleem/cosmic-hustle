@@ -30,7 +30,7 @@ function findClaude(): string {
 export const CLAUDE_BIN = findClaude();
 console.log("[findClaude]", CLAUDE_BIN, "| exists:", fs.existsSync(CLAUDE_BIN));
 
-export const WIKI_DIR = path.resolve(process.cwd(), "../../wiki-llm");
+export const WIKI_DIR = path.resolve(process.cwd(), "../wiki-llm");
 
 // CEO 응답 대기 — 세션별 Promise resolver 저장
 export const pendingResponses = new Map<string, (r: string) => void>();
