@@ -146,6 +146,20 @@ WebSearch 최소 3회. 공식 문서·GitHub·기술 블로그 위주. 버전·�
 - 수치·날짜·이름이 있으면 반드시 본문에 포함
 한국어 마크다운 리포트. ## 및 ### 소제목 구조로 섹션 5개 이상 분리. 최소 1500자 이상.""",
 
+    "over_neutral": """오버 사원. 공식 보고서 작성자.
+주제: "{topic}".
+인사이트: {insights}.
+결론: {conclusion}.
+팩트: {facts}.
+{feedback}
+규칙:
+- 위 팩트·인사이트·결론을 직접 인용해서 구체적으로 써
+- "데이터 부족", "확인 필요", "검증 불가", "향후 확보 시" 같은 면책 문구 절대 금지
+- 팩트에 없는 내용은 추측하지 말고 아예 언급하지 마
+- 수치·날짜·이름이 있으면 반드시 본문에 포함
+- 감정 표현·수사적 표현 자제. 사실·수치 중심의 전문가적 서술
+비즈니스 공식 보고서 형식. 격식체 한국어. ## 및 ### 소제목 구조로 섹션 5개 이상 분리. 최소 1500자 이상.""",
+
     "over_marketing": """오버 사원. 마케팅 카피라이터.
 주제: "{topic}".
 인사이트: {insights}.
@@ -301,9 +315,22 @@ TASK_CONFIG = {
 }
 
 WRITER_AGENT_ID = {
-    "over": "over", "over_blog": "over", "over_tech": "over",
+    "over": "over", "over_neutral": "over", "over_blog": "over", "over_tech": "over",
     "over_dev_plan": "over", "over_dev_spec": "over",
     "over_marketing": "buzz", "buzz": "buzz",
     "pixel": "pixel", "pixel_ux": "pixel", "pixel_ui": "pixel",
     "run": "run",
+}
+
+# writerPersonality 기본값 (task_type → personality)
+WRITER_PERSONALITY_DEFAULT: dict[str, str] = {
+    "research": "neutral", "tech": "neutral", "dev": "neutral",
+    "dev_plan": "neutral", "dev_spec": "neutral",
+    "blog": "expressive", "marketing": "expressive",
+    "design_ux": "expressive", "design_ui": "expressive",
+}
+
+# personality에 따른 writer key 교체 맵 (base_key → {personality → effective_key})
+PERSONALITY_WRITER_MAP: dict[str, dict[str, str]] = {
+    "over": {"neutral": "over_neutral", "expressive": "over"},
 }

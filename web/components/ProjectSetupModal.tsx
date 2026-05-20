@@ -56,8 +56,13 @@ const TASK_WRITER: Record<string, string> = {
   marketing: "buzz", design_ux: "pixel", design_ui: "pixel", dev: "run",
 };
 
+const PERSONALITY_DEFAULT: Record<string, "neutral" | "expressive"> = {
+  research: "neutral", tech: "neutral", dev: "neutral", dev_plan: "neutral", dev_spec: "neutral",
+  blog: "expressive", marketing: "expressive", design_ux: "expressive", design_ui: "expressive",
+};
+
 type Question = {
-  key: "tone" | "length";
+  key: "tone" | "length" | "writerPersonality";
   text: string;
   choices: { label: string; value: string }[];
 };
@@ -116,7 +121,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
 
   const taskTypeRef = useRef("research");
   const modeRef = useRef<ProjectMode>("full");
-  const styleRef = useRef<ReportStyle>({ length: "standard", tone: "formal" });
+  const styleRef = useRef<ReportStyle>({ length: "standard", tone: "formal", writerPersonality: undefined });
   const writerQIndexRef = useRef(0);
   const writerIdRef = useRef("over");
 
@@ -140,11 +145,25 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
     addMsg({ from: agentId, text, choices, choiceKey });
   }
 
+  function buildWriterQuestions(writerId: string, taskTypeId: string): Question[] {
+    const base = WRITER_QUESTIONS[writerId] ?? [];
+    const defaultPersonality = PERSONALITY_DEFAULT[taskTypeId] ?? "neutral";
+    const personalityQ: Question = {
+      key: "writerPersonality",
+      text: `작성 스타일은요? (기본: ${defaultPersonality === "neutral" ? "공식체" : "감성체"})`,
+      choices: [
+        { label: "공식체", value: "neutral" },
+        { label: "감성체", value: "expressive" },
+      ],
+    };
+    return [...base, personalityQ];
+  }
+
   function proceedToWriter() {
     const writerId = TASK_WRITER[taskTypeRef.current] ?? "over";
     writerIdRef.current = writerId;
     writerQIndexRef.current = 0;
-    const qs = WRITER_QUESTIONS[writerId] ?? [];
+    const qs = buildWriterQuestions(writerId, taskTypeRef.current);
     if (qs.length === 0) { proceedToMode(); return; }
     setTimeout(() => agentSay(writerId, qs[0].text, qs[0].choices, "writer_q"), 500);
   }
@@ -193,10 +212,10 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
       taskTypeRef.current = choice.value;
       proceedToWriter();
     } else if (msg.choiceKey === "writer_q") {
-      const qs = WRITER_QUESTIONS[writerIdRef.current] ?? [];
+      const qs = buildWriterQuestions(writerIdRef.current, taskTypeRef.current);
       const currentQ = qs[writerQIndexRef.current];
       if (currentQ) {
-        styleRef.current = { ...styleRef.current, [currentQ.key]: choice.value };
+        styleRef.current = { ...styleRef.current, [currentQ.key]: choice.value as never };
       }
       writerQIndexRef.current += 1;
       if (writerQIndexRef.current < qs.length) {

@@ -72,8 +72,9 @@ def _sse_generator(session_id: str, topic: str, db, pipeline_kwargs: dict):
 
 
 class ReportStyleModel(BaseModel):
-    length: str = "standard"   # brief | standard | detailed
-    tone: str = "formal"       # formal | casual | analytical
+    length: str = "standard"           # brief | standard | detailed
+    tone: str = "formal"               # formal | casual | analytical
+    writerPersonality: str | None = None  # neutral | expressive | None(auto)
 
 
 class ResearchRequest(BaseModel):
@@ -121,7 +122,11 @@ async def start_research(body: ResearchRequest, db: Session = Depends(get_db), m
             db.commit()
         return EventSourceResponse(mock_gen())
     mode = body.mode
-    report_style = {"length": body.reportStyle.length, "tone": body.reportStyle.tone} if body.reportStyle else None
+    report_style = {
+        "length": body.reportStyle.length,
+        "tone": body.reportStyle.tone,
+        "writerPersonality": body.reportStyle.writerPersonality,
+    } if body.reportStyle else None
 
     generator = _sse_generator(session_id, topic, db, {
         "session_id": session_id, "topic": topic,

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from .agent_runner import run_agent, parse_json, WIKI_DIR
-from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID
+from .prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID, WRITER_PERSONALITY_DEFAULT, PERSONALITY_WRITER_MAP
 
 # 에이전트별 모델 — Haiku: 단순 포맷팅/단일턴, Sonnet: 분석·창작·도구사용
 AGENT_MODEL: dict[str, str] = {
@@ -644,6 +644,12 @@ class _Pipeline:
         is_dev_task = resolved_task_type == "dev"
         config["_is_dev"] = is_dev_task
         writer_key = config["writer"]
+        personality = (
+            self.report_style.get("writerPersonality")
+            or WRITER_PERSONALITY_DEFAULT.get(resolved_task_type, "neutral")
+        )
+        if writer_key in PERSONALITY_WRITER_MAP:
+            writer_key = PERSONALITY_WRITER_MAP[writer_key].get(personality, writer_key)
         writer_agent_id = WRITER_AGENT_ID.get(writer_key, "over")
 
         self.checkin_gates.clear()

@@ -3,7 +3,10 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from orchestrator.prompts import build_prompt, TASK_CONFIG, WRITER_AGENT_ID, PROMPTS  # noqa
+from orchestrator.prompts import (  # noqa
+    build_prompt, TASK_CONFIG, WRITER_AGENT_ID, PROMPTS,
+    WRITER_PERSONALITY_DEFAULT, PERSONALITY_WRITER_MAP,
+)
 
 
 # ── build_prompt ──────────────────────────────────────────────────────────
@@ -104,3 +107,44 @@ class TestWriterAgentId:
         valid_ids = {"over", "buzz", "pixel", "run"}
         for key, agent_id in WRITER_AGENT_ID.items():
             assert agent_id in valid_ids, f"'{key}' → '{agent_id}' 유효하지 않은 에이전트 ID"
+
+    def test_over_neutral_in_writer_agent_id(self):
+        assert "over_neutral" in WRITER_AGENT_ID
+        assert WRITER_AGENT_ID["over_neutral"] == "over"
+
+
+# ── writerPersonality ─────────────────────────────────────────────────────
+
+class TestWriterPersonality:
+    def test_neutral_task_defaults(self):
+        for tt in ["research", "tech", "dev", "dev_plan", "dev_spec"]:
+            assert WRITER_PERSONALITY_DEFAULT[tt] == "neutral", f"{tt} 기본값이 neutral이어야 함"
+
+    def test_expressive_task_defaults(self):
+        for tt in ["blog", "marketing", "design_ux", "design_ui"]:
+            assert WRITER_PERSONALITY_DEFAULT[tt] == "expressive", f"{tt} 기본값이 expressive이어야 함"
+
+    def test_all_task_types_have_default(self):
+        required = ["research", "blog", "tech", "marketing", "design_ux", "design_ui", "dev", "dev_plan", "dev_spec"]
+        for tt in required:
+            assert tt in WRITER_PERSONALITY_DEFAULT, f"'{tt}' WRITER_PERSONALITY_DEFAULT에 없음"
+
+    def test_over_neutral_resolves_from_map(self):
+        effective = PERSONALITY_WRITER_MAP.get("over", {}).get("neutral", "over")
+        assert effective == "over_neutral"
+        assert "over_neutral" in PROMPTS
+
+    def test_over_expressive_resolves_from_map(self):
+        effective = PERSONALITY_WRITER_MAP.get("over", {}).get("expressive", "over")
+        assert effective == "over"
+
+    def test_non_mapped_writers_unchanged(self):
+        """buzz·pixel·run·over_blog 같이 맵에 없는 writer는 바뀌지 않아야 함."""
+        for key in ["buzz", "pixel", "run", "over_blog", "over_tech"]:
+            effective = PERSONALITY_WRITER_MAP.get(key, {}).get("neutral", key)
+            assert effective == key, f"'{key}'는 personality로 바뀌면 안 됨"
+
+    def test_over_neutral_prompt_is_formal(self):
+        """over_neutral 프롬프트에는 공식·전문 키워드가 포함되어야 함."""
+        prompt = PROMPTS["over_neutral"]
+        assert "공식" in prompt or "전문" in prompt or "격식" in prompt
