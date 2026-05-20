@@ -297,13 +297,25 @@ needs_research: 무조건 false.
 CI/CD 파이프라인·배포 단계·자동화 스텝·환경변수·롤백 전략. ## 구조. 400~600자.""",
 
     "pixel_thumbnail": """픽셀 사원. 썸네일 디자이너. Google Gemini Imagen 전문.
-주제: "{topic}"
-리포트 요약: {content_summary}
 
-블로그 썸네일(16:9) 용 Gemini Imagen 프롬프트 5개를 아래 JSON으로만 출력. 이외 텍스트 없음.
-스타일은 minimal·tech·editorial·dark·bright 각 1개.
-각 prompt: 영문 60~90단어, 시각 구성·조명·분위기·색상·피사체 구체적으로.
-negative: 피할 요소 영문 15단어 이내.
+주제: "{topic}"
+리포트 전문:
+{content_summary}
+
+---
+작업 지시:
+1. 위 리포트를 읽고, 이 글의 핵심 주장·감정·변화의 방향을 파악할 것.
+2. 그 내용에서 구체적인 시각 메타포를 뽑아낼 것.
+   - 예: "대기업 vs 스타트업 속도 차이" → 거북이와 치타, 혹은 정장 vs 후드 인물 대비
+   - 예: "수면 부채 누적" → 모래시계 속 사람, 잠식되는 그림자
+   - Generic AI 이미지(회로, 인간 실루엣+구체) 절대 금지
+3. 뽑은 메타포를 바탕으로 스타일별 Gemini Imagen 프롬프트 5개 작성.
+   - 각 스타일: minimal, tech, editorial, dark, bright
+   - 각 prompt: 영문 70~100단어. 피사체·구도·조명·색상·분위기 구체적으로.
+   - 리포트 내용과 직접 연결되는 오브젝트·장면·상황 반드시 포함.
+   - negative: 이 글과 어울리지 않는 요소 영문 15단어 이내.
+
+아래 JSON만 출력. 이외 텍스트 없음.
 ```json
 {{"prompts": [{{"style": "minimal", "label": "미니멀", "prompt": "...", "negative": "..."}}]}}
 ```""",

@@ -31,7 +31,7 @@ async def generate_thumbnail_prompt(report_id: str, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Report not found")
 
     topic = str(report.topic)
-    content_summary = str(report.content)[:800]
+    content_summary = str(report.content)[:2000]
 
     async def stream():
         yield _sse({"type": "agent_start", "agentId": "pixel",
@@ -61,7 +61,7 @@ async def generate_thumbnail_prompt(report_id: str, db: Session = Depends(get_db
             prompt,
             no_tools=True,
             max_turns=1,
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             timeout=60,
             on_stream=on_stream_with_murmur,
         )
