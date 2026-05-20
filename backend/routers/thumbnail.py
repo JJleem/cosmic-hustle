@@ -71,21 +71,24 @@ async def generate_thumbnail_prompt(report_id: str, db: Session = Depends(get_db
             yield _sse({"type": "agent_message", "agentId": "pixel", "message": msg})
 
         parsed = parse_json(result_text, {})
-        prompts = parsed.get("prompts", []) if isinstance(parsed, dict) else []
+        result = {
+            "prompt": parsed.get("prompt", "") if isinstance(parsed, dict) else "",
+            "negative": parsed.get("negative", "") if isinstance(parsed, dict) else "",
+        }
 
         # DB 저장
         db2 = SessionLocal()
         try:
             db2.query(models.Report).filter(models.Report.id == report_id).update(
-                {"thumbnail_prompts": json.dumps(prompts, ensure_ascii=False)}
+                {"thumbnail_prompts": json.dumps(result, ensure_ascii=False)}
             )
             db2.commit()
         finally:
             db2.close()
 
         yield _sse({"type": "agent_done", "agentId": "pixel",
-                    "message": f"{len(prompts)}개 프롬프트 완성! 복사해서 Gemini에 붙여넣어요.",
-                    "prompts": prompts,
+                    "message": "프롬프트 완성! 복사해서 Gemini에 붙여넣어요.",
+                    "result": result,
                     "ts": int(time.time() * 1000)})
 
     return StreamingResponse(stream(), media_type="text/event-stream")

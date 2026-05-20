@@ -43,9 +43,9 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
   const [thumbnailLoading, setThumbnailLoading] = useState(false);
-  const [thumbnailPrompts, setThumbnailPrompts] = useState<ThumbnailPrompt[] | null>(report.thumbnailPrompts ?? null);
+  const [thumbnailPrompt, setThumbnailPrompt] = useState<ThumbnailPrompt | null>(report.thumbnailPrompts ?? null);
   const [showThumbnail, setShowThumbnail] = useState(false);
-  const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [pixelMsg, setPixelMsg] = useState("");
   const [pixelToastVisible, setPixelToastVisible] = useState(false);
   const [talkFrame, setTalkFrame] = useState(0);
@@ -92,7 +92,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
 
   const handleThumbnailPrompt = useCallback(async () => {
     if (thumbnailLoading) return;
-    if (thumbnailPrompts) { setShowThumbnail((v) => !v); setShowVersions(false); return; }
+    if (thumbnailPrompt) { setShowThumbnail((v) => !v); setShowVersions(false); return; }
     setThumbnailLoading(true);
     setShowVersions(false);
     setPixelToastVisible(true);
@@ -107,7 +107,7 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
-      let prompts: ThumbnailPrompt[] = [];
+      let result: ThumbnailPrompt | null = null;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -117,28 +117,28 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           try {
-            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string; prompts?: ThumbnailPrompt[] };
+            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string; result?: ThumbnailPrompt };
             if ((ev.type === "agent_start" || ev.type === "agent_message") && ev.message) {
               setPixelMsg(ev.message);
             } else if (ev.type === "agent_done") {
               if (ev.message) setPixelMsg(ev.message);
-              if (ev.prompts) prompts = ev.prompts;
+              if (ev.result) result = ev.result;
             }
           } catch { /* ignore */ }
         }
       }
-      setThumbnailPrompts(prompts);
+      setThumbnailPrompt(result);
       setShowThumbnail(true);
-      onUpdate({ ...report, thumbnailPrompts: prompts });
+      onUpdate({ ...report, thumbnailPrompts: result });
       setTimeout(() => setPixelToastVisible(false), 2500);
     } catch {
-      setThumbnailPrompts([]);
+      setThumbnailPrompt(null);
       setPixelToastVisible(false);
     } finally {
       if (talkIntervalRef.current) clearInterval(talkIntervalRef.current);
       setThumbnailLoading(false);
     }
-  }, [thumbnailLoading, thumbnailPrompts, report, onUpdate]);
+  }, [thumbnailLoading, thumbnailPrompt, report, onUpdate]);
 
   const handleTranslate = useCallback(async () => {
     if (translating) {
@@ -517,11 +517,11 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
           </div>
         ) : showVersions && versions.length > 0 ? (
           <VersionView versions={versions} selectedVersion={selectedVersion} onSelectVersion={setSelectedVersion} />
-        ) : showThumbnail && thumbnailPrompts ? (
-          <ThumbnailView prompts={thumbnailPrompts} copiedIdx={copiedPromptIdx} onCopy={(i, text) => {
+        ) : showThumbnail && thumbnailPrompt ? (
+          <ThumbnailView data={thumbnailPrompt} copied={copiedPrompt} onCopy={(text) => {
             void navigator.clipboard.writeText(text).then(() => {
-              setCopiedPromptIdx(i);
-              setTimeout(() => setCopiedPromptIdx(null), 2000);
+              setCopiedPrompt(true);
+              setTimeout(() => setCopiedPrompt(false), 2000);
             });
           }} />
         ) : (
@@ -645,58 +645,39 @@ function VersionView({ versions, selectedVersion, onSelectVersion }: {
   );
 }
 
-const STYLE_COLORS: Record<string, { bg: string; border: string; color: string }> = {
-  minimal:   { bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.2)", color: "#94a3b8" },
-  tech:      { bg: "rgba(56,189,248,0.08)",  border: "rgba(56,189,248,0.2)",  color: "#38bdf8" },
-  editorial: { bg: "rgba(167,139,250,0.08)", border: "rgba(167,139,250,0.2)", color: "#a78bfa" },
-  dark:      { bg: "rgba(30,41,59,0.6)",     border: "rgba(71,85,105,0.4)",   color: "#64748b" },
-  bright:    { bg: "rgba(251,146,60,0.08)",  border: "rgba(251,146,60,0.2)",  color: "#fb923c" },
-};
 
-function ThumbnailView({ prompts, copiedIdx, onCopy }: {
-  prompts: ThumbnailPrompt[];
-  copiedIdx: number | null;
-  onCopy: (i: number, text: string) => void;
+function ThumbnailView({ data, copied, onCopy }: {
+  data: ThumbnailPrompt;
+  copied: boolean;
+  onCopy: (text: string) => void;
 }) {
-  if (prompts.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-[11px] text-slate-600">
-        프롬프트 생성에 실패했습니다. 다시 시도해주세요.
-      </div>
-    );
-  }
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 scrollbar-hide flex flex-col gap-4">
       <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
         <ImagePlus size={11} className="text-orange-400" />
         <span className="text-[10px] text-orange-400 font-medium">Gemini Imagen 썸네일 프롬프트 (16:9)</span>
-        <span className="text-[9px] text-slate-600 ml-auto">복사해서 Google AI Studio에 붙여넣기</span>
+        <span className="text-[9px] text-slate-600 ml-auto">Google AI Studio에 붙여넣기</span>
       </div>
-      {prompts.map((p, i) => {
-        const c = STYLE_COLORS[p.style] ?? STYLE_COLORS.minimal;
-        const isCopied = copiedIdx === i;
-        return (
-          <div key={i} className="rounded-xl p-4 flex flex-col gap-3" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold tracking-wide uppercase" style={{ color: c.color }}>{p.label ?? p.style}</span>
-              <button onClick={() => onCopy(i, p.prompt)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] transition-all"
-                style={isCopied
-                  ? { background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }
-                  : { color: "#64748b", border: "1px solid rgba(255,255,255,0.06)" }}>
-                {isCopied ? <Check size={9} /> : <Copy size={9} />}
-                <span>{isCopied ? "복사됨!" : "복사"}</span>
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed font-mono">{p.prompt}</p>
-            {p.negative && (
-              <p className="text-[10px] text-slate-600 leading-relaxed">
-                <span className="text-slate-700 mr-1">negative:</span>{p.negative}
-              </p>
-            )}
-          </div>
-        );
-      })}
+      <div className="rounded-xl p-5 flex flex-col gap-4"
+        style={{ background: "rgba(251,146,60,0.06)", border: "1px solid rgba(251,146,60,0.2)" }}>
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] text-orange-400/60 tracking-widest uppercase font-bold">Prompt</span>
+          <button onClick={() => onCopy(data.prompt)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] transition-all"
+            style={copied
+              ? { background: "rgba(74,222,128,0.1)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }
+              : { color: "#64748b", border: "1px solid rgba(255,255,255,0.06)" }}>
+            {copied ? <Check size={9} /> : <Copy size={9} />}
+            <span>{copied ? "복사됨!" : "복사"}</span>
+          </button>
+        </div>
+        <p className="text-[12px] text-slate-200 leading-relaxed">{data.prompt}</p>
+        {data.negative && (
+          <p className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
+            <span className="text-slate-600 mr-1.5">negative prompt:</span>{data.negative}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
