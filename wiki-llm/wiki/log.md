@@ -4,6 +4,12 @@
 
 ---
 
+## [2026-05-21] ingest | AI 에이전트와 업무 변화 블로그 리포트
+
+- sources/Report_AI_에이전트와_업무_변화_블로그_글_작성_...범용_독자_대상_.md 생성
+- concepts/ai-agents-workplace-transformation.md 보강 (frontmatter 추가, 핵심 수치 표 추가, 소스 링크 연결)
+- index.md — Machine Learning/AI 섹션 + Research Reports 섹션 링크 추가
+
 ## [2026-05-20] ingest | test_debug
 
 - sources/test_debug.md 생성 (테스트 문서, 내용 없음)

@@ -6,6 +6,11 @@ Create Date: 2026-05-20
 """
 from alembic import op
 
+revision = "010"
+down_revision = "009"
+branch_labels = None
+depends_on = None
+
 
 def upgrade() -> None:
     op.execute("""

@@ -355,7 +355,9 @@ class _Pipeline:
         wiki_raw, pocke_raw = await asyncio.gather(_wiki(), _pocke())
         stop_pocke()
 
+        self.send({"type": "agent_expression", "agentId": "wiki", "expression": "happy"})
         self.emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
+        self.send({"type": "agent_expression", "agentId": "pocke", "expression": "happy"})
         self.emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
         return wiki_raw or default_wiki, pocke_raw or default_pocke
 
@@ -417,9 +419,11 @@ class _Pipeline:
                 if raw.strip():
                     ka_raw = raw
                 await asyncio.sleep(1.2)
+                self.send({"type": "agent_expression", "agentId": "ka", "expression": "happy"})
                 self.emit("agent_done", agentId="ka", message="찾았다!!! 핵심 인사이트 잡음.")
             except Exception as e:
                 log_error(f"카 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+                self.send({"type": "agent_expression", "agentId": "ka", "expression": "err"})
                 self.emit("agent_done", agentId="ka", message="분석 완료.")
             finally:
                 stop_ka()
@@ -462,7 +466,7 @@ class _Pipeline:
             start_msg = msgs["start1"] if attempt == 1 else msgs["start2"]
             self.emit("agent_start", agentId=writer_agent_id, message=start_msg)
             if attempt == 2:
-                self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": None})
+                self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": "sad"})
 
             stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), self.send, interval_sec=11.0)  # noqa: E501
             try:
@@ -492,6 +496,7 @@ class _Pipeline:
                           if attempt == 1 else ("구현 완료." if is_dev_task else "최종본 완성."))
             except Exception as e:
                 log_error(f"라이터 에이전트({writer_agent_id}) 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+                self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": "err"})
                 draft = f"# {self.topic}\n\n{ka.conclusion}\n\n" + "\n".join(live_pocke.key_facts)
                 self.emit("agent_done", agentId=writer_agent_id, message="초안 완성. 팩트 부장님께.")
             finally:
@@ -516,7 +521,7 @@ class _Pipeline:
                 await asyncio.sleep(0.8)
             # attempt 2: 팩트 없음, 라이터 최종본으로 루프 종료
 
-        self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": None})
+        self.send({"type": "agent_expression", "agentId": writer_agent_id, "expression": "happy"})
 
         final_lines = [ln.strip() for ln in draft.splitlines() if ln.strip()][:8]
         await self.maybe_checkin("fact", "검토까지 완료됐어요. 최종 결과물 확인해주세요.",
@@ -532,7 +537,7 @@ class _Pipeline:
         self.emit("agent_start", agentId="fact", message="...")
         self.send({"type": "agent_thinking", "agentId": "fact", "chunk": "초안 분석 중..."})
         await asyncio.sleep(1.5)
-        self.send({"type": "agent_expression", "agentId": "fact", "expression": None})
+        self.send({"type": "agent_expression", "agentId": "fact", "expression": "happy"})
         self.emit("agent_done", agentId="fact", message="피드백 전달. 수정 부탁해요.")
         if is_dev_task:
             feedback = "초안을 스스로 검토해. 보안 취약점·로직 오류·미구현 항목을 점검하고 완성도를 높여줘."
@@ -637,11 +642,13 @@ class _Pipeline:
             if ping_data.ideas:
                 self.send({"type": "ping_ideas", "agentId": "ping",
                            "ideas": [i.model_dump() for i in ping_data.ideas]})
+            self.send({"type": "agent_expression", "agentId": "ping", "expression": "happy"})
             self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
             ping_lines = [f"💡 {i.title}: {i.spark}" for i in ping_data.ideas[:5]]
             await self.maybe_checkin("ping", f"아이디어 {len(ping_data.ideas)}개 캡처됐어요.", ping_lines)
         except Exception as e:
             log_error(f"핑 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+            self.send({"type": "agent_expression", "agentId": "ping", "expression": "err"})
             self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
 
         # ── 위키 업데이트 (핑 완료 후) ────────────────────────────────────────

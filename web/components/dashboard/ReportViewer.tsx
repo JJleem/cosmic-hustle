@@ -38,6 +38,9 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const [wikiSaving, setWikiSaving] = useState(false);
   const [wikiSaved, setWikiSaved] = useState(false);
   const [wikiMsg, setWikiMsg] = useState("");
+  const [wikiToastVisible, setWikiToastVisible] = useState(false);
+  const [wikiTalkFrame, setWikiTalkFrame] = useState(0);
+  const wikiTalkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [tags, setTags] = useState<string[]>(report.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [versions, setVersions] = useState<ReportVersion[]>([]);
@@ -256,43 +259,31 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
   const saveToWiki = async () => {
     if (wikiSaving) return;
     setWikiSaving(true);
-    setWikiMsg("위키 대리에게 전달 중...");
+    setWikiToastVisible(true);
+    setWikiMsg("관련 자료 조용히 꺼내보는 중...");
+    setWikiTalkFrame(0);
+    wikiTalkIntervalRef.current = setInterval(() => {
+      setWikiTalkFrame((f) => (f + 1) % 3);
+    }, 300);
     try {
       const agent = AGENT_MAP[report.agentId];
       const filename = `Report_${report.topic.replace(/[^a-zA-Z0-9가-힣]/g, "_")}`;
       const content = `# ${report.topic}\n\n> 작성: ${agent?.name ?? report.agentId} · ${new Date(report.createdAt).toLocaleDateString("ko-KR")}\n\n---\n\n${report.content}`;
+      setWikiMsg("분류하고 벡터 저장 중...");
       const res = await fetch("/api/wiki/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, filename }),
       });
-      if (!res.ok || !res.body) throw new Error("ingest 실패");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let saved = false;
-      let serverError: string | null = null;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (value) buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n"); buf = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const ev = JSON.parse(line.slice(6)) as { type: string; message?: string };
-            if (ev.type === "agent_message" && ev.message) setWikiMsg(ev.message);
-            else if (ev.type === "agent_done") saved = true;
-            else if (ev.type === "complete") saved = true;
-            else if (ev.type === "error") serverError = ev.message ?? "ingest 실패";
-          } catch { /* ignore */ }
-        }
-        if (done) break;
-      }
-      if (serverError) throw new Error(serverError);
-      if (saved) { setWikiSaved(true); setWikiMsg("위키에 저장됐어요!"); }
+      if (!res.ok) throw new Error("ingest 실패");
+      setWikiSaved(true);
+      setWikiMsg("기록 완료. 다음 리서치에 연결할게요.");
+      setTimeout(() => setWikiToastVisible(false), 2500);
     } catch {
-      setWikiMsg("저장 실패. 다시 시도해줘요.");
+      setWikiMsg("출처 확인 필요해요. 저장 실패.");
+      setTimeout(() => setWikiToastVisible(false), 2000);
     } finally {
+      if (wikiTalkIntervalRef.current) clearInterval(wikiTalkIntervalRef.current);
       setWikiSaving(false);
     }
   };
@@ -307,6 +298,10 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
       {/* 픽셀 토스트 */}
       {pixelToastVisible && (
         <PixelToast message={pixelMsg} frame={talkFrame} done={!thumbnailLoading} />
+      )}
+      {/* 위키 토스트 */}
+      {wikiToastVisible && (
+        <WikiToast message={wikiMsg} frame={wikiTalkFrame} done={wikiSaved} error={!wikiSaving && !wikiSaved} />
       )}
       <div
         className="relative w-[92vw] max-w-6xl h-[90vh] rounded-2xl border border-slate-600 bg-[#0c1220] shadow-2xl flex flex-col overflow-hidden animate-fadeIn"
@@ -574,13 +569,6 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-[10px] text-slate-600">{report.content.length.toLocaleString()}자</span>
-              {wikiMsg && (
-                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: wikiSaved ? "#a78bfa" : "#64748b" }}>
-                  {wikiSaving && <Loader2 size={9} className="animate-spin" />}
-                  {wikiSaved && <Check size={9} />}
-                  {wikiMsg}
-                </span>
-              )}
             </div>
             <button onClick={onClose} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
               닫기 (Esc)
@@ -706,19 +694,39 @@ function PixelToast({ message, frame, done }: { message: string; frame: number; 
       className="fixed bottom-8 right-8 z-[60] flex items-end gap-3 animate-fadeIn pointer-events-none"
       style={{ filter: "drop-shadow(0 8px 32px rgba(0,0,0,0.7))" }}
     >
-      {/* 말풍선 */}
       <div className="relative max-w-[220px] rounded-2xl rounded-br-sm px-4 py-3 text-[11px] text-slate-200 leading-relaxed"
         style={{ background: "#111827", border: "1px solid rgba(253,186,116,0.25)" }}>
         <span className="text-orange-300 font-semibold text-[9px] block mb-1 tracking-wide">PIXEL</span>
         {message}
-        {/* 말풍선 꼬리 */}
         <span className="absolute -bottom-[6px] right-3 w-3 h-3 block"
           style={{ background: "#111827", clipPath: "polygon(0 0, 100% 0, 100% 100%)", borderRight: "1px solid rgba(253,186,116,0.25)", borderBottom: "1px solid rgba(253,186,116,0.25)" }} />
       </div>
-      {/* 픽셀 아바타 */}
       <div className="w-14 h-14 rounded-full overflow-hidden shrink-0"
         style={{ outline: "2px solid rgba(253,186,116,0.4)", outlineOffset: 2 }}>
         <Image src={finalSrc} alt="pixel" width={56} height={56} className="w-full h-full object-cover" unoptimized />
+      </div>
+    </div>
+  );
+}
+
+function WikiToast({ message, frame, done, error }: { message: string; frame: number; done: boolean; error: boolean }) {
+  const talkSrc = `/characters/wiki/talk_${frame}.png`;
+  const finalSrc = done ? "/characters/wiki/happy.png" : error ? "/characters/wiki/err.png" : talkSrc;
+  return (
+    <div
+      className="fixed bottom-8 right-8 z-[60] flex items-end gap-3 animate-fadeIn pointer-events-none"
+      style={{ filter: "drop-shadow(0 8px 32px rgba(0,0,0,0.7))" }}
+    >
+      <div className="relative max-w-[220px] rounded-2xl rounded-br-sm px-4 py-3 text-[11px] text-slate-200 leading-relaxed"
+        style={{ background: "#111827", border: "1px solid rgba(196,181,253,0.25)" }}>
+        <span className="font-semibold text-[9px] block mb-1 tracking-wide" style={{ color: "#c4b5fd" }}>WIKI</span>
+        {message}
+        <span className="absolute -bottom-[6px] right-3 w-3 h-3 block"
+          style={{ background: "#111827", clipPath: "polygon(0 0, 100% 0, 100% 100%)", borderRight: "1px solid rgba(196,181,253,0.25)", borderBottom: "1px solid rgba(196,181,253,0.25)" }} />
+      </div>
+      <div className="w-14 h-14 rounded-full overflow-hidden shrink-0"
+        style={{ outline: "2px solid rgba(196,181,253,0.4)", outlineOffset: 2 }}>
+        <Image src={finalSrc} alt="wiki" width={56} height={56} className="w-full h-full object-cover" unoptimized />
       </div>
     </div>
   );

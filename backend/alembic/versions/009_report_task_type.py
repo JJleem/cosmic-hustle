@@ -8,6 +8,11 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
+revision = "009"
+down_revision = "008"
+branch_labels = None
+depends_on = None
+
 
 def upgrade() -> None:
     bind = op.get_bind()

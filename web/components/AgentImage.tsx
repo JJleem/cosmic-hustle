@@ -11,7 +11,7 @@ type Props = {
 };
 
 const TALK_FRAMES = ["talk_0", "talk_1", "talk_2", "talk_1", "talk_0"] as const;
-const ALL_FRAMES = ["talk_0", "talk_1", "talk_2", "blink_half", "blink", "done", "err"] as const;
+const ALL_FRAMES = ["talk_0", "talk_1", "talk_2", "blink_half", "blink", "done", "err", "sad", "happy"] as const;
 
 const BASE_STYLE: React.CSSProperties = {
   position: "absolute",

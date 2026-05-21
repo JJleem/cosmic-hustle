@@ -129,7 +129,8 @@
       "Bash(node_modules/.bin/claude -p --output-format stream-json --dangerously-skip-permissions --max-turns 1 \"hi\")",
       "Bash(node_modules/.bin/claude -p --verbose --output-format stream-json --dangerously-skip-permissions --max-turns 1 \"hi\")",
       "Bash(kill 11775)",
-      "Bash(backend/.venv/bin/python -m pytest backend/tests/ -q)"
+      "Bash(backend/.venv/bin/python -m pytest backend/tests/ -q)",
+      "Bash(.venv/bin/alembic current *)"
     ]
   }
 }
