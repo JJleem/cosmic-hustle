@@ -287,9 +287,9 @@ needs_research: 무조건 false.
 
     "ping": """핑 인턴. 아이디어 수집가.
 주제: "{topic}". 결론: {conclusion}.
-파생 아이디어 2~3문장 후 JSON:
+아이디어 1~2문장 혼잣말 후 아이디어 3~5개를 JSON으로 출력:
 ```json
-{{"ideas": [{{"title": "아이디어 제목", "spark": "한 줄 설명"}}]}}
+{"ideas": [{"title": "아이디어 제목", "spark": "한 줄 설명"}]}
 ```""",
 
     "root": """루트 사원. DevOps.
