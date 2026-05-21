@@ -28,12 +28,11 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
         }}
       >
         <div className="flex items-end justify-center gap-3">
-          {AGENTS.map((agent) => {
+          {AGENTS.filter((agent) => (agentStatus[agent.id] ?? "idle") !== "disabled").map((agent) => {
             const status = agentStatus[agent.id] ?? "idle";
             const isActive = status === "active";
             const isDone = status === "done";
             const isWaiting = status === "waiting";
-            const isDisabled = status === "disabled";
             const isSpeaking = speaking[agent.id];
             const msg = lastMessage[agent.id];
             const dept = DEPT_MAP[agent.departmentId];
@@ -92,10 +91,9 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                         ? `1px solid ${agent.color}35`
                         : `1px solid rgba(255,255,255,0.07)`,
                       outlineOffset: 2,
-                      opacity: isDisabled ? 0 : isWaiting ? 0.25 : 1,
-                      transition: isDisabled ? "none" : "all 0.3s",
+                      opacity: isWaiting ? 0.25 : 1,
+                      transition: "all 0.3s",
                       filter: "none",
-                      pointerEvents: isDisabled ? "none" : undefined,
                       boxShadow: isActive
                         ? `0 0 0 1px ${agent.color}20, inset 0 1px 0 rgba(255,255,255,0.08)`
                         : isDone
@@ -116,8 +114,8 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                 <p
                   className="text-[9px] font-semibold tracking-wide"
                   style={{
-                    color: isDisabled ? "transparent" : isActive ? agent.color : "rgba(148,163,184,0.7)",
-                    transition: isDisabled ? "none" : "color 0.3s",
+                    color: isActive ? agent.color : "rgba(148,163,184,0.7)",
+                    transition: "color 0.3s",
                   }}
                 >
                   {agent.name}
@@ -128,8 +126,8 @@ export default function BottomAgentBar({ agentStatus, agentExpression, speaking,
                   <div
                     className="w-1 h-1 rounded-full"
                     style={{
-                      background: isDisabled ? "transparent" : isActive ? dept.color : `${dept.color}30`,
-                      transition: isDisabled ? "none" : "background 0.3s",
+                      background: isActive ? dept.color : `${dept.color}30`,
+                      transition: "background 0.3s",
                     }}
                   />
                 )}
