@@ -336,9 +336,12 @@ class _Pipeline:
                     build_prompt("wiki", topic=self.topic, past_context=past_ctx),
                     no_tools=True, max_turns=1, agent_id="wiki",
                 )
+                self.send({"type": "agent_expression", "agentId": "wiki", "expression": "happy"})
+                self.emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
                 return raw
             except Exception as e:
                 log_error(f"위키 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+                self.emit("agent_done", agentId="wiki", message="위키 조회 완료.")
                 return ""
 
         async def _pocke():
@@ -347,18 +350,16 @@ class _Pipeline:
                     build_prompt(config["pocke"], topic=self.topic, context=self.topic, keywords=self.topic),
                     tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=300,
                 )
+                self.send({"type": "agent_expression", "agentId": "pocke", "expression": "happy"})
+                self.emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
                 return raw
             except Exception as e:
                 log_error(f"포케 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+                self.emit("agent_done", agentId="pocke", message="수집 완료.")
                 return ""
 
         wiki_raw, pocke_raw = await asyncio.gather(_wiki(), _pocke())
         stop_pocke()
-
-        self.send({"type": "agent_expression", "agentId": "wiki", "expression": "happy"})
-        self.emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
-        self.send({"type": "agent_expression", "agentId": "pocke", "expression": "happy"})
-        self.emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
         return wiki_raw or default_wiki, pocke_raw or default_pocke
 
     async def _pocke_retry(self) -> PockeResult:
