@@ -207,10 +207,11 @@ function SalaryTab({ agentColor }: { agentColor: string }) {
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
   const [loading, setLoading] = useState(false);
 
-  const fetchFromApi = useCallback(async (sid: string) => {
+  const fetchFromApi = useCallback(async (sid?: string | null) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/sessions/${sid}/token-usage`);
+      const url = sid ? `/api/sessions/${sid}/token-usage` : `/api/sessions/latest/token-usage`;
+      const res = await fetch(url);
       if (res.ok) {
         const data: TokenUsageSummary = await res.json();
         if (data.agents.length > 0) setLastTokenUsage(data);
@@ -219,9 +220,9 @@ function SalaryTab({ agentColor }: { agentColor: string }) {
     finally { setLoading(false); }
   }, [setLastTokenUsage]);
 
-  // lastTokenUsage 없고 sessionId 있으면 자동 조회
+  // lastTokenUsage 없으면 sessionId 기반 or 최근 세션 fallback 조회
   useEffect(() => {
-    if (!lastTokenUsage && currentSessionId) {
+    if (!lastTokenUsage) {
       void fetchFromApi(currentSessionId);
     }
   }, [lastTokenUsage, currentSessionId, fetchFromApi]);
@@ -251,15 +252,13 @@ function SalaryTab({ agentColor }: { agentColor: string }) {
         <p className="text-[9px] text-slate-600 tracking-widest uppercase font-bold">이번 달 월급 명세서</p>
         <div className="flex items-center gap-2">
           <span className="text-[9px] text-slate-700">hover → 토큰 내역</span>
-          {currentSessionId && (
-            <button
-              onClick={() => void fetchFromApi(currentSessionId)}
-              disabled={loading}
-              className="text-slate-700 hover:text-slate-500 transition-colors"
-            >
-              <RefreshCw size={9} className={loading ? "animate-spin" : ""} />
-            </button>
-          )}
+          <button
+            onClick={() => void fetchFromApi(currentSessionId)}
+            disabled={loading}
+            className="text-slate-700 hover:text-slate-500 transition-colors"
+          >
+            <RefreshCw size={9} className={loading ? "animate-spin" : ""} />
+          </button>
         </div>
       </div>
 

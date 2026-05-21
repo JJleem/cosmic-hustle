@@ -202,8 +202,8 @@ class _Pipeline:
                 model=usage.get("model", ""),
             ))
             db.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            log_error(f"token_usage 저장 실패 [{agent_id}]: {e}", source="pipeline", session_id=self.session_id, exc=e)
         finally:
             db.close()
 
