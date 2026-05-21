@@ -319,6 +319,10 @@ class _Pipeline:
         self.send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
 
         stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], self.send, interval_sec=9.0)
+        # tech/dev 계열만 WebFetch 허용 — 나머지는 스니펫으로 충분
+        _DEEP_TASKS = {"tech", "dev", "dev_plan", "dev_spec"}
+        self._pocke_tools = ["WebSearch", "WebFetch"] if self.task_type in _DEEP_TASKS else ["WebSearch"]
+        pocke_tools = self._pocke_tools
 
         async def _wiki():
             try:
@@ -348,7 +352,7 @@ class _Pipeline:
             try:
                 raw, _ = await self.run_a(
                     build_prompt(config["pocke"], topic=self.topic, context=self.topic, keywords=self.topic),
-                    tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=300,
+                    tools=pocke_tools, max_turns=5, agent_id="pocke", timeout=300,
                 )
                 self.send({"type": "agent_expression", "agentId": "pocke", "expression": "happy"})
                 self.emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
@@ -371,7 +375,7 @@ class _Pipeline:
         try:
             retry_raw, _ = await self.run_a(
                 build_prompt("pocke_retry", topic=self.topic),
-                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=240,
+                tools=getattr(self, "_pocke_tools", ["WebSearch", "WebFetch"]), max_turns=5, agent_id="pocke", timeout=240,
             )
             retry = _parse_typed(retry_raw, PockeResult, PockeResult())
             if retry.key_facts:
@@ -559,7 +563,7 @@ class _Pipeline:
             recheck_raw, _ = await self.run_a(
                 build_prompt("pocke_recheck", topic=self.topic,
                              research_queries="\n".join(research_queries)),
-                tools=["WebSearch", "WebFetch"], max_turns=5, agent_id="pocke", timeout=240,
+                tools=getattr(self, "_pocke_tools", ["WebSearch", "WebFetch"]), max_turns=5, agent_id="pocke", timeout=240,
             )
             recheck = _parse_typed(recheck_raw, PockeResult, PockeResult())
             live_pocke.key_facts = list(dict.fromkeys(recheck.key_facts + live_pocke.key_facts))[:10]
