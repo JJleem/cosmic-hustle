@@ -24,6 +24,7 @@ class Report(Base):
     content = Column(Text, nullable=False)
     tags = Column(Text, nullable=True)  # JSON array string
     thumbnail_prompts = Column(Text, nullable=True)  # JSON array string
+    task_type = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

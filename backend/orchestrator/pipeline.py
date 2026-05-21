@@ -768,7 +768,7 @@ class _Pipeline:
         # ── 최종 리포트 ───────────────────────────────────────────────────
         report_id = str(uuid.uuid4())
         self.emit("report", reportId=report_id, agentId=writer_agent_id,
-                  topic=self.topic, content=draft)
+                  topic=self.topic, content=draft, taskType=resolved_task_type)
 
         def _save_versions():
             db = SessionLocal()

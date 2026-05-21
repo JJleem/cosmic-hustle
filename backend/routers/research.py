@@ -39,6 +39,7 @@ def _sse_generator(session_id: str, topic: str, db, pipeline_kwargs: dict):
                             agent_id=event.get("agentId", ""),
                             topic=topic,
                             content=event.get("content", ""),
+                            task_type=event.get("taskType"),
                         ))
                         db.commit()
                     except Exception:
@@ -113,6 +114,7 @@ async def start_research(body: ResearchRequest, db: Session = Depends(get_db), m
                             agent_id=event.get("agentId", ""),
                             topic=topic,
                             content=event.get("content", ""),
+                            task_type=event.get("taskType"),
                         ))
                         db.commit()
                     except Exception:
@@ -328,6 +330,7 @@ def _serialize_report(r: models.Report) -> dict:
         "content": r.content,
         "tags": json.loads(str(r.tags)) if r.tags else [],
         "thumbnailPrompts": json.loads(str(r.thumbnail_prompts)) if r.thumbnail_prompts else None,
+        "taskType": r.task_type,
         "createdAt": _ts(r.created_at),
     }
 

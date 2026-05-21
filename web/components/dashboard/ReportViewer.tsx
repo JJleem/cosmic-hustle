@@ -9,6 +9,7 @@ import {
   type Report, type ReportVersion, type ThumbnailPrompt,
   extractHtml, stripMarkdown,
   printReport, downloadMarkdown, downloadHtml, downloadTxt, downloadExport,
+  THUMBNAIL_TASK_TYPES,
 } from "@/lib/reportUtils";
 
 type Props = {
@@ -474,14 +475,16 @@ export default function ReportViewer({ report, drafts, onClose, onDelete, onUpda
             </div>
             <div className="w-px h-4 bg-slate-700" />
 
-            {/* 썸네일 프롬프트 */}
-            <button onClick={() => void handleThumbnailPrompt()} disabled={thumbnailLoading}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
-              style={showThumbnail ? { background: "rgba(251,146,60,0.12)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" } : { color: "#94a3b8" }}>
-              {thumbnailLoading ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
-              <span>{thumbnailLoading ? "생성 중..." : "썸네일 프롬프트"}</span>
-            </button>
-            <div className="w-px h-4 bg-slate-700" />
+            {/* 썸네일 프롬프트 — research/blog/tech/marketing 만 표시 */}
+            {THUMBNAIL_TASK_TYPES.has(report.taskType ?? "") && (<>
+              <button onClick={() => void handleThumbnailPrompt()} disabled={thumbnailLoading}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-50"
+                style={showThumbnail ? { background: "rgba(251,146,60,0.12)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" } : { color: "#94a3b8" }}>
+                {thumbnailLoading ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+                <span>{thumbnailLoading ? "생성 중..." : "썸네일 프롬프트"}</span>
+              </button>
+              <div className="w-px h-4 bg-slate-700" />
+            </>)}
 
             {/* 위키에 저장 */}
             <button onClick={() => void saveToWiki()} disabled={wikiSaving || wikiSaved}

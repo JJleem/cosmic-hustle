@@ -6,6 +6,8 @@ export type ThumbnailPrompt = {
   negative: string;
 };
 
+export const THUMBNAIL_TASK_TYPES = new Set(["research", "blog", "tech", "marketing"]);
+
 export type Report = {
   id: string;
   sessionId?: string;
@@ -14,6 +16,7 @@ export type Report = {
   content: string;
   tags?: string[];
   thumbnailPrompts?: ThumbnailPrompt | null;
+  taskType?: string | null;
   createdAt: Date;
 };
 
