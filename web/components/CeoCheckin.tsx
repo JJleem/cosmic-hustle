@@ -83,7 +83,7 @@ export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
       `}</style>
 
       <div
-        className="rounded-2xl flex flex-col gap-4 p-5"
+        className="rounded-2xl flex flex-col gap-4 p-5 max-h-[calc(100vh-5rem)] overflow-y-auto"
         style={{
           background: "#090e1a",
           border: `1px solid ${agent?.color ?? "#334155"}30`,
@@ -153,7 +153,7 @@ export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
               <p className="text-[9px] text-slate-600 tracking-widest uppercase mb-0.5">{contentLabel}</p>
               <p className="text-[11px] text-slate-400 leading-relaxed mb-1">{state.summary}</p>
               {state.keyFacts.length > 0 && (
-                <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-0.5 border-t border-slate-800 pt-2">
+                <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto pr-0.5 border-t border-slate-800 pt-2">
                   {state.keyFacts.map((f, i) => (
                     <div key={i} className="flex gap-2 text-xs text-slate-400 leading-snug">
                       <span className="shrink-0 mt-0.5" style={{ color: agent?.color ?? "#34d399", opacity: 0.6 }}>▸</span>
