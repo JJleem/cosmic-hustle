@@ -4,6 +4,12 @@
 
 ---
 
+## [2026-05-21] ingest | 리액트 서버 컴포넌트 vs 클라이언트 컴포넌트 성능 비교 리포트
+
+- sources/Report_리액트_서버_컴포넌트_vs_클라이언트_컴포넌트_성능_비교_...공통_고려__.md 생성
+- concepts/react-server-components.md 신규 생성 (RSC/CC 구조·성능수치·데이터패칭·설계원칙 전체)
+- index.md — Programming 섹션 + Research Reports 섹션 링크 추가
+
 ## [2026-05-21] ingest | AI 에이전트와 업무 변화 블로그 리포트
 
 - sources/Report_AI_에이전트와_업무_변화_블로그_글_작성_...범용_독자_대상_.md 생성

@@ -242,8 +242,25 @@ function SalaryTab({ agentColor }: { agentColor: string }) {
     );
   }
 
-  const { agents, total } = lastTokenUsage;
-  const sorted = [...agents].sort((a, b) => b.costUsd - a.costUsd);
+  const { total } = lastTokenUsage;
+  // 같은 에이전트가 여러 번 실행될 수 있으므로 agentId별 합산
+  const aggregated = Object.values(
+    lastTokenUsage.agents.reduce<Record<string, AgentTokenUsage>>((acc, row) => {
+      if (acc[row.agentId]) {
+        acc[row.agentId] = {
+          ...acc[row.agentId],
+          inputTokens: acc[row.agentId].inputTokens + row.inputTokens,
+          outputTokens: acc[row.agentId].outputTokens + row.outputTokens,
+          cacheReadTokens: acc[row.agentId].cacheReadTokens + row.cacheReadTokens,
+          costUsd: acc[row.agentId].costUsd + row.costUsd,
+        };
+      } else {
+        acc[row.agentId] = { ...row };
+      }
+      return acc;
+    }, {})
+  );
+  const sorted = aggregated.sort((a, b) => b.costUsd - a.costUsd);
 
   return (
     <div className="h-full overflow-y-auto px-5 py-4 scrollbar-hide space-y-3">
@@ -269,9 +286,19 @@ function SalaryTab({ agentColor }: { agentColor: string }) {
 
       {/* 직원별 월급 */}
       <div className="space-y-1.5">
-        {sorted.map((row) => (
-          <SalaryRow key={row.agentId} row={row} color={agentColor} />
-        ))}
+        {sorted.map((row) => {
+          const isWriter = ["over", "pixel", "buzz", "run"].includes(row.agentId);
+          return (
+            <div key={row.agentId}>
+              <SalaryRow row={row} color={agentColor} />
+              {isWriter && (
+                <p className="text-[8px] text-slate-700 pl-4 mt-0.5 italic">
+                  팩트 부장 검토 비용 포함
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 합계 */}

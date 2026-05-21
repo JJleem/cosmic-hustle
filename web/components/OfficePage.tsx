@@ -32,8 +32,15 @@ export default function OfficePage({
   const feedRef = useRef<HTMLDivElement>(null);
   const isTransitioning = selectedDeptId !== null;
 
-  const activeStageIdx = PIPELINE.findIndex((s) =>
+  const visiblePipeline = PIPELINE.filter((stage) =>
+    stage.ids.some((id) => (agentStatus[id] ?? "idle") !== "disabled")
+  );
+
+  const activeStageIdx = visiblePipeline.findIndex((s) =>
     s.ids.some((id) => agentStatus[id] === "active")
+  );
+  const allDone = visiblePipeline.length > 0 && visiblePipeline.every((s) =>
+    s.ids.every((id) => (agentStatus[id] ?? "idle") === "done" || (agentStatus[id] ?? "idle") === "disabled")
   );
 
   useEffect(() => {
@@ -60,9 +67,12 @@ export default function OfficePage({
           ) : (
             <span className="text-[9px] text-slate-700 tracking-[0.2em] uppercase mr-4 font-bold whitespace-nowrap shrink-0 pl-1">Pipeline</span>
           )}
-          {PIPELINE.map((stage, i) => {
+          {visiblePipeline.length === 0 ? (
+            <span className="text-[9px] text-slate-800 italic pl-1">대기 중</span>
+          ) : null}
+          {visiblePipeline.map((stage, i) => {
             const isActive = i === activeStageIdx;
-            const isDone   = activeStageIdx !== -1 && i < activeStageIdx;
+            const isDone   = allDone || (activeStageIdx !== -1 && i < activeStageIdx);
             const activeId = stage.ids.find(id => agentStatus[id] === "active")
               ?? stage.ids.find(id => agentStatus[id] === "done")
               ?? stage.ids.find(id => agentStatus[id] !== "disabled")

@@ -48,17 +48,6 @@ def get_versions(session_id: str, db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/{session_id}/token-usage")
-def get_token_usage(session_id: str, db: Session = Depends(get_db)):
-    rows = (
-        db.query(TokenUsage)
-        .filter(TokenUsage.session_id == session_id)
-        .order_by(TokenUsage.ts)
-        .all()
-    )
-    return _serialize_token_usage(rows)
-
-
 @router.get("/latest/token-usage")
 def get_latest_token_usage(db: Session = Depends(get_db)):
     """가장 최근 세션(token_usage 존재하는)의 토큰 사용량 반환."""
@@ -71,4 +60,15 @@ def get_latest_token_usage(db: Session = Depends(get_db)):
     if not latest:
         return {"agents": [], "total": {"inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0, "cacheCreationTokens": 0, "costUsd": 0.0}}
     rows = db.query(TokenUsage).filter(TokenUsage.session_id == latest).order_by(TokenUsage.ts).all()
+    return _serialize_token_usage(rows)
+
+
+@router.get("/{session_id}/token-usage")
+def get_token_usage(session_id: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(TokenUsage)
+        .filter(TokenUsage.session_id == session_id)
+        .order_by(TokenUsage.ts)
+        .all()
+    )
     return _serialize_token_usage(rows)

@@ -13,6 +13,7 @@
 ## Programming
 
 - [SSE vs WebSocket 선택 기준](concepts/SSE_vs_WebSocket.md)
+- [React Server Component (RSC) — 렌더링·성능·설계 기준](concepts/react-server-components.md)
 
 ## Mathematics / Statistics
 
@@ -38,6 +39,7 @@ _아직 페이지가 없습니다._
 
 - [펩 과르디올라 일대기 리서치 리포트 (2026-05-20)](sources/Report_펩_과르디올라의_일생_일대기에대해_리서치해줘.md)
 - [AI 에이전트와 업무 변화 — 블로그 리포트 (2026-05-21)](sources/Report_AI_에이전트와_업무_변화_블로그_글_작성__목표__AI_에이전트_도입이_현대_업무_환경을_어떻게_변화시키고_있는지_독자가_공감할_수_있는_블로그_글_작성___범위__2023_2025년_AI_에이전트_확산_시기_기준__지식_노동자_사무직_중심__특정_산업_한정_없이_범용_독자_대상_.md)
+- [리액트 서버 컴포넌트 vs 클라이언트 컴포넌트 성능 비교 리포트 (2026-05-21)](sources/Report_리액트_서버_컴포넌트_vs_클라이언트_컴포넌트_성능_비교__목표__React_Server_Component와_Client_Component의_렌더링_방식_번들_크기_TTI_데이터_패칭_측면에서_성능_차이를_분석하고_사용_기준을_제시한다____범위__Next_js_13__App_Router_기준__2023_2025년_공식_문서_벤치마크_실사례_중심__모바일_데스크탑_공통_고려__.md)
 
 ## Chat Logs
 
