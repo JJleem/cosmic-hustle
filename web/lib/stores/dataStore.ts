@@ -41,6 +41,7 @@ interface DataStore {
   addHistory: (h: ProjectRecord) => void;
   addHandoff: (h: Handoff) => void;
   setPingIdeas: (ideas: Idea[]) => void;
+  addPingIdeas: (ideas: Idea[]) => void;
   addChat: (entry: ChatEntry) => void;
   setReportDraft: (reportId: string, draft: string) => void;
   setLiveDraft: (d: { agentId: string; topic: string; content: string } | null) => void;
@@ -69,6 +70,11 @@ export const useDataStore = create<DataStore>((set) => ({
     st.history.some((x) => x.id === h.id) ? st : { history: [h, ...st.history] }),
   addHandoff: (h) => set((st) => ({ handoffs: [h, ...st.handoffs].slice(0, 20) })),
   setPingIdeas: (ideas) => set({ pingIdeas: ideas }),
+  addPingIdeas: (ideas) => set((st) => {
+    const existing = new Set(st.pingIdeas.map((i) => i.title));
+    const deduped = ideas.filter((i) => !existing.has(i.title));
+    return deduped.length > 0 ? { pingIdeas: [...st.pingIdeas, ...deduped] } : st;
+  }),
   addChat: (entry) => set((st) => {
     const next = [...st.chatFeed, entry];
     return { chatFeed: next.length > 60 ? next.slice(-60) : next };
@@ -82,7 +88,7 @@ export const useDataStore = create<DataStore>((set) => ({
   }),
   setLastTokenUsage: (u) => set({ lastTokenUsage: u }),
   reset: () => set({
-    handoffs: [], pingIdeas: [], chatFeed: [],
+    handoffs: [], chatFeed: [],
     reportDrafts: {}, liveDraft: null, draftVersions: [],
   }),
 }));

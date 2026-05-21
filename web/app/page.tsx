@@ -217,7 +217,7 @@ export default function Home() {
           break;
         }
         case "ping_ideas":
-          data.setPingIdeas((event.ideas as Idea[]) ?? []);
+          data.addPingIdeas((event.ideas as Idea[]) ?? []);
           break;
         case "clarify_request":
           session.setCeoCheckin({ type: "clarify_request", sessionId: event.sessionId as string, agentId: "plan", questions: event.questions as string[] });
@@ -393,7 +393,7 @@ export default function Home() {
           newReports.push({ id: e.reportId as string, agentId: e.agentId as string, topic: (e.topic as string) ?? resumeTopic, content: e.content as string, createdAt: new Date() });
           break;
         case "ping_ideas":
-          newIdeas.push(...(e.ideas as Idea[]));
+          newIdeas.push(...((e.ideas as Idea[]) ?? []));
           break;
         case "clarify_request":
           lastCheckin = { type: "clarify_request", sessionId, agentId: "plan", questions: e.questions as string[] };
@@ -407,7 +407,7 @@ export default function Home() {
     agent.setAllStatus(newStatus);
     useAgentStore.setState({ streamLog: newStreamLog, lastMessage: newLastMsg });
     newReports.filter((r) => !data.reports.some((p) => p.id === r.id)).forEach((r) => data.addReport(r));
-    data.setPingIdeas(newIdeas);
+    data.addPingIdeas(newIdeas);
     session.setTopic(resumeTopic);
     session.setMode("full");
     session.setPhase(status === "done" ? "done" : "working");
