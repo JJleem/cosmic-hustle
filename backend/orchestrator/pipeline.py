@@ -140,6 +140,7 @@ class _Pipeline:
         self.report_style = report_style or {}
         self.checkpoint = checkpoint or {}
         self._seq = 0
+        self._pocke_skipped = False
         self.checkin_gates: set[str] = {"plan", "root" if task_type == "dev" else "fact"}
 
     # ── 유틸 ──────────────────────────────────────────────────────────────
@@ -256,7 +257,7 @@ class _Pipeline:
         if plan.needs_clarification and plan.clarify_questions and self.mode != "background":
             future: asyncio.Future = asyncio.get_event_loop().create_future()
             pending_responses[self.session_id] = future
-            self.emit("clarify_request", questions=plan.clarify_questions)
+            self.emit("clarify_request", agentId="plan", questions=plan.clarify_questions)
             try:
                 ceo_answer = await asyncio.wait_for(asyncio.shield(future), timeout=600)
                 if ceo_answer and ceo_answer.strip():
@@ -296,7 +297,7 @@ class _Pipeline:
         wiki = _parse_typed(wiki_raw, WikiResult, WikiResult())
         pocke = _parse_typed(pocke_raw, PockeResult, PockeResult())
 
-        if not pocke.key_facts and not self.is_cancelled() and resume_stage not in ("after_research", "after_analysis"):
+        if not pocke.key_facts and not self._pocke_skipped and not self.is_cancelled() and resume_stage not in ("after_research", "after_analysis"):
             pocke = await self._pocke_retry()
             pocke_raw = json.dumps(pocke.model_dump(), ensure_ascii=False)
 
@@ -379,6 +380,7 @@ class _Pipeline:
                 return ""
 
         if pocke_mode == "skip":
+            self._pocke_skipped = True
             wiki_raw = await _wiki()
             return wiki_raw or default_wiki, default_pocke
 
@@ -396,15 +398,13 @@ class _Pipeline:
         titles = ", ".join(f"'{h['title']}'" for h in hits[:3])
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         pending_responses[self.session_id] = future
-        self.send({
-            "type": "clarify_request",
-            "questions": [f"위키에 관련 데이터가 있어요 ({titles}).\n60초 내 답 없으면 1번으로 진행합니다."],
-            "choices": [
-                "1️⃣ 위키 데이터로만 진행 (포케 생략)",
-                "2️⃣ 위키 + 포케 보완 검색 1회",
-                "3️⃣ 완전 새 리서치 (포케 풀 실행)",
-            ],
-        })
+        self.emit("clarify_request", agentId="wiki",
+                  questions=[f"위키에 관련 데이터가 있어요 ({titles}).\n60초 내 답 없으면 1번으로 진행합니다."],
+                  choices=[
+                      "1️⃣ 위키 데이터로만 진행 (포케 생략)",
+                      "2️⃣ 위키 + 포케 보완 검색 1회",
+                      "3️⃣ 완전 새 리서치 (포케 풀 실행)",
+                  ])
         try:
             answer = await asyncio.wait_for(asyncio.shield(future), timeout=60)
             answer = (answer or "").strip()
@@ -451,7 +451,7 @@ class _Pipeline:
             self.send({"type": "agent_message", "agentId": writer_agent_id,
                        "message": WRITER_WAITING.get(writer_agent_id, "분석 기다리는 중...")})
 
-    async def stage_analysis(self, config: dict, pocke: PockeResult) -> tuple[KaResult, str]:
+    async def stage_analysis(self, config: dict, pocke: PockeResult, wiki: WikiResult | None = None) -> tuple[KaResult, str]:
         """카 분석 실행. (KaResult, ka_raw) 반환."""
         resume_stage = self.checkpoint.get("stage")
         ka_fallback = (f'{{"insights": [{{"title": "주요 동향", "description": "{self.topic}의 핵심 흐름"}}],'
@@ -467,9 +467,16 @@ class _Pipeline:
             stop_ka = _start_murmurs("ka", MURMURS["ka"], self.send, interval_sec=10.0)
             ka_raw = ka_fallback
             try:
+                if pocke.key_facts:
+                    facts_str = " / ".join(pocke.key_facts)
+                elif wiki and (wiki.context or wiki.keywords):
+                    parts = ([wiki.context] if wiki.context else []) + wiki.keywords
+                    facts_str = " / ".join(parts[:8])
+                else:
+                    facts_str = self.topic
                 raw, _ = await self.run_a(
                     build_prompt(config["ka"], topic=self.topic,
-                                 facts=" / ".join(pocke.key_facts),
+                                 facts=facts_str,
                                  ceo_notes=self.ceo_notes),
                     no_tools=True, max_turns=1, agent_id="ka",
                 )
@@ -795,7 +802,7 @@ class _Pipeline:
         # ── 3. 카 + writer warmup 병렬 ────────────────────────────────────
         # writer_warmup: 5초 후 writer에게 "대기 중" 메시지 발송 (카 분석 중 overlap)
         warmup_task = asyncio.create_task(self._writer_warmup(writer_agent_id))
-        ka, ka_raw = await self.stage_analysis(config, pocke)
+        ka, ka_raw = await self.stage_analysis(config, pocke, wiki)
         warmup_task.cancel()
         try:
             await warmup_task

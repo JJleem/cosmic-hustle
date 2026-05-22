@@ -221,7 +221,7 @@ export default function Home() {
           data.addPingIdeas((event.ideas as Idea[]) ?? []);
           break;
         case "clarify_request":
-          session.setCeoCheckin({ type: "clarify_request", sessionId: event.sessionId as string, agentId: "plan", questions: event.questions as string[] });
+          session.setCeoCheckin({ type: "clarify_request", sessionId: event.sessionId as string, agentId: event.agentId as string || "plan", questions: event.questions as string[], choices: event.choices as string[] | undefined });
           break;
         case "ceo_checkin":
           session.setCeoCheckin({ type: "ceo_checkin", sessionId: event.sessionId as string, agentId: event.agentId as string, summary: event.summary as string, keyFacts: event.keyFacts as string[] });
@@ -397,7 +397,7 @@ export default function Home() {
           newIdeas.push(...((e.ideas as Idea[]) ?? []));
           break;
         case "clarify_request":
-          lastCheckin = { type: "clarify_request", sessionId, agentId: "plan", questions: e.questions as string[] };
+          lastCheckin = { type: "clarify_request", sessionId, agentId: e.agentId as string || "plan", questions: e.questions as string[], choices: e.choices as string[] | undefined };
           break;
         case "ceo_checkin":
           lastCheckin = { type: "ceo_checkin", sessionId, agentId: e.agentId as string, summary: e.summary as string, keyFacts: e.keyFacts as string[] };
