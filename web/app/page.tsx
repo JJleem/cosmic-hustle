@@ -156,6 +156,7 @@ export default function Home() {
           agent.setStatus(id, "active");
           agent.clearStream(id);
           agent.clearThinkingHint(id);
+          agent.setExpression(id, null);
           speak(id, event.message as string);
           data.addChat({ id: uid(), agentId: id, text: `[시작] ${event.message as string}`, at: new Date() });
           agentStartTs.current[id] = (event.ts as number | undefined) ?? Date.now();

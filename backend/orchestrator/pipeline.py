@@ -325,7 +325,7 @@ class _Pipeline:
         except Exception:
             past_entries = []
 
-        hits = [e for e in past_entries if e.get("dist", 1.0) < 0.3]
+        hits = [e for e in past_entries if e.get("dist", 1.0) < 0.5]
         pocke_mode = await self._ask_wiki_pocke_mode(hits) if hits and not self.is_cancelled() else "full"
 
         past_ctx = (
