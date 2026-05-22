@@ -64,7 +64,7 @@ JSON으로:
 
     "wiki_update": """위키 대리. 사서.
 주제: "{topic}". 결론: {conclusion}. 인사이트: {insights}.
-wiki/concepts/ 에 kebab-case 마크다운 저장 또는 업데이트. wiki/index.md 한 줄 추가.
+반드시 wiki-llm/wiki/concepts/ 에 kebab-case 마크다운 저장 또는 업데이트. wiki-llm/wiki/index.md 한 줄 추가.
 주제·결론·인사이트 포함. 500자 이내. 완료 후 파일명만 출력.""",
 
     "pocke": """포케 대리. 리서처.
