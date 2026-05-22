@@ -313,28 +313,29 @@ class _Pipeline:
         return wiki_raw, pocke_raw, wiki, pocke
 
     async def _run_wiki_pocke_parallel(self, config, semantic_task, default_wiki, default_pocke) -> tuple[str, str]:
-        self.emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
-        self.emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
-        self.send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 시맨틱 서치 중..."})
-        self.send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
-
-        stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], self.send, interval_sec=9.0)
-        # tech/dev 계열만 WebFetch 허용 — 나머지는 스니펫으로 충분
         _DEEP_TASKS = {"tech", "dev", "dev_plan", "dev_spec"}
         self._pocke_tools = ["WebSearch", "WebFetch"] if self.task_type in _DEEP_TASKS else ["WebSearch"]
         pocke_tools = self._pocke_tools
 
+        # semantic_search 결과 먼저 확인 — 히트 여부로 포케 모드 결정
+        self.emit("agent_start", agentId="wiki", message="관련 자료 조용히 꺼내는 중...")
+        self.send({"type": "agent_thinking", "agentId": "wiki", "chunk": "위키 시맨틱 서치 중..."})
+        try:
+            past_entries = await semantic_task
+        except Exception:
+            past_entries = []
+
+        hits = [e for e in past_entries if e.get("dist", 1.0) < 0.3]
+        pocke_mode = await self._ask_wiki_pocke_mode(hits) if hits and not self.is_cancelled() else "full"
+
+        past_ctx = (
+            "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
+                f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
+                for e in past_entries
+            ) if past_entries else "관련 과거 리서치 없음. 일반 지식 활용."
+        )
+
         async def _wiki():
-            try:
-                past_entries = await semantic_task
-                past_ctx = (
-                    "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
-                        f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
-                        for e in past_entries
-                    ) if past_entries else "관련 과거 리서치 없음. 일반 지식 활용."
-                )
-            except Exception:
-                past_ctx = "관련 과거 리서치 없음. 일반 지식 활용."
             try:
                 raw, _ = await self.run_a(
                     build_prompt("wiki", topic=self.topic, past_context=past_ctx),
@@ -348,7 +349,7 @@ class _Pipeline:
                 self.emit("agent_done", agentId="wiki", message="위키 조회 완료.")
                 return ""
 
-        async def _pocke():
+        async def _pocke_full():
             try:
                 raw, _ = await self.run_a(
                     build_prompt(config["pocke"], topic=self.topic, context=self.topic, keywords=self.topic),
@@ -362,9 +363,61 @@ class _Pipeline:
                 self.emit("agent_done", agentId="pocke", message="수집 완료.")
                 return ""
 
-        wiki_raw, pocke_raw = await asyncio.gather(_wiki(), _pocke())
+        async def _pocke_supplement():
+            ctx_summary = "\n".join(f"- {e['title']}: {e['content'][:200]}" for e in past_entries)
+            try:
+                raw, _ = await self.run_a(
+                    build_prompt(config["pocke"], topic=self.topic, context=ctx_summary, keywords=self.topic),
+                    tools=pocke_tools, max_turns=3, agent_id="pocke", timeout=180,
+                )
+                self.send({"type": "agent_expression", "agentId": "pocke", "expression": "happy"})
+                self.emit("agent_done", agentId="pocke", message="보완 검색 완료! 카 과장한테 넘길게요.")
+                return raw
+            except Exception as e:
+                log_error(f"포케 보완 검색 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+                self.emit("agent_done", agentId="pocke", message="수집 완료.")
+                return ""
+
+        if pocke_mode == "skip":
+            wiki_raw = await _wiki()
+            return wiki_raw or default_wiki, default_pocke
+
+        self.emit("agent_start", agentId="pocke", message="볼따구에 정보 쑤셔넣는 중...")
+        self.send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
+        stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], self.send, interval_sec=9.0)
+
+        pocke_fn = _pocke_supplement if pocke_mode == "supplement" else _pocke_full
+        wiki_raw, pocke_raw = await asyncio.gather(_wiki(), pocke_fn())
         stop_pocke()
         return wiki_raw or default_wiki, pocke_raw or default_pocke
+
+    async def _ask_wiki_pocke_mode(self, hits: list[dict]) -> str:
+        """위키 히트 감지 시 CEO에게 3지선다 질문. 60초 무응답 → skip."""
+        titles = ", ".join(f"'{h['title']}'" for h in hits[:3])
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        pending_responses[self.session_id] = future
+        self.send({
+            "type": "clarify_request",
+            "questions": [
+                f"위키에 관련 데이터가 있어요 ({titles}).\n"
+                "1️⃣ 위키 데이터로만 진행 (포케 생략)\n"
+                "2️⃣ 위키 데이터 + 포케 보완 검색 1회\n"
+                "3️⃣ 완전 새 리서치 (포케 풀 실행)\n"
+                "60초 내 답 없으면 1번으로 진행합니다."
+            ],
+        })
+        try:
+            answer = await asyncio.wait_for(asyncio.shield(future), timeout=60)
+            answer = (answer or "").strip()
+            if "3" in answer:
+                return "full"
+            if "2" in answer:
+                return "supplement"
+            return "skip"
+        except asyncio.TimeoutError:
+            return "skip"
+        finally:
+            pending_responses.pop(self.session_id, None)
 
     async def _pocke_retry(self) -> PockeResult:
         self.send({"type": "agent_message", "agentId": "pocke",

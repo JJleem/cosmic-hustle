@@ -9,20 +9,21 @@ WIKI_CONCEPTS_DIR = Path(__file__).parent.parent.parent / "wiki-llm" / "wiki" / 
 
 
 def semantic_search(query: str, top_k: int = 3) -> list[dict]:
-    """Return top_k wiki entries most semantically similar to query."""
+    """Return top_k wiki entries most semantically similar to query, with cosine distance score."""
     db = SessionLocal()
     try:
         q_emb = embed(query)
-        results = (
-            db.query(WikiEntry)
+        dist_col = WikiEntry.embedding.cosine_distance(q_emb).label("dist")
+        rows = (
+            db.query(WikiEntry, dist_col)
             .filter(WikiEntry.embedding.isnot(None))
-            .order_by(WikiEntry.embedding.cosine_distance(q_emb))
+            .order_by(dist_col)
             .limit(top_k)
             .all()
         )
         return [
-            {"filename": r.filename, "title": r.title, "content": r.content}
-            for r in results
+            {"filename": r.filename, "title": r.title, "content": r.content, "dist": float(d)}
+            for r, d in rows
         ]
     finally:
         db.close()
