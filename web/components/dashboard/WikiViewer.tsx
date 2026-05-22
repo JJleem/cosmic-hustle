@@ -149,7 +149,30 @@ export default function WikiViewer() {
             ? <div className="flex items-center justify-center h-full"><div className="w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin" /></div>
             : content === null
             ? <div className="flex items-center justify-center h-full"><p className="text-slate-500 text-xs">파일을 불러올 수 없어요</p></div>
-            : <div className="report-body text-[11px] text-slate-300 leading-relaxed"><ReactMarkdown>{body}</ReactMarkdown></div>
+            : <div className="report-body text-[11px] text-slate-300 leading-relaxed">
+                <ReactMarkdown
+                  components={{
+                    a: ({ href, children }) => {
+                      if (href?.endsWith(".md")) {
+                        const parts = href.replace(/^\.\//, "").split("/");
+                        const [cat, name] = parts.length >= 2 ? [parts[0], parts[1]] : ["root", parts[0]];
+                        return (
+                          <button
+                            onClick={() => void openFile(parts.length >= 2 ? `${cat}/${name}` : name, name, cat)}
+                            className="underline hover:opacity-80 transition-opacity"
+                            style={{ color: "#a78bfa" }}
+                          >
+                            {children}
+                          </button>
+                        );
+                      }
+                      return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#67e8f9" }}>{children}</a>;
+                    },
+                  }}
+                >
+                  {body}
+                </ReactMarkdown>
+              </div>
           }
         </div>
       </div>
