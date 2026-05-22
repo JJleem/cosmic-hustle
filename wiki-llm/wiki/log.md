@@ -4,6 +4,12 @@
 
 ---
 
+## [2026-05-22] ingest | 국내 B2B SaaS 초기 고객 확보 마케팅 전략 리포트
+
+- sources/Report_국내_스타트업_대상_B2B_SaaS_제품의_초기_고객_확보_마케팅_전략_짜줘.md 생성
+- concepts/b2b-saas-초기고객확보-전략.md 신규 생성 (3단계 프레임워크·채널 우선순위·한국 시장 특수성 전체)
+- index.md — Marketing/Business 카테고리 신설, Research Reports 섹션 링크 추가
+
 ## [2026-05-21] ingest | 리액트 서버 컴포넌트 vs 클라이언트 컴포넌트 성능 비교 리포트
 
 - sources/Report_리액트_서버_컴포넌트_vs_클라이언트_컴포넌트_성능_비교_...공통_고려__.md 생성
