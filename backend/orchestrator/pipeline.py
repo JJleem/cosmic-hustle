@@ -326,14 +326,16 @@ class _Pipeline:
         except Exception:
             past_entries = []
 
-        # semantic_search는 이미 top-k 가장 유사한 것만 반환 — 거리 필터 없이 데이터 존재 여부만 확인
-        pocke_mode = await self._ask_wiki_pocke_mode(past_entries) if past_entries and not self.is_cancelled() else "full"
+        # dist 임계값 0.45: 완전 다른 주제의 위키 데이터가 오발동 방지 (cosine distance 낮을수록 유사)
+        _WIKI_HIT_THRESHOLD = 0.45
+        relevant_entries = [e for e in past_entries if e.get("dist", 1.0) < _WIKI_HIT_THRESHOLD]
+        pocke_mode = await self._ask_wiki_pocke_mode(relevant_entries) if relevant_entries and not self.is_cancelled() else "full"
 
         past_ctx = (
             "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
                 f"📄 {e['title']} ({e['filename']}):\n{e['content'][:400]}"
-                for e in past_entries
-            ) if past_entries else "관련 과거 리서치 없음. 일반 지식 활용."
+                for e in relevant_entries
+            ) if relevant_entries else "관련 과거 리서치 없음. 일반 지식 활용."
         )
 
         async def _wiki():
@@ -469,7 +471,8 @@ class _Pipeline:
             try:
                 if pocke.key_facts:
                     facts_str = " / ".join(pocke.key_facts)
-                elif wiki and (wiki.context or wiki.keywords):
+                elif self._pocke_skipped and wiki and (wiki.context or wiki.keywords):
+                    # 포케를 의도적으로 스킵한 경우에만 위키 데이터를 facts로 사용
                     parts = ([wiki.context] if wiki.context else []) + wiki.keywords
                     facts_str = " / ".join(parts[:8])
                 else:
