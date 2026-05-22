@@ -325,8 +325,8 @@ class _Pipeline:
         except Exception:
             past_entries = []
 
-        hits = [e for e in past_entries if e.get("dist", 1.0) < 0.5]
-        pocke_mode = await self._ask_wiki_pocke_mode(hits) if hits and not self.is_cancelled() else "full"
+        # semantic_search는 이미 top-k 가장 유사한 것만 반환 — 거리 필터 없이 데이터 존재 여부만 확인
+        pocke_mode = await self._ask_wiki_pocke_mode(past_entries) if past_entries and not self.is_cancelled() else "full"
 
         past_ctx = (
             "[과거 리서치 관련 자료 - 시맨틱 서치 결과]\n" + "\n\n".join(
