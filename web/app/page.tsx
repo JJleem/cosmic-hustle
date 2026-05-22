@@ -275,6 +275,7 @@ export default function Home() {
   }, [session, data, agent, speak]);
 
   const runResearch = async (config: ProjectConfig) => {
+    reset();
     if (idleTimerRef.current) clearInterval(idleTimerRef.current);
     if (Notification.permission === "default") await Notification.requestPermission();
     session.setShowSetup(false);

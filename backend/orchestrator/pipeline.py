@@ -345,7 +345,8 @@ class _Pipeline:
                     no_tools=True, max_turns=1, agent_id="wiki",
                 )
                 self.send({"type": "agent_expression", "agentId": "wiki", "expression": "happy"})
-                self.emit("agent_done", agentId="wiki", message="이전 리서치 연결됐어요.")
+                wiki_msg = "이전 리서치 연결됐어요." if relevant_entries else "배경 맥락 정리 완료."
+                self.emit("agent_done", agentId="wiki", message=wiki_msg)
                 return raw
             except Exception as e:
                 log_error(f"위키 에이전트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
@@ -538,18 +539,19 @@ class _Pipeline:
             stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), self.send, interval_sec=11.0)  # noqa: E501
             try:
                 feedback_parts = []
-                if style_note:
-                    feedback_parts.append(style_note)
                 if fact_feedback:
-                    feedback_parts.append(f"피드백: {fact_feedback}")
+                    feedback_parts.append(f"팩트 피드백: {fact_feedback}")
                 if not live_pocke.key_facts:
                     feedback_parts.append("웹 리서치 데이터 없음. 위키 맥락과 일반 지식 기반으로 작성.")
+                writer_prompt = build_prompt(writer_key,
+                                             topic=self.topic, insights=insights_str,
+                                             conclusion=ka.conclusion,
+                                             facts="; ".join(live_pocke.key_facts[:6]),
+                                             feedback="\n".join(feedback_parts) + "\n" if feedback_parts else "")
+                if style_note:
+                    writer_prompt += f"\n\n【출력 형식 최우선 지침 — 다른 모든 분량·문체 지시보다 이것을 따를 것】\n{style_note}"
                 writer_raw, _ = await self.run_a(
-                    build_prompt(writer_key,
-                                 topic=self.topic, insights=insights_str,
-                                 conclusion=ka.conclusion,
-                                 facts="; ".join(live_pocke.key_facts[:6]),
-                                 feedback="\n".join(feedback_parts) + "\n" if feedback_parts else ""),
+                    writer_prompt,
                     no_tools=True, max_turns=2, agent_id=writer_agent_id,
                 )
                 if writer_raw.strip():
