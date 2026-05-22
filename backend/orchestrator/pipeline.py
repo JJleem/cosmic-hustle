@@ -227,7 +227,7 @@ class _Pipeline:
     async def stage_plan(self) -> tuple[PlanResult, asyncio.Future]:
         """플랜 실행. (PlanResult, semantic_task) 반환."""
         self.emit("session_start", topic=self.topic)
-        semantic_task = asyncio.get_event_loop().run_in_executor(None, semantic_search, self.topic, 3)
+        semantic_task = asyncio.get_event_loop().run_in_executor(None, semantic_search, self.topic, 5)
 
         self.emit("agent_start", agentId="plan", message="요구사항 파악 중. 티켓 열게요.")
         self.send({"type": "agent_thinking", "agentId": "plan", "chunk": "태스크 타입 분류 중..."})
@@ -398,12 +398,11 @@ class _Pipeline:
         pending_responses[self.session_id] = future
         self.send({
             "type": "clarify_request",
-            "questions": [
-                f"위키에 관련 데이터가 있어요 ({titles}).\n"
-                "1️⃣ 위키 데이터로만 진행 (포케 생략)\n"
-                "2️⃣ 위키 데이터 + 포케 보완 검색 1회\n"
-                "3️⃣ 완전 새 리서치 (포케 풀 실행)\n"
-                "60초 내 답 없으면 1번으로 진행합니다."
+            "questions": [f"위키에 관련 데이터가 있어요 ({titles}).\n60초 내 답 없으면 1번으로 진행합니다."],
+            "choices": [
+                "1️⃣ 위키 데이터로만 진행 (포케 생략)",
+                "2️⃣ 위키 + 포케 보완 검색 1회",
+                "3️⃣ 완전 새 리서치 (포케 풀 실행)",
             ],
         })
         try:

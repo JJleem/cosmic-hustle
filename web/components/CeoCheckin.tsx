@@ -9,6 +9,7 @@ type ClarifyRequest = {
   sessionId: string;
   agentId: string;
   questions: string[];
+  choices?: string[];
 };
 
 type CeoCheckin = {
@@ -166,6 +167,26 @@ export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
           </>
         )}
 
+        {/* choices 모드: 버튼 3개 */}
+        {!submitted && state.type === "clarify_request" && state.choices && (
+          <div className="flex flex-col gap-2">
+            {state.choices.map((label, i) => (
+              <button
+                key={i}
+                onClick={() => submit(String(i + 1))}
+                className="w-full text-left text-xs px-4 py-2.5 rounded-xl font-medium transition-all hover:opacity-90"
+                style={{
+                  background: i === 0 ? `${agent?.color ?? "#3b82f6"}18` : i === 1 ? "#0f1928" : "#0c1118",
+                  border: `1px solid ${i === 0 ? (agent?.color ?? "#3b82f6") + "50" : "#1e3050"}`,
+                  color: i === 0 ? (agent?.color ?? "#93c5fd") : "#94a3b8",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* 제출 완료 상태 */}
         {submitted ? (
           <div
@@ -177,7 +198,7 @@ export default function CeoCheckin({ state, onRespond, onCancel }: Props) {
               {answer.trim() ? "지시사항 반영해서 계속할게요." : "네, 이 방향으로 계속할게요."}
             </p>
           </div>
-        ) : (
+        ) : state.type === "clarify_request" && state.choices ? null : (
           <>
             {/* CEO 지시사항 입력 */}
             <div className="flex flex-col gap-1.5">
