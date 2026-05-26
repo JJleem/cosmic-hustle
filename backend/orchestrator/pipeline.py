@@ -15,7 +15,8 @@ AGENT_MODEL: dict[str, str] = {
     "ping":  "claude-haiku-4-5-20251001",
     "root":  "claude-haiku-4-5-20251001",
     "plan":  "claude-haiku-4-5-20251001",
-    # 나머지(pocke·ka·over·pixel·buzz·run)는 Sonnet 기본값
+    "pocke": "claude-haiku-4-5-20251001",
+    # 나머지(ka·over·pixel·buzz·run)는 Sonnet 기본값
 }
 from .types import PlanResult, WikiResult, PockeResult, KaResult, FactResult, PingResult
 from db.wiki_store import semantic_search, sync_concepts_dir
