@@ -393,8 +393,13 @@ class _Pipeline:
         self.send({"type": "agent_thinking", "agentId": "pocke", "chunk": "검색 쿼리 구성 중..."})
         stop_pocke = _start_murmurs("pocke", MURMURS["pocke"], self.send, interval_sec=9.0)
 
+        # design_ui는 위키 컨텍스트 불필요 — HTML 생성에 과거 리서치 무의미
         pocke_fn = _pocke_supplement if pocke_mode == "supplement" else _pocke_full
-        wiki_raw, pocke_raw = await asyncio.gather(_wiki(), pocke_fn())
+        if self.task_type == "design_ui":
+            self.emit("agent_done", agentId="wiki", message="디자인 태스크 — 위키 스킵.")
+            wiki_raw, pocke_raw = default_wiki, await pocke_fn()
+        else:
+            wiki_raw, pocke_raw = await asyncio.gather(_wiki(), pocke_fn())
         stop_pocke()
         return wiki_raw or default_wiki, pocke_raw or default_pocke
 
@@ -737,20 +742,24 @@ class _Pipeline:
             self.send({"type": "agent_expression", "agentId": "ping", "expression": "err"})
             self.emit("agent_done", agentId="ping", message="아이디어 캡처 완료!")
 
-        # ── 위키 업데이트 (핑 완료 후) ────────────────────────────────────────
-        self.emit("agent_start", agentId="wiki", message="리서치 기록 업데이트 중...")
-        try:
-            await self.run_a(
-                build_prompt("wiki_update", topic=self.topic,
-                             conclusion=ka.conclusion[:200],
-                             insights=insights_str),
-                tools=["Read", "Write", "Edit"], max_turns=2, agent_id="wiki", timeout=120,
-            )
-            synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
-            self.emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
-        except Exception as e:
-            log_error(f"위키 업데이트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
-            self.emit("agent_done", agentId="wiki", message="기록 완료.")
+        # ── 위키 업데이트 (핑 완료 후, design_ui 제외) ───────────────────────
+        if self.task_type == "design_ui":
+            self.emit("agent_start", agentId="wiki", message="HTML 결과물 — 위키 저장 스킵.")
+            self.emit("agent_done", agentId="wiki", message="스킵.")
+        else:
+            self.emit("agent_start", agentId="wiki", message="리서치 기록 업데이트 중...")
+            try:
+                await self.run_a(
+                    build_prompt("wiki_update", topic=self.topic,
+                                 conclusion=ka.conclusion[:200],
+                                 insights=insights_str),
+                    tools=["Read", "Write", "Edit"], max_turns=2, agent_id="wiki", timeout=120,
+                )
+                synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
+                self.emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
+            except Exception as e:
+                log_error(f"위키 업데이트 실패: {e}", source="agent", session_id=self.session_id, exc=e)
+                self.emit("agent_done", agentId="wiki", message="기록 완료.")
 
         token_usage = await asyncio.get_event_loop().run_in_executor(None, self._get_token_usage_summary)
         self.emit("complete", reportId=report_id, topic=self.topic, tokenUsage=token_usage)

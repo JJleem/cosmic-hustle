@@ -135,7 +135,7 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 
 ---
 
-## 현재 상태 (2026-05-18)
+## 현재 상태 (2026-05-26)
 
 ### 완료된 기능
 
@@ -194,6 +194,17 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 - **사원증 UI** — TeamRoster.tsx, `/public/id/*.png` 11개 활용
   - 호버 시 scale + glow 효과 (에이전트별 컬러)
   - 활성/비활성/완료 상태 뱃지 표시
+- **토큰 최적화 (2026-05-26)**
+  - plan·pocke → Haiku 전환, wiki dir 범위 축소, key_facts 7개 슬라이싱
+  - 프로젝트당 ~30% → ~17% 절감
+- **design_ui 전용 파이프라인 개선 (2026-05-26)**
+  - pre-flight 질문: 컬러계열·레이아웃·primary color 텍스트 입력
+  - 위키 읽기·업데이트 스킵
+  - ka_design_ui 전용 프롬프트 (레이아웃·컬러 관점)
+  - pixel 라이터 타임아웃 300초
+- **design_ux 전용 ka_design_ux 프롬프트** — 사용자 관점 분석
+- **전 태스크 타임아웃 교정** — over계열 180초, root/wiki_update 명시적 120초
+- **파이프라인 완료 후 에이전트 상태 복구** — 3초 후 idle 리셋
 
 ### 파이프라인 핵심 동작 (현재)
 
@@ -204,6 +215,21 @@ writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 �
 - 팩트는 절대 passed:false 반환 안 함 (프롬프트 강제)
 - 라이터는 항상 정확히 2번 실행 (1회 초안 → 1회 수정본)
 - 포케 max_turns=8 (ToolSearch 1 + WebSearch 최대 6 + JSON 출력 1)
+
+### 에이전트 모델 배정 (2026-05-26 기준)
+
+| 에이전트 | 모델 | 이유 |
+|---------|------|------|
+| wiki, fact, ping, root, plan, pocke | Haiku | 단순 포맷팅·검색·분류 |
+| ka, over, pixel, buzz, run | Sonnet | 분석·창작·복잡한 추론 |
+
+### 토큰 최적화 내역 (2026-05-26)
+
+- wiki dir을 wiki 에이전트에만 전달 (기존: 전체 에이전트)
+- key_facts 최대 7개 슬라이싱 (카·라이터 input 절감)
+- plan, pocke → Haiku 전환
+- design_ui: 위키 읽기·업데이트 스킵 (HTML 생성에 과거 리서치 무의미)
+- 프로젝트당 토큰 사용량: ~30% → ~17%
 
 ### 남은 로드맵
 
@@ -222,6 +248,7 @@ writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 �
 [ ] AWS Lightsail 배포
 [ ] Phase 5: LangGraph + Anthropic API 전환
 [ ] 3D 회의실 UI
+[ ] Gemini Imagen 썸네일 자동 생성 — pixel_thumbnail 프롬프트 이미 존재, Google AI Studio 무료 티어 활용 예정
 ```
 
 ---
