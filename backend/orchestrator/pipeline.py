@@ -471,7 +471,7 @@ class _Pipeline:
             ka_raw = ka_fallback
             try:
                 if pocke.key_facts:
-                    facts_str = " / ".join(pocke.key_facts)
+                    facts_str = " / ".join(pocke.key_facts[:7])
                 elif self._pocke_skipped and wiki and (wiki.context or wiki.keywords):
                     # 포케를 의도적으로 스킵한 경우에만 위키 데이터를 facts로 사용
                     parts = ([wiki.context] if wiki.context else []) + wiki.keywords
@@ -518,7 +518,7 @@ class _Pipeline:
         draft = ""
         fact_feedback = ""
         draft_versions: list[tuple[int, str, str]] = []
-        live_pocke = PockeResult(sources=list(pocke.sources), key_facts=list(pocke.key_facts))
+        live_pocke = PockeResult(sources=list(pocke.sources), key_facts=list(pocke.key_facts[:7]))
         msgs = WRITER_MESSAGES.get(writer_agent_id, WRITER_MESSAGES["over"])
 
         self.send({"type": "agent_message", "agentId": writer_agent_id,
