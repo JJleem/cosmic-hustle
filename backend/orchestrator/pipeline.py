@@ -170,7 +170,7 @@ class _Pipeline:
         try:
             result, stream, usage = await run_agent(
                 prompt, allowed_tools=tools, no_tools=no_tools,
-                add_dirs=[WIKI_DIR], max_turns=max_turns,
+                add_dirs=[WIKI_DIR] if agent_id == "wiki" else [], max_turns=max_turns,
                 cwd=agent_dir,
                 on_stream=_on_stream if agent_id else None,
                 should_stop=self.is_paused,
