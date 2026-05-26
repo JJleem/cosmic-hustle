@@ -85,7 +85,7 @@ function HRPanel({ agentSettings }: { agentSettings: AllAgentSettings }) {
 
 // ── 위키 워크스페이스 ─────────────────────────────────
 type WikiTab = "knowledge" | "ingest" | "chat" | "hr";
-const WIKI_TABS: Array<{ id: WikiTab; label: string; icon: React.ElementType }> = [
+const WIKI_TABS: Array<{ id: WikiTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "knowledge", label: "지식베이스", icon: BookOpen },
   { id: "ingest",    label: "인제스트",   icon: FileInput },
   { id: "chat",      label: "채팅",       icon: MessageCircle },

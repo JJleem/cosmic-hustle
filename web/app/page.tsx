@@ -239,6 +239,7 @@ export default function Home() {
           if (Notification.permission === "granted") {
             new Notification("🪐 Cosmic Hustle", { body: `"${inputTopic}" 리서치가 완료됐어요.`, icon: "/favicon.ico" });
           }
+          setTimeout(() => agent.reset(), 3000);
           break;
         }
         case "error": {

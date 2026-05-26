@@ -8,7 +8,7 @@ import Image from "next/image";
 type Verdict = "true" | "false" | "partial" | "pending";
 type Check = { id: string; claim: string; verdict: Verdict; reason: string; loading?: boolean };
 
-const VERDICT_STYLE: Record<Verdict, { label: string; color: string; bg: string; icon: React.ElementType }> = {
+const VERDICT_STYLE: Record<Verdict, { label: string; color: string; bg: string; icon: React.ComponentType<{ size?: number }> }> = {
   true:    { label: "사실",    color: "#34d399", bg: "rgba(52,211,153,0.08)",  icon: CheckSquare },
   false:   { label: "거짓",    color: "#f87171", bg: "rgba(248,113,113,0.08)", icon: AlertCircle },
   partial: { label: "부분적", color: "#fbbf24", bg: "rgba(251,191,36,0.08)",  icon: Minus },
