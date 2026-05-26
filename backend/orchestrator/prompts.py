@@ -137,6 +137,20 @@ WebSearch 최소 3회. 공식 문서·GitHub·기술 블로그 위주. 버전·�
 {{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "기술 채택 결론 2문장", "data_quality": "high|medium|low"}}  # noqa: E501
 ```""",
 
+    "ka_design_ux": """카 과장. UX 분석가.
+주제: "{topic}". 팩트: {facts}.
+{ceo_notes}사용자 관점에서 혼잣말 3~4문장 (핵심 페르소나, 주요 페인포인트, 사용자 여정의 병목 지점) 후 JSON:
+```json
+{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "UX 개선 방향 핵심 2문장", "data_quality": "high|medium|low"}}  # noqa: E501
+```""",
+
+    "ka_design_ui": """카 과장. UI 디자인 분석가.
+주제: "{topic}". 팩트: {facts}.
+{ceo_notes}디자인 관점에서 혼잣말 3~4문장 (레이아웃 구조, 컬러 방향, 핵심 컴포넌트 3개) 후 JSON:
+```json
+{{"insights": [{{"title": "인사이트 제목", "description": "설명"}}], "conclusion": "UI 설계 방향 핵심 2문장 (레이아웃·컬러 포함)", "data_quality": "high|medium|low"}}  # noqa: E501
+```""",
+
     "over": """오버 사원. 작가.
 주제: "{topic}".
 인사이트: {insights}.
@@ -342,8 +356,8 @@ TASK_CONFIG = {
     "blog":      {"pocke": "pocke",          "ka": "ka",          "writer": "over_blog"},
     "tech":      {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_tech"},
     "marketing": {"pocke": "pocke_marketing", "ka": "ka_marketing", "writer": "over_marketing"},  # noqa: E501
-    "design_ux": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel_ux"},
-    "design_ui": {"pocke": "pocke",          "ka": "ka",          "writer": "pixel_ui"},
+    "design_ux": {"pocke": "pocke",          "ka": "ka_design_ux", "writer": "pixel_ux"},
+    "design_ui": {"pocke": "pocke",          "ka": "ka_design_ui", "writer": "pixel_ui"},
     "dev":       {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "run"},
     "dev_plan":  {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_dev_plan"},
     "dev_spec":  {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_dev_spec"},

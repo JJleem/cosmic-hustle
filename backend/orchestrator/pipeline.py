@@ -561,7 +561,12 @@ class _Pipeline:
                                              feedback="\n".join(feedback_parts) + "\n" if feedback_parts else "")
                 if style_note and writer_agent_id != "pixel":
                     writer_prompt += f"\n\n【출력 형식 최우선 지침 — 다른 모든 분량·문체 지시보다 이것을 따를 것】\n{style_note}"
-                writer_timeout = 240 if writer_agent_id == "pixel" else 120
+                _WRITER_TIMEOUTS = {
+                    "pixel": 300,
+                    "over": 180, "over_neutral": 180, "over_blog": 180,
+                    "over_dev_plan": 180, "over_dev_spec": 180,
+                }
+                writer_timeout = _WRITER_TIMEOUTS.get(writer_agent_id, 120)
                 writer_raw, _ = await self.run_a(
                     writer_prompt,
                     no_tools=True, max_turns=2, agent_id=writer_agent_id, timeout=writer_timeout,
@@ -661,7 +666,7 @@ class _Pipeline:
         try:
             root_raw, _ = await self.run_a(
                 build_prompt("root", topic=self.topic, report=draft[:600]),
-                no_tools=True, max_turns=1, agent_id="root",
+                no_tools=True, max_turns=1, agent_id="root", timeout=120,
             )
             if root_raw.strip():
                 draft += f"\n\n---\n\n{root_raw}"
@@ -739,7 +744,7 @@ class _Pipeline:
                 build_prompt("wiki_update", topic=self.topic,
                              conclusion=ka.conclusion[:200],
                              insights=insights_str),
-                tools=["Read", "Write", "Edit"], max_turns=2, agent_id="wiki",
+                tools=["Read", "Write", "Edit"], max_turns=2, agent_id="wiki", timeout=120,
             )
             synced = await asyncio.get_event_loop().run_in_executor(None, sync_concepts_dir)
             self.emit("agent_done", agentId="wiki", message=f"위키 업데이트 완료. {synced}개 페이지 벡터 저장됨.")
