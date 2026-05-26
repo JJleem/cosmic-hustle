@@ -514,9 +514,16 @@ class _Pipeline:
         """Writer+Fact 루프 (최대 3회). (draft, draft_versions, paused) 반환."""
         is_dev_task = config.get("_is_dev", False)
         insights_str = "; ".join(f"{i.title}: {i.description}" for i in ka.insights)
-        style_note = _STYLE_NOTE.get(
-            (self.report_style.get("length", "standard"), self.report_style.get("tone", "formal")), ""
-        )
+        if writer_agent_id == "pixel":
+            _color_note = {"dark": "배경: 다크모드(#0f1117 계열). 텍스트: 흰색·회색.", "light": "배경: 라이트(흰색·연회색). 텍스트: 어두운 계열.", "colorful": "컬러풀 디자인. 그라디언트·강렬한 포인트 컬러 사용."}.get(self.report_style.get("tone", ""), "")
+            _layout_note = {"landing": "랜딩페이지 구조: 히어로 → 특징 섹션 → CTA.", "dashboard": "대시보드 구조: 사이드바 + 메인 콘텐츠.", "card": "카드 그리드 레이아웃."}.get(self.report_style.get("length", ""), "")
+            _primary = self.report_style.get("primaryColor") or ""
+            _color_line = f"Primary color: {_primary}." if _primary else ""
+            style_note = " ".join(p for p in [_color_note, _layout_note, _color_line] if p)
+        else:
+            style_note = _STYLE_NOTE.get(
+                (self.report_style.get("length", "standard"), self.report_style.get("tone", "formal")), ""
+            )
         draft = ""
         fact_feedback = ""
         draft_versions: list[tuple[int, str, str]] = []
@@ -552,9 +559,10 @@ class _Pipeline:
                                              feedback="\n".join(feedback_parts) + "\n" if feedback_parts else "")
                 if style_note:
                     writer_prompt += f"\n\n【출력 형식 최우선 지침 — 다른 모든 분량·문체 지시보다 이것을 따를 것】\n{style_note}"
+                writer_timeout = 240 if writer_agent_id == "pixel" else 120
                 writer_raw, _ = await self.run_a(
                     writer_prompt,
-                    no_tools=True, max_turns=2, agent_id=writer_agent_id,
+                    no_tools=True, max_turns=2, agent_id=writer_agent_id, timeout=writer_timeout,
                 )
                 if writer_raw.strip():
                     parsed = parse_json(writer_raw, {})

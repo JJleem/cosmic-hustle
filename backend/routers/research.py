@@ -73,9 +73,10 @@ def _sse_generator(session_id: str, topic: str, db, pipeline_kwargs: dict):
 
 
 class ReportStyleModel(BaseModel):
-    length: str = "standard"           # brief | standard | detailed
-    tone: str = "formal"               # formal | casual | analytical
+    length: str = "standard"           # brief | standard | detailed | landing | dashboard | card
+    tone: str = "formal"               # formal | casual | analytical | dark | light | colorful
     writerPersonality: str | None = None  # neutral | expressive | None(auto)
+    primaryColor: str | None = None    # hex 또는 색상명 (pixel_ui 전용)
 
 
 class ResearchRequest(BaseModel):
@@ -128,6 +129,7 @@ async def start_research(body: ResearchRequest, db: Session = Depends(get_db), m
         "length": body.reportStyle.length,
         "tone": body.reportStyle.tone,
         "writerPersonality": body.reportStyle.writerPersonality,
+        "primaryColor": body.reportStyle.primaryColor,
     } if body.reportStyle else None
 
     generator = _sse_generator(session_id, topic, db, {

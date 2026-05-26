@@ -1,7 +1,8 @@
 export type ReportStyle = {
-  length: "brief" | "standard" | "detailed";
-  tone: "formal" | "casual" | "analytical";
+  length: string;
+  tone: string;
   writerPersonality?: "neutral" | "expressive";
+  primaryColor?: string;
 };
 
 export type Handoff = {

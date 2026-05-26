@@ -62,9 +62,12 @@ const PERSONALITY_DEFAULT: Record<string, "neutral" | "expressive"> = {
 };
 
 type Question = {
-  key: "tone" | "length" | "writerPersonality";
+  key: "tone" | "length" | "writerPersonality" | "primaryColor";
   text: string;
-  choices: { label: string; value: string }[];
+  choices?: { label: string; value: string }[];
+  inputType?: "text";
+  inputPlaceholder?: string;
+  optional?: boolean;
 };
 
 const WRITER_QUESTIONS: Record<string, Question[]> = {
@@ -77,8 +80,9 @@ const WRITER_QUESTIONS: Record<string, Question[]> = {
     { key: "length", text: "분량은요?", choices: [{ label: "간결하게", value: "brief" }, { label: "상세하게", value: "standard" }] },
   ],
   pixel: [
-    { key: "tone", text: "어떤 스타일로?", choices: [{ label: "미니멀", value: "formal" }, { label: "풍부하게", value: "casual" }] },
-    { key: "length", text: "상세도는요?", choices: [{ label: "개요", value: "brief" }, { label: "상세히", value: "detailed" }] },
+    { key: "tone", text: "컬러 계열은요?", choices: [{ label: "다크모드", value: "dark" }, { label: "라이트", value: "light" }, { label: "컬러풀", value: "colorful" }] },
+    { key: "length", text: "레이아웃 방향은?", choices: [{ label: "랜딩페이지", value: "landing" }, { label: "대시보드", value: "dashboard" }, { label: "폼·카드형", value: "card" }] },
+    { key: "primaryColor", text: "Primary color 있어요?", inputType: "text", inputPlaceholder: "#6366F1 또는 퍼플 (없으면 건너뛰기)", optional: true },
   ],
   run: [
     { key: "length", text: "얼마나 상세하게?", choices: [{ label: "개요만", value: "brief" }, { label: "상세히", value: "detailed" }] },
@@ -97,6 +101,9 @@ type ChatMsg = {
   text: string;
   choices?: { label: string; value: string; desc?: string }[];
   choiceKey?: string;
+  inputType?: "text";
+  inputPlaceholder?: string;
+  optional?: boolean;
   answered?: boolean;
 };
 
@@ -118,6 +125,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [phase, setPhase] = useState<"input" | "chat" | "ready">("input");
+  const [textInput, setTextInput] = useState("");
 
   const taskTypeRef = useRef("research");
   const modeRef = useRef<ProjectMode>("full");
@@ -140,13 +148,38 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
     text: string,
     choices?: ChatMsg["choices"],
     choiceKey?: string,
+    inputType?: "text",
+    inputPlaceholder?: string,
+    optional?: boolean,
   ) {
     setActiveAgent(agentId);
-    addMsg({ from: agentId, text, choices, choiceKey });
+    addMsg({ from: agentId, text, choices, choiceKey, inputType, inputPlaceholder, optional });
+  }
+
+  function advanceWriterQ(value: string) {
+    const qs = buildWriterQuestions(writerIdRef.current, taskTypeRef.current);
+    const currentQ = qs[writerQIndexRef.current];
+    if (currentQ) styleRef.current = { ...styleRef.current, [currentQ.key]: value };
+    writerQIndexRef.current += 1;
+    if (writerQIndexRef.current < qs.length) {
+      const nextQ = qs[writerQIndexRef.current];
+      setTimeout(() => agentSay(writerIdRef.current, nextQ.text, nextQ.choices, "writer_q", nextQ.inputType, nextQ.inputPlaceholder, nextQ.optional), 400);
+    } else {
+      proceedToMode();
+    }
+  }
+
+  function handleTextSubmit(msg: ChatMsg, value: string) {
+    setMsgs((prev) => prev.map((m) => m.id === msg.id ? { ...m, answered: true } : m));
+    setActiveAgent(null);
+    setTextInput("");
+    addMsg({ from: "ceo", text: value || "건너뛰기" });
+    advanceWriterQ(value);
   }
 
   function buildWriterQuestions(writerId: string, taskTypeId: string): Question[] {
     const base = WRITER_QUESTIONS[writerId] ?? [];
+    if (writerId === "pixel") return base;
     const defaultPersonality = PERSONALITY_DEFAULT[taskTypeId] ?? "neutral";
     const personalityQ: Question = {
       key: "writerPersonality",
@@ -165,7 +198,8 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
     writerQIndexRef.current = 0;
     const qs = buildWriterQuestions(writerId, taskTypeRef.current);
     if (qs.length === 0) { proceedToMode(); return; }
-    setTimeout(() => agentSay(writerId, qs[0].text, qs[0].choices, "writer_q"), 500);
+    const q = qs[0];
+    setTimeout(() => agentSay(writerId, q.text, q.choices, "writer_q", q.inputType, q.inputPlaceholder, q.optional), 500);
   }
 
   function proceedToMode() {
@@ -212,18 +246,7 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
       taskTypeRef.current = choice.value;
       proceedToWriter();
     } else if (msg.choiceKey === "writer_q") {
-      const qs = buildWriterQuestions(writerIdRef.current, taskTypeRef.current);
-      const currentQ = qs[writerQIndexRef.current];
-      if (currentQ) {
-        styleRef.current = { ...styleRef.current, [currentQ.key]: choice.value as never };
-      }
-      writerQIndexRef.current += 1;
-      if (writerQIndexRef.current < qs.length) {
-        const nextQ = qs[writerQIndexRef.current];
-        setTimeout(() => agentSay(writerIdRef.current, nextQ.text, nextQ.choices, "writer_q"), 400);
-      } else {
-        proceedToMode();
-      }
+      advanceWriterQ(choice.value);
     } else if (msg.choiceKey === "mode") {
       modeRef.current = choice.value as ProjectMode;
       setTimeout(() => {
@@ -374,6 +397,32 @@ export default function ProjectSetupModal({ onStart, onClose, defaultSettings, i
                             )}
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {msg.inputType === "text" && !msg.answered && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <input
+                          autoFocus
+                          value={textInput}
+                          onChange={(e) => setTextInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && textInput.trim()) handleTextSubmit(msg, textInput.trim()); }}
+                          placeholder={msg.inputPlaceholder ?? "입력하세요"}
+                          className="flex-1 rounded-xl px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 outline-none"
+                          style={{ background: "#0d1222", border: `1px solid ${agent.color}30`, minWidth: 0 }}
+                        />
+                        <button
+                          onClick={() => { if (textInput.trim()) handleTextSubmit(msg, textInput.trim()); }}
+                          disabled={!textInput.trim()}
+                          className="text-[11px] px-3 py-1.5 rounded-full transition-all"
+                          style={{ background: `${agent.color}20`, color: agent.color, border: `1px solid ${agent.color}40`, opacity: textInput.trim() ? 1 : 0.4 }}
+                        >확인</button>
+                        {msg.optional && (
+                          <button
+                            onClick={() => handleTextSubmit(msg, "")}
+                            className="text-[11px] px-3 py-1.5 rounded-full transition-all text-slate-500 hover:text-slate-400"
+                            style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+                          >건너뛰기</button>
+                        )}
                       </div>
                     )}
                   </div>
