@@ -548,6 +548,8 @@ class _Pipeline:
             stop_writer = _start_murmurs(writer_agent_id, MURMURS.get(writer_agent_id, []), self.send, interval_sec=11.0)  # noqa: E501
             try:
                 feedback_parts = []
+                if writer_agent_id == "pixel" and style_note:
+                    feedback_parts.append(f"디자인 요구사항: {style_note}")
                 if fact_feedback:
                     feedback_parts.append(f"팩트 피드백: {fact_feedback}")
                 if not live_pocke.key_facts:
@@ -557,7 +559,7 @@ class _Pipeline:
                                              conclusion=ka.conclusion,
                                              facts="; ".join(live_pocke.key_facts[:6]),
                                              feedback="\n".join(feedback_parts) + "\n" if feedback_parts else "")
-                if style_note:
+                if style_note and writer_agent_id != "pixel":
                     writer_prompt += f"\n\n【출력 형식 최우선 지침 — 다른 모든 분량·문체 지시보다 이것을 따를 것】\n{style_note}"
                 writer_timeout = 240 if writer_agent_id == "pixel" else 120
                 writer_raw, _ = await self.run_a(
