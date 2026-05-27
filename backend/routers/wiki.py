@@ -130,7 +130,7 @@ def ingest_wiki(body: IngestRequest):
 
 @router.post("/ingest-local")
 def ingest_local(body: IngestLocalRequest):
-    """원본 .md/.txt를 받아 concept + source 마크다운을 반환. DB·파일 저장 없음."""
+    """원본 .md/.txt를 받아 concept + source 마크다운을 반환. concept는 DB에 upsert."""
     slug = _to_kebab(body.filename)
     stem = Path(body.filename).stem
     # 언더스코어·하이픈을 공백으로 변환해 가독성 있는 제목 생성
@@ -142,6 +142,12 @@ def ingest_local(body: IngestLocalRequest):
 
     concept_content = _build_concept_md(title, tags, body.content)
     source_content = _build_source_md(title, tags, body.filename, body.content)
+
+    # concept를 DB에 저장 — 인제스트 완료 즉시 그래프에 노드 반영
+    try:
+        upsert_wiki_entry(concept_filename, title, concept_content)
+    except Exception:
+        pass
 
     return {
         "concept": {"filename": concept_filename, "content": concept_content},

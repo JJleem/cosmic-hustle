@@ -625,7 +625,8 @@ export default function WikiPage() {
     }
     setRunning(false);
     setDone(true);
-    setGraphData(null);
+    setGraphData(null);  // 그래프 재로드
+    setActiveTab("graph");  // 완료 후 그래프 탭으로 이동
   }, [dirHandle, files, running]);
 
   // 연결 노드 클릭 → 해당 노드로 이동 + 줌
