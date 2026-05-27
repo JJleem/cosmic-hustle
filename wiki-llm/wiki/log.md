@@ -4,6 +4,12 @@
 
 ---
 
+## [2026-05-26] ingest | 앤트로픽 2025년 매출과 최근 펀딩 현황 리포트
+
+- sources/Report_앤트로픽_2025년_매출과_최근_펀딩_현황_...펀딩_활동_.md 생성
+- concepts/anthropic-2025-revenue-and-funding.md 보강 (frontmatter 추가, ARR 궤적·엔터프라이즈 구조·펀딩 상세·전략 분석 전체 내용 확장)
+- index.md — Business/Finance 카테고리 신설, Research Reports 섹션 링크 추가
+
 ## [2026-05-22] ingest | 국내 B2B SaaS 초기 고객 확보 마케팅 전략 리포트
 
 - sources/Report_국내_스타트업_대상_B2B_SaaS_제품의_초기_고객_확보_마케팅_전략_짜줘.md 생성

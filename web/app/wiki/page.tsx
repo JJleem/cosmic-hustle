@@ -1,8 +1,59 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import * as d3 from "d3";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library } from "lucide-react";
+import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, Eye, EyeOff } from "lucide-react";
+
+function formatNodeTitle(raw: string): string {
+  return raw.replace(/[-_]+/g, " ").trim();
+}
+
+function stripFrontmatter(content: string): string {
+  if (!content.startsWith("---")) return content;
+  const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  if (!match) return content;
+  return content.slice(match[0].length).trimStart();
+}
+
+function ContentRenderer({ text }: { text: string }) {
+  if (!text.trim()) return <span style={{ color: "#475569", fontSize: "12px" }}>(내용 없음)</span>;
+  return (
+    <div>
+      {text.split("\n").map((line, i) => {
+        if (line.startsWith("# "))
+          return <h1 key={i} style={{ fontSize: "13px", fontWeight: 700, color: "#f1f5f9", margin: "16px 0 6px", lineHeight: 1.4 }}>{line.slice(2)}</h1>;
+        if (line.startsWith("## "))
+          return <h2 key={i} style={{ fontSize: "11.5px", fontWeight: 600, color: "#c4b5fd", margin: "14px 0 4px" }}>{line.slice(3)}</h2>;
+        if (line.startsWith("### "))
+          return <h3 key={i} style={{ fontSize: "11px", fontWeight: 600, color: "#cbd5e1", margin: "10px 0 3px" }}>{line.slice(4)}</h3>;
+        if (line.startsWith("- ") || line.startsWith("* "))
+          return (
+            <div key={i} style={{ display: "flex", gap: "8px", marginBottom: "3px", fontSize: "11px", color: "#94a3b8" }}>
+              <span style={{ color: "#8b5cf6", flexShrink: 0, marginTop: "2px" }}>·</span>
+              <span>{line.slice(2)}</span>
+            </div>
+          );
+        if (line.startsWith("|"))
+          return <div key={i} style={{ fontFamily: "monospace", fontSize: "10px", color: "#64748b", marginBottom: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line}</div>;
+        if (line.trim() === "" || line.trim() === "---")
+          return <div key={i} style={{ height: "8px" }} />;
+        return <p key={i} style={{ fontSize: "11px", color: "#94a3b8", lineHeight: 1.8, marginBottom: "2px" }}>{line}</p>;
+      })}
+    </div>
+  );
+}
+
+const CLUSTER_COLORS = [
+  "#8b5cf6",
+  "#10b981",
+  "#3b82f6",
+  "#f59e0b",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#a855f7",
+];
 
 type FileStatus = "pending" | "processing" | "done" | "error";
 
@@ -17,6 +68,31 @@ interface WikiFile {
 interface IngestResult {
   concept: { filename: string; content: string };
   source: { filename: string; content: string };
+}
+
+interface GraphNode {
+  id: string;
+  type: "concept" | "source";
+  size: number;
+  cluster: number;
+  tags: string[];
+  preview: string;
+  title: string;
+  parentId?: string;
+  x?: number;
+  y?: number;
+  z?: number;
+}
+
+interface GraphLink {
+  source: string;
+  target: string;
+  weight: number;
+}
+
+interface GraphData {
+  nodes: GraphNode[];
+  links: GraphLink[];
 }
 
 async function readAllMdTxt(
@@ -52,6 +128,9 @@ async function writeFile(dir: FileSystemDirectoryHandle, filename: string, conte
 }
 
 export default function WikiPage() {
+  const [activeTab, setActiveTab] = useState<"folder" | "graph">("folder");
+
+  // 폴더 탭
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [files, setFiles] = useState<WikiFile[]>([]);
   const [running, setRunning] = useState(false);
@@ -59,11 +138,356 @@ export default function WikiPage() {
   const [connectError, setConnectError] = useState<string | null>(null);
   const abortRef = useRef(false);
 
+  // 그래프 탭
+  const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSources, setShowSources] = useState(false);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const [graphDims, setGraphDims] = useState({ width: 800, height: 600 });
+  const svgRef = useRef<SVGSVGElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const zoomRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const simulationRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodeSelRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const linkSelRef = useRef<any>(null);
+  const searchQueryRef = useRef("");
+  const showSourcesRef = useRef(false);
+  const sourceIdsRef = useRef(new Set<string>());
+  // 항상 최신 값 동기화
+  searchQueryRef.current = searchQuery;
+  showSourcesRef.current = showSources;
+
+  // 연결된 노드 목록
+  const connectedNodes = useMemo(() => {
+    if (!selectedNode || !graphData) return [];
+    const ids = new Set<string>();
+    graphData.links.forEach((l) => {
+      const s = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const t = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      if (s === selectedNode.id) ids.add(t);
+      if (t === selectedNode.id) ids.add(s);
+    });
+    return graphData.nodes.filter((n) => ids.has(n.id));
+  }, [selectedNode, graphData]);
+
+  const connectedCount = useMemo(() => {
+    if (!selectedNode || !graphData) return 0;
+    return graphData.links.filter((l) => {
+      const src = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const tgt = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      return src === selectedNode.id || tgt === selectedNode.id;
+    }).length;
+  }, [selectedNode, graphData]);
+
+  // 그래프 컨테이너 크기
+  useEffect(() => {
+    if (activeTab !== "graph") return;
+    const el = graphContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      setGraphDims({ width: el.offsetWidth, height: el.offsetHeight });
+    });
+    ro.observe(el);
+    setGraphDims({ width: el.offsetWidth, height: el.offsetHeight });
+    return () => ro.disconnect();
+  }, [activeTab]);
+
+  // 그래프 데이터 fetch
+  useEffect(() => {
+    if (activeTab !== "graph" || graphData !== null) return;
+    setGraphLoading(true);
+    setGraphError(null);
+    fetch("/api/wiki/graph")
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: GraphData) => setGraphData(data))
+      .catch((e) => setGraphError(e.message))
+      .finally(() => setGraphLoading(false));
+  }, [activeTab, graphData]);
+
+  // D3 그래프 렌더링
+  useEffect(() => {
+    if (!graphData || graphData.nodes.length === 0 || !svgRef.current) return;
+
+    type SimNode = GraphNode & d3.SimulationNodeDatum;
+    type SimLink = d3.SimulationLinkDatum<SimNode> & { weight: number };
+
+    const nodes: SimNode[] = graphData.nodes.map((n) => ({ ...n }));
+    const links: SimLink[] = graphData.links.map((l) => ({ ...l }));
+
+    const W = graphDims.width;
+    const H = graphDims.height;
+
+    // 연결 수로 노드 크기 결정
+    const connCount = new Map<string, number>();
+    graphData.links.forEach((l) => {
+      const s = String(l.source), t = String(l.target);
+      connCount.set(s, (connCount.get(s) || 0) + 1);
+      connCount.set(t, (connCount.get(t) || 0) + 1);
+    });
+
+    const getR = (n: SimNode) =>
+      n.type === "source" ? 3 : Math.max(6, 6 + (connCount.get(n.id) || 0) * 1.2);
+    const getColor = (n: SimNode) =>
+      n.type === "source" ? "#1e2a3a" : CLUSTER_COLORS[n.cluster % CLUSTER_COLORS.length];
+
+    // SVG 초기화
+    const svg = d3.select(svgRef.current);
+    svg.selectAll("*").remove();
+    svg.attr("width", W).attr("height", H);
+
+    // Defs: glow 필터
+    const defs = svg.append("defs");
+    CLUSTER_COLORS.forEach((_, i) => {
+      const f = defs.append("filter")
+        .attr("id", `glow-${i}`)
+        .attr("x", "-80%").attr("y", "-80%")
+        .attr("width", "260%").attr("height", "260%");
+      f.append("feGaussianBlur").attr("in", "SourceGraphic").attr("stdDeviation", "6").attr("result", "blur");
+      const m = f.append("feMerge");
+      m.append("feMergeNode").attr("in", "blur");
+      m.append("feMergeNode").attr("in", "SourceGraphic");
+    });
+
+    // Zoom
+    const container = svg.append("g").attr("class", "root");
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.1, 6])
+      .on("zoom", (e) => container.attr("transform", e.transform.toString()));
+    svg.call(zoom).on("dblclick.zoom", null);
+    zoomRef.current = zoom;
+
+    // 배경 클릭 → 선택 해제
+    svg.on("click", () => {
+      setSelectedNode(null);
+      container.selectAll<SVGCircleElement, SimNode>(".sel-ring").attr("stroke-opacity", 0);
+    });
+
+    // 링크
+    const linkG = container.append("g").attr("class", "links");
+    const linkSel = linkG
+      .selectAll<SVGLineElement, SimLink>("line")
+      .data(links)
+      .join("line")
+      .attr("stroke-linecap", "round")
+      .attr("stroke", (d) => d.weight >= 0.75 ? "#a78bfa" : d.weight >= 0.6 ? "#7c3aed" : "#5b21b6")
+      .attr("stroke-width", (d) => d.weight >= 0.75 ? 1.8 : d.weight >= 0.6 ? 1.1 : 0.7)
+      .attr("stroke-opacity", 0.7);
+
+    // 노드
+    const nodeG = container.append("g").attr("class", "nodes");
+    const nodeSel = nodeG
+      .selectAll<SVGGElement, SimNode>("g")
+      .data(nodes)
+      .join("g")
+      .attr("cursor", "pointer");
+
+    // 개념 노드 비주얼
+    nodeSel.filter((d) => d.type === "concept").each(function (d) {
+      const g = d3.select(this);
+      const r = getR(d);
+      const color = getColor(d);
+      const ci = d.cluster % CLUSTER_COLORS.length;
+
+      g.append("circle")
+        .attr("r", r * 2.0)
+        .attr("fill", color)
+        .attr("fill-opacity", 0.09)
+        .attr("pointer-events", "none");
+
+      g.append("circle")
+        .attr("r", r)
+        .attr("fill", color)
+        .attr("fill-opacity", 0.88)
+        .attr("filter", `url(#glow-${ci})`);
+
+      g.append("circle")
+        .attr("class", "sel-ring")
+        .attr("r", r + 6)
+        .attr("fill", "none")
+        .attr("stroke", color)
+        .attr("stroke-width", 1.8)
+        .attr("stroke-opacity", 0)
+        .attr("stroke-dasharray", "5 3")
+        .attr("pointer-events", "none");
+
+      const label = formatNodeTitle(d.title || d.id);
+      const display = label.length > 24 ? label.slice(0, 22) + "…" : label;
+      g.append("text")
+        .attr("dy", r + 16)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "12px")
+        .attr("font-family", "'Helvetica Neue', Arial, sans-serif")
+        .attr("font-weight", "600")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "#07091a")
+        .attr("stroke-width", 3.5)
+        .attr("stroke-linecap", "round")
+        .attr("stroke-linejoin", "round")
+        .attr("fill", "#ffffff")
+        .attr("pointer-events", "none")
+        .text(display);
+    });
+
+    // 소스 노드 (작은 점)
+    nodeSel.filter((d) => d.type === "source").each(function () {
+      d3.select(this).append("circle")
+        .attr("r", 4)
+        .attr("fill", "#334155")
+        .attr("fill-opacity", 0.5);
+    });
+
+    // refs 저장 (시뮬레이션 생성 전)
+    nodeSelRef.current = nodeSel;
+    linkSelRef.current = linkSel;
+
+    // 소스 ID 세트
+    const sourceIds = new Set(graphData.nodes.filter(n => n.type === "source").map(n => n.id));
+    sourceIdsRef.current = sourceIds;
+
+    // 소스 노드/링크 초기 가시성 적용 — 시뮬레이션이 link.source/target을 node ref로 변환하기 전에 실행
+    if (!showSourcesRef.current) {
+      nodeSel.filter((d) => d.type === "source").attr("display", "none");
+      linkSel.attr("display", (d: SimLink) => {
+        // 이 시점엔 아직 string ID
+        const sId = d.source as unknown as string;
+        const tId = d.target as unknown as string;
+        return (sourceIds.has(sId) || sourceIds.has(tId)) ? "none" : null;
+      });
+    }
+
+    // 호버: 연결 하이라이트
+    nodeSel
+      .on("mouseenter", function (_, d) {
+        const connected = new Set([d.id]);
+        links.forEach((l) => {
+          const s = typeof l.source === "object" ? (l.source as SimNode).id : String(l.source);
+          const t = typeof l.target === "object" ? (l.target as SimNode).id : String(l.target);
+          if (s === d.id) connected.add(t);
+          if (t === d.id) connected.add(s);
+        });
+        nodeSel.attr("opacity", (n) => connected.has(n.id) ? 1 : 0.07);
+        linkSel.attr("stroke-opacity", (l) => {
+          const s = typeof l.source === "object" ? (l.source as SimNode).id : String(l.source);
+          const t = typeof l.target === "object" ? (l.target as SimNode).id : String(l.target);
+          return s === d.id || t === d.id ? 1 : 0.03;
+        });
+      })
+      .on("mouseleave", function () {
+        const q = searchQueryRef.current.trim().toLowerCase();
+        if (q) {
+          nodeSel.attr("opacity", (n: SimNode) => {
+            const title = (n.title || n.id).toLowerCase();
+            const tagMatch = (n.tags || []).some((tag: string) => tag.toLowerCase().includes(q));
+            return (title.includes(q) || tagMatch) ? 1 : 0.07;
+          });
+          linkSel.attr("stroke-opacity", 0.05);
+        } else {
+          nodeSel.attr("opacity", 1);
+          linkSel.attr("stroke-opacity", 0.7);
+        }
+      })
+      .on("click", function (event, d) {
+        event.stopPropagation();
+        setSelectedNode(d as GraphNode);
+        container.selectAll<SVGCircleElement, SimNode>(".sel-ring").attr("stroke-opacity", 0);
+        d3.select(this).select(".sel-ring").attr("stroke-opacity", 0.9);
+        // 클릭한 노드로 줌
+        const scale = 2.0;
+        const tx = W / 2 - scale * (d.x ?? 0);
+        const ty = H / 2 - scale * (d.y ?? 0);
+        d3.select(svgRef.current!)
+          .transition().duration(500)
+          .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+      });
+
+    // 드래그
+    nodeSel.call(
+      d3.drag<SVGGElement, SimNode>()
+        .on("start", (event, d) => {
+          if (!event.active) sim.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x; d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if (!event.active) sim.alphaTarget(0);
+          d.fx = null; d.fy = null;
+        })
+    );
+
+    // Force 시뮬레이션 — 생성 시 link.source/target이 node ref로 변환됨
+    const sim = d3.forceSimulation<SimNode>(nodes)
+      .force(
+        "link",
+        d3.forceLink<SimNode, SimLink>(links)
+          .id((d) => d.id)
+          .distance((d) => 100 + (1 - d.weight) * 70)
+          .strength(0.45)
+      )
+      .force("charge", d3.forceManyBody<SimNode>().strength((d) => d.type === "source" ? -60 : -360))
+      .force("center", d3.forceCenter(W / 2, H / 2).strength(0.06))
+      .force("collision", d3.forceCollide<SimNode>().radius((d) => getR(d) + 22).strength(0.9));
+
+    sim.on("tick", () => {
+      linkSel
+        .attr("x1", (d) => (d.source as SimNode).x ?? 0)
+        .attr("y1", (d) => (d.source as SimNode).y ?? 0)
+        .attr("x2", (d) => (d.target as SimNode).x ?? 0)
+        .attr("y2", (d) => (d.target as SimNode).y ?? 0);
+      nodeSel.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+    });
+
+    simulationRef.current = sim;
+    return () => { sim.stop(); };
+  }, [graphData, graphDims]);
+
+  // 소스 노드 토글
+  useEffect(() => {
+    if (!nodeSelRef.current || !linkSelRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    nodeSelRef.current.filter((d: any) => d.type === "source").attr("display", showSources ? null : "none");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    linkSelRef.current.attr("display", (d: any) => {
+      if (showSources) return null;
+      const sType = typeof d.source === "object" ? d.source.type : null;
+      const tType = typeof d.target === "object" ? d.target.type : null;
+      return (sType === "source" || tType === "source") ? "none" : null;
+    });
+  }, [showSources]);
+
+  // 검색 필터
+  useEffect(() => {
+    if (!nodeSelRef.current) return;
+    if (!searchQuery.trim()) {
+      nodeSelRef.current.attr("opacity", 1);
+      linkSelRef.current?.attr("stroke-opacity", 0.7);
+      return;
+    }
+    const q = searchQuery.trim().toLowerCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    nodeSelRef.current.attr("opacity", (d: any) => {
+      const title = (d.title || d.id).toLowerCase();
+      const tagMatch = (d.tags || []).some((tag: string) => tag.toLowerCase().includes(q));
+      return (title.includes(q) || tagMatch) ? 1 : 0.07;
+    });
+    linkSelRef.current?.attr("stroke-opacity", 0.05);
+  }, [searchQuery]);
+
+  // 폴더 탭 핸들러
   const connectFolder = useCallback(async () => {
     setConnectError(null);
     try {
       const handle = await window.showDirectoryPicker({ mode: "readwrite" });
-
       try {
         await ensureDir(handle, "wiki/concepts");
         await ensureDir(handle, "wiki/sources");
@@ -71,7 +495,6 @@ export default function WikiPage() {
         setConnectError(`폴더 생성 실패: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
-
       let found: { handle: FileSystemFileHandle; name: string; path: string }[] = [];
       try {
         found = await readAllMdTxt(handle);
@@ -79,18 +502,12 @@ export default function WikiPage() {
         setConnectError(`파일 읽기 실패: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
-
-      // wiki/ 하위 파일은 제외 (이미 변환된 결과물)
       const filtered = found.filter((f) => !f.path.startsWith("wiki/"));
-
       setDirHandle(handle);
       setFiles(filtered.map((f) => ({ ...f, status: "pending" })));
       setDone(false);
     } catch (e) {
-      // AbortError = 사용자 취소, 그 외는 표시
-      if (e instanceof Error && e.name !== "AbortError") {
-        setConnectError(e.message);
-      }
+      if (e instanceof Error && e.name !== "AbortError") setConnectError(e.message);
     }
   }, []);
 
@@ -98,243 +515,402 @@ export default function WikiPage() {
     if (!dirHandle || running) return;
     setRunning(true);
     abortRef.current = false;
-
     const wikiDir = await dirHandle.getDirectoryHandle("wiki", { create: true });
     const conceptsDir = await wikiDir.getDirectoryHandle("concepts", { create: true });
     const sourcesDir = await wikiDir.getDirectoryHandle("sources", { create: true });
-
     for (let i = 0; i < files.length; i++) {
       if (abortRef.current) break;
-
       setFiles((prev) => prev.map((f, idx) => idx === i ? { ...f, status: "processing" } : f));
-
       try {
         const fileObj = await files[i].handle.getFile();
         const content = await fileObj.text();
-
         const res = await fetch("/api/wiki/ingest-local", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: files[i].name, content }),
         });
-
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: IngestResult = await res.json();
-
-        // concept 파일 저장
         await writeFile(conceptsDir, data.concept.filename, data.concept.content);
-        // source 파일 저장
         await writeFile(sourcesDir, data.source.filename.replace("sources/", ""), data.source.content);
-
         setFiles((prev) => prev.map((f, idx) => idx === i ? { ...f, status: "done" } : f));
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setFiles((prev) => prev.map((f, idx) => idx === i ? { ...f, status: "error", error: msg } : f));
       }
     }
-
     setRunning(false);
     setDone(true);
+    setGraphData(null);
   }, [dirHandle, files, running]);
+
+  // 연결 노드 클릭 → 해당 노드로 이동 + 줌
+  const handleConnectedNodeClick = useCallback((node: GraphNode) => {
+    setSelectedNode(node);
+    if (nodeSelRef.current) {
+      nodeSelRef.current.selectAll(".sel-ring").attr("stroke-opacity", 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      nodeSelRef.current.filter((d: any) => d.id === node.id).select(".sel-ring").attr("stroke-opacity", 0.9);
+    }
+    if (simulationRef.current && svgRef.current && zoomRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const simNode = simulationRef.current.nodes().find((n: any) => n.id === node.id);
+      if (simNode?.x != null) {
+        const { width: W, height: H } = graphDims;
+        const scale = 2.0;
+        const tx = W / 2 - scale * simNode.x;
+        const ty = H / 2 - scale * simNode.y;
+        d3.select(svgRef.current)
+          .transition().duration(600)
+          .call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+      }
+    }
+  }, [graphDims]);
 
   const doneCount = files.filter((f) => f.status === "done").length;
   const errorCount = files.filter((f) => f.status === "error").length;
+  const conceptCount = graphData?.nodes.filter((n) => n.type === "concept").length ?? 0;
+  const linkCount = graphData?.links.length ?? 0;
+
+  const handleFitView = () => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current)
+      .transition().duration(500)
+      .call(zoomRef.current.transform, d3.zoomIdentity);
+  };
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ background: "#07091a", color: "#e2e8f0" }}
-    >
+    <div className="min-h-screen flex flex-col" style={{ background: "#07091a", color: "#e2e8f0" }}>
       {/* 헤더 */}
       <header
-        className="shrink-0 px-6 py-2.5 flex items-center gap-3"
-        style={{
-          borderBottom: "1px solid rgba(99,60,220,0.12)",
-          background: "rgba(5,7,20,0.88)",
-          backdropFilter: "blur(24px)",
-        }}
+        className="shrink-0 px-6 py-2.5 flex items-center gap-4"
+        style={{ borderBottom: "1px solid rgba(99,60,220,0.12)", background: "rgba(5,7,20,0.88)", backdropFilter: "blur(24px)" }}
       >
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-300 transition-colors text-xs"
-        >
+        <Link href="/" className="flex items-center gap-1.5 text-slate-500 hover:text-slate-300 transition-colors text-xs">
           <ArrowLeft size={12} />
           <span>오피스로</span>
         </Link>
-        <div className="flex items-center gap-2 ml-2">
+        <div className="flex items-center gap-2">
           <Library size={14} style={{ color: "#c4b5fd" }} />
-          <span className="text-sm font-semibold tracking-wide" style={{ color: "#c4b5fd" }}>
-            개인 위키
-          </span>
+          <span className="text-sm font-semibold tracking-wide" style={{ color: "#c4b5fd" }}>개인 위키</span>
+        </div>
+        <div className="flex items-center gap-1 ml-4">
+          <TabBtn active={activeTab === "folder"} onClick={() => setActiveTab("folder")} icon={<FolderOpen size={12} />} label="폴더" />
+          <TabBtn active={activeTab === "graph"} onClick={() => setActiveTab("graph")} icon={<Network size={12} />} label="지식 그래프" />
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-start px-6 py-12 max-w-2xl mx-auto w-full">
-        {!dirHandle ? (
-          /* 온보딩 */
-          <div className="flex flex-col items-center gap-6 text-center mt-16">
-            <div
-              className="w-20 h-20 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}
-            >
-              <FolderOpen size={32} style={{ color: "#a78bfa" }} />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold mb-2" style={{ color: "#e2e8f0" }}>
-                로컬 폴더를 연결하세요
-              </h2>
-              <p className="text-sm leading-relaxed" style={{ color: "#64748b" }}>
-                .md · .txt 파일이 있는 폴더를 연결하면
-                <br />
-                <span style={{ color: "#a78bfa" }}>wiki/concepts/</span>와{" "}
-                <span style={{ color: "#a78bfa" }}>wiki/sources/</span>가 자동 생성됩니다.
-              </p>
-            </div>
-            <button
-              onClick={connectFolder}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all"
-              style={{
-                background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)",
-                color: "#c4b5fd",
-                border: "1px solid rgba(139,92,246,0.35)",
-                boxShadow: "0 0 20px rgba(109,40,217,0.2)",
-              }}
-            >
-              <FolderOpen size={14} />
-              폴더 연결
-            </button>
-            {connectError && (
+      {/* 폴더 탭 */}
+      {activeTab === "folder" && (
+        <main className="flex-1 flex flex-col items-center justify-start px-6 py-12 max-w-2xl mx-auto w-full">
+          {!dirHandle ? (
+            <div className="flex flex-col items-center gap-6 text-center mt-16">
               <div
-                className="w-full max-w-sm px-4 py-2.5 rounded-xl text-xs text-center"
-                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}
+                className="w-20 h-20 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}
               >
-                {connectError}
+                <FolderOpen size={32} style={{ color: "#a78bfa" }} />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold mb-2" style={{ color: "#e2e8f0" }}>로컬 폴더를 연결하세요</h2>
+                <p className="text-sm leading-relaxed" style={{ color: "#64748b" }}>
+                  .md · .txt 파일이 있는 폴더를 연결하면
+                  <br />
+                  <span style={{ color: "#a78bfa" }}>wiki/concepts/</span>와{" "}
+                  <span style={{ color: "#a78bfa" }}>wiki/sources/</span>가 자동 생성됩니다.
+                </p>
+              </div>
+              <button
+                onClick={connectFolder}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all"
+                style={{ background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.35)", boxShadow: "0 0 20px rgba(109,40,217,0.2)" }}
+              >
+                <FolderOpen size={14} />
+                폴더 연결
+              </button>
+              {connectError && (
+                <div className="w-full max-w-sm px-4 py-2.5 rounded-xl text-xs text-center" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
+                  {connectError}
+                </div>
+              )}
+              <p className="text-xs" style={{ color: "#334155" }}>파일은 로컬에만 저장됩니다. 서버 DB에 원본을 저장하지 않습니다.</p>
+            </div>
+          ) : (
+            <div className="w-full flex flex-col gap-4">
+              <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.15)" }}>
+                <div className="flex items-center gap-2 text-sm">
+                  <FolderOpen size={14} style={{ color: "#a78bfa" }} />
+                  <span style={{ color: "#a78bfa" }}>{dirHandle.name}</span>
+                  <span style={{ color: "#334155" }}>·</span>
+                  <span style={{ color: "#64748b" }}>{files.length}개 파일</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {done && <span className="text-xs" style={{ color: "#34d399" }}>완료 {doneCount} / 오류 {errorCount}</span>}
+                  <button onClick={connectFolder} className="text-xs px-3 py-1 rounded-full transition-all" style={{ color: "#475569", border: "1px solid rgba(255,255,255,0.07)" }}>폴더 변경</button>
+                </div>
+              </div>
+              {files.length === 0 ? (
+                <div className="text-center py-12 text-sm" style={{ color: "#334155" }}>.md / .txt 파일이 없습니다</div>
+              ) : (
+                <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.05)" }}>
+                  {files.map((f) => (
+                    <div
+                      key={f.path}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                      style={{
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        background: f.status === "processing" ? "rgba(139,92,246,0.05)" : f.status === "done" ? "rgba(52,211,153,0.03)" : f.status === "error" ? "rgba(239,68,68,0.04)" : "transparent",
+                      }}
+                    >
+                      <StatusIcon status={f.status} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate" style={{ color: "#cbd5e1" }}>{f.name}</div>
+                        {f.path !== f.name && <div className="text-[10px] truncate" style={{ color: "#334155" }}>{f.path}</div>}
+                      </div>
+                      {f.status === "error" && f.error && <span className="text-[10px] shrink-0" style={{ color: "#f87171" }}>{f.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!done && files.length > 0 && (
+                <button
+                  onClick={startIngest}
+                  disabled={running}
+                  className="w-full py-3 rounded-xl text-sm font-semibold transition-all"
+                  style={running
+                    ? { background: "rgba(255,255,255,0.03)", color: "#334155", border: "1px solid rgba(255,255,255,0.05)" }
+                    : { background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.35)", boxShadow: "0 0 20px rgba(109,40,217,0.15)" }
+                  }
+                >
+                  {running ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      인제스트 중…
+                    </span>
+                  ) : `위키로 변환 (${files.length}개)`}
+                </button>
+              )}
+              {done && (
+                <div className="text-center py-4 rounded-xl text-sm" style={{ background: "rgba(52,211,153,0.05)", border: "1px solid rgba(52,211,153,0.15)", color: "#34d399" }}>
+                  완료! <span style={{ color: "#64748b" }}>wiki/concepts/ 와 wiki/sources/ 를 확인하세요.</span>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* 그래프 탭 */}
+      {activeTab === "graph" && (
+        <div className="flex-1 flex overflow-hidden">
+          {/* 그래프 캔버스 */}
+          <div ref={graphContainerRef} className="flex-1 relative overflow-hidden">
+            {graphLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 size={28} className="animate-spin" style={{ color: "#a78bfa" }} />
+                  <span className="text-sm" style={{ color: "#475569" }}>그래프 로딩 중…</span>
+                </div>
               </div>
             )}
-            <p className="text-xs" style={{ color: "#334155" }}>
-              파일은 로컬에만 저장됩니다. 서버 DB에 원본을 저장하지 않습니다.
-            </p>
-          </div>
-        ) : (
-          /* 연결된 상태 */
-          <div className="w-full flex flex-col gap-4">
-            {/* 상단 요약 */}
-            <div
-              className="flex items-center justify-between px-4 py-3 rounded-xl"
-              style={{ background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.15)" }}
-            >
-              <div className="flex items-center gap-2 text-sm">
-                <FolderOpen size={14} style={{ color: "#a78bfa" }} />
-                <span style={{ color: "#a78bfa" }}>{dirHandle.name}</span>
-                <span style={{ color: "#334155" }}>·</span>
-                <span style={{ color: "#64748b" }}>{files.length}개 파일</span>
+            {graphError && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="px-6 py-4 rounded-2xl text-sm text-center" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
+                  <p className="font-semibold mb-1">그래프 로드 실패</p>
+                  <p style={{ color: "#94a3b8" }}>{graphError}</p>
+                  <button onClick={() => { setGraphData(null); setGraphError(null); }} className="mt-3 text-xs px-4 py-1.5 rounded-full" style={{ border: "1px solid rgba(239,68,68,0.3)", color: "#f87171" }}>재시도</button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {done && (
-                  <span className="text-xs" style={{ color: "#34d399" }}>
-                    완료 {doneCount} / 오류 {errorCount}
-                  </span>
-                )}
-                <button
-                  onClick={connectFolder}
-                  className="text-xs px-3 py-1 rounded-full transition-all"
-                  style={{ color: "#475569", border: "1px solid rgba(255,255,255,0.07)" }}
-                >
-                  폴더 변경
-                </button>
+            )}
+            {graphData && graphData.nodes.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <Network size={40} style={{ color: "#1e293b" }} />
+                  <p className="text-sm" style={{ color: "#475569" }}>아직 위키에 데이터가 없습니다</p>
+                  <p className="text-xs" style={{ color: "#334155" }}>폴더 탭에서 파일을 인제스트한 후 돌아오세요</p>
+                </div>
               </div>
-            </div>
+            )}
+            {graphData && graphData.nodes.length > 0 && (
+              <>
+                {/* 통계 */}
+                <div className="absolute top-4 left-4 z-10 px-3 py-2 rounded-xl text-xs flex items-center gap-3"
+                  style={{ background: "rgba(5,7,20,0.8)", border: "1px solid rgba(99,60,220,0.18)", backdropFilter: "blur(12px)" }}>
+                  <span style={{ color: "#a78bfa" }}>{conceptCount}개 개념</span>
+                  <span style={{ color: "#334155" }}>·</span>
+                  <span style={{ color: "#475569" }}>{linkCount}개 연결</span>
+                </div>
 
-            {/* 파일 목록 */}
-            {files.length === 0 ? (
-              <div className="text-center py-12 text-sm" style={{ color: "#334155" }}>
-                .md / .txt 파일이 없습니다
-              </div>
-            ) : (
-              <div
-                className="rounded-xl overflow-hidden"
-                style={{ border: "1px solid rgba(255,255,255,0.05)" }}
-              >
-                {files.map((f) => (
-                  <div
-                    key={f.path}
-                    className="flex items-center gap-3 px-4 py-2.5"
-                    style={{
-                      borderBottom: "1px solid rgba(255,255,255,0.04)",
-                      background:
-                        f.status === "processing"
-                          ? "rgba(139,92,246,0.05)"
-                          : f.status === "done"
-                          ? "rgba(52,211,153,0.03)"
-                          : f.status === "error"
-                          ? "rgba(239,68,68,0.04)"
-                          : "transparent",
-                    }}
-                  >
-                    <StatusIcon status={f.status} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate" style={{ color: "#cbd5e1" }}>
-                        {f.name}
-                      </div>
-                      {f.path !== f.name && (
-                        <div className="text-[10px] truncate" style={{ color: "#334155" }}>
-                          {f.path}
-                        </div>
-                      )}
-                    </div>
-                    {f.status === "error" && f.error && (
-                      <span className="text-[10px] shrink-0" style={{ color: "#f87171" }}>
-                        {f.error}
-                      </span>
+                {/* 검색 + 조작 버튼 */}
+                <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                  {/* 검색창 */}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                    style={{ background: "rgba(5,7,20,0.85)", border: "1px solid rgba(99,60,220,0.22)", backdropFilter: "blur(12px)" }}>
+                    <Search size={11} style={{ color: "#475569", flexShrink: 0 }} />
+                    <input
+                      type="text"
+                      placeholder="노드 검색…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-transparent outline-none text-xs w-28"
+                      style={{ color: "#cbd5e1", caretColor: "#a78bfa" }}
+                    />
+                    {searchQuery && (
+                      <button onClick={() => setSearchQuery("")} style={{ color: "#475569", lineHeight: 1 }}>×</button>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
 
-            {/* 실행 버튼 */}
-            {!done && files.length > 0 && (
-              <button
-                onClick={startIngest}
-                disabled={running}
-                className="w-full py-3 rounded-xl text-sm font-semibold transition-all"
-                style={
-                  running
-                    ? { background: "rgba(255,255,255,0.03)", color: "#334155", border: "1px solid rgba(255,255,255,0.05)" }
-                    : {
-                        background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)",
-                        color: "#c4b5fd",
-                        border: "1px solid rgba(139,92,246,0.35)",
-                        boxShadow: "0 0 20px rgba(109,40,217,0.15)",
-                      }
-                }
-              >
-                {running ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 size={14} className="animate-spin" />
-                    인제스트 중…
-                  </span>
-                ) : (
-                  `위키로 변환 (${files.length}개)`
-                )}
-              </button>
-            )}
+                  {/* 소스 토글 */}
+                  <button
+                    onClick={() => setShowSources((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                    style={{
+                      background: "rgba(5,7,20,0.8)",
+                      border: showSources ? "1px solid rgba(99,60,220,0.4)" : "1px solid rgba(99,60,220,0.18)",
+                      backdropFilter: "blur(12px)",
+                      color: showSources ? "#a78bfa" : "#64748b",
+                    }}
+                  >
+                    {showSources ? <Eye size={11} /> : <EyeOff size={11} />}
+                    소스
+                  </button>
 
-            {done && (
-              <div
-                className="text-center py-4 rounded-xl text-sm"
-                style={{
-                  background: "rgba(52,211,153,0.05)",
-                  border: "1px solid rgba(52,211,153,0.15)",
-                  color: "#34d399",
-                }}
-              >
-                완료! <span style={{ color: "#64748b" }}>wiki/concepts/ 와 wiki/sources/ 를 확인하세요.</span>
-              </div>
+                  {/* 전체 보기 */}
+                  <button
+                    onClick={handleFitView}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                    style={{ background: "rgba(5,7,20,0.8)", border: "1px solid rgba(99,60,220,0.18)", backdropFilter: "blur(12px)", color: "#64748b" }}
+                  >
+                    <Maximize2 size={11} />
+                    전체 보기
+                  </button>
+                </div>
+
+                {/* 범례 */}
+                <div className="absolute bottom-4 left-4 z-10 px-3 py-2.5 rounded-xl text-xs flex flex-col gap-2"
+                  style={{ background: "rgba(5,7,20,0.8)", border: "1px solid rgba(99,60,220,0.15)", backdropFilter: "blur(12px)" }}>
+                  <p className="text-[10px] font-semibold mb-0.5" style={{ color: "#334155" }}>클러스터</p>
+                  {Array.from(new Set(graphData.nodes.filter(n => n.type === "concept").map(n => n.cluster))).sort().slice(0, 5).map((c) => (
+                    <div key={c} className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: CLUSTER_COLORS[c % CLUSTER_COLORS.length] }} />
+                      <span style={{ color: "#475569" }}>그룹 {c + 1}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2 mt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "6px" }}>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "#334155" }} />
+                    <span style={{ color: "#334155" }}>소스</span>
+                  </div>
+                </div>
+
+                <svg ref={svgRef} className="absolute inset-0" style={{ cursor: "grab" }} />
+              </>
             )}
           </div>
-        )}
-      </main>
+
+          {/* 사이드 패널 */}
+          {selectedNode && (
+            <div className="w-80 shrink-0 flex flex-col overflow-hidden"
+              style={{ borderLeft: "1px solid rgba(99,60,220,0.15)", background: "rgba(4,6,18,0.97)", backdropFilter: "blur(20px)" }}>
+              {/* 헤더 */}
+              <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3"
+                style={{ borderBottom: "1px solid rgba(99,60,220,0.1)" }}>
+                <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0 mt-[3px]"
+                    style={{
+                      background: selectedNode.type === "source" ? "#475569" : CLUSTER_COLORS[selectedNode.cluster % CLUSTER_COLORS.length],
+                      boxShadow: selectedNode.type !== "source" ? `0 0 8px ${CLUSTER_COLORS[selectedNode.cluster % CLUSTER_COLORS.length]}88` : "none",
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold leading-snug break-words" style={{ color: "#e2e8f0" }}>
+                      {formatNodeTitle(selectedNode.title || selectedNode.id)}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className="text-[10px]" style={{ color: "#475569" }}>
+                        {selectedNode.type === "concept" ? "개념" : "소스"}
+                      </span>
+                      {selectedNode.type === "concept" && (
+                        <span className="text-[10px]" style={{ color: "#334155" }}>그룹 {selectedNode.cluster + 1}</span>
+                      )}
+                      {connectedCount > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(109,40,217,0.2)", color: "#a78bfa" }}>
+                          {connectedCount}개 연결
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedNode(null)}
+                  className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
+                  style={{ color: "#475569", fontSize: "16px" }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* 태그 */}
+              {selectedNode.tags.length > 0 && (
+                <div className="px-5 py-2.5 flex flex-wrap gap-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                  {selectedNode.tags.map((tag) => (
+                    <span key={tag} className="px-2 py-0.5 rounded-full text-[10px]"
+                      style={{ background: "rgba(109,40,217,0.12)", border: "1px solid rgba(109,40,217,0.25)", color: "#a78bfa" }}>
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* 본문 */}
+              <div className="flex-1 overflow-y-auto px-5 py-4" style={{ minHeight: 0 }}>
+                <ContentRenderer text={stripFrontmatter(selectedNode.preview || "")} />
+              </div>
+
+              {/* 연결된 노드 목록 */}
+              {connectedNodes.length > 0 && (
+                <div className="shrink-0" style={{ borderTop: "1px solid rgba(99,60,220,0.1)" }}>
+                  <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold" style={{ color: "#334155" }}>
+                    연결된 노드 ({connectedNodes.length})
+                  </p>
+                  <div className="overflow-y-auto" style={{ maxHeight: "160px" }}>
+                    {connectedNodes.map((node) => (
+                      <button
+                        key={node.id}
+                        onClick={() => handleConnectedNodeClick(node)}
+                        className="w-full flex items-center gap-2.5 px-5 py-2 text-left transition-colors hover:bg-white/[0.03]"
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            background: node.type === "source" ? "#334155" : CLUSTER_COLORS[node.cluster % CLUSTER_COLORS.length],
+                          }}
+                        />
+                        <span className="text-xs truncate" style={{ color: "#64748b" }}>
+                          {formatNodeTitle(node.title || node.id)}
+                        </span>
+                        <span className="text-[9px] shrink-0 ml-auto" style={{ color: "#1e293b" }}>
+                          {node.type === "concept" ? "개념" : "소스"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 푸터 */}
+              {selectedNode.parentId && (
+                <div className="px-5 py-2.5 text-[10px] flex items-center gap-1.5"
+                  style={{ borderTop: "1px solid rgba(99,60,220,0.08)", color: "#334155" }}>
+                  <span>↑</span>
+                  <span style={{ color: "#475569" }}>{formatNodeTitle(selectedNode.parentId)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -344,4 +920,20 @@ function StatusIcon({ status }: { status: FileStatus }) {
   if (status === "error") return <XCircle size={14} style={{ color: "#f87171", flexShrink: 0 }} />;
   if (status === "processing") return <Loader2 size={14} style={{ color: "#a78bfa", flexShrink: 0 }} className="animate-spin" />;
   return <FileText size={14} style={{ color: "#334155", flexShrink: 0 }} />;
+}
+
+function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all"
+      style={active
+        ? { background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", color: "#c4b5fd" }
+        : { background: "transparent", border: "1px solid transparent", color: "#475569" }
+      }
+    >
+      {icon}
+      {label}
+    </button>
+  );
 }
