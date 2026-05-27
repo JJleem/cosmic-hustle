@@ -130,7 +130,8 @@ async function writeFile(dir: FileSystemDirectoryHandle, filename: string, conte
 }
 
 export default function WikiPage() {
-  const [activeTab, setActiveTab] = useState<"folder" | "graph">("folder");
+  const [activeTab, setActiveTab] = useState<"folder" | "graph">("graph");
+  const [showIntroToast, setShowIntroToast] = useState(true);
 
   // 폴더 탭
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -690,8 +691,8 @@ export default function WikiPage() {
           <span className="text-sm font-semibold tracking-wide" style={{ color: "#c4b5fd" }}>개인 위키</span>
         </div>
         <div className="flex items-center gap-1 ml-4">
-          <TabBtn active={activeTab === "folder"} onClick={() => setActiveTab("folder")} icon={<FolderOpen size={12} />} label="폴더" />
           <TabBtn active={activeTab === "graph"} onClick={() => setActiveTab("graph")} icon={<Network size={12} />} label="지식 그래프" />
+          <TabBtn active={activeTab === "folder"} onClick={() => setActiveTab("folder")} icon={<FolderOpen size={12} />} label="폴더" />
         </div>
       </header>
 
@@ -1102,6 +1103,117 @@ export default function WikiPage() {
           )}
         </div>
       )}
+      {showIntroToast && <WikiIntroToast onClose={() => setShowIntroToast(false)} />}
+    </div>
+  );
+}
+
+function WikiIntroToast({ onClose }: { onClose: () => void }) {
+  const [frame, setFrame] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [progress, setProgress] = useState(100);
+
+  const DURATION = 7000;
+
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => setFrame((f) => (f + 1) % 3), 350);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const step = 100 / (DURATION / 80);
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        if (p <= 0) { clearInterval(interval); return 0; }
+        return p - step;
+      });
+    }, 80);
+    const dismiss = setTimeout(() => {
+      setVisible(false);
+      setTimeout(onClose, 400);
+    }, DURATION);
+    return () => { clearInterval(interval); clearTimeout(dismiss); };
+  }, [onClose]);
+
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 400);
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", bottom: "28px", right: "28px", zIndex: 100,
+        transform: visible ? "translateY(0) scale(1)" : "translateY(24px) scale(0.95)",
+        opacity: visible ? 1 : 0,
+        transition: "transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
+        width: "300px",
+        pointerEvents: visible ? "auto" : "none",
+      }}
+    >
+      <div style={{
+        background: "rgba(5,7,20,0.96)",
+        border: "1px solid rgba(139,92,246,0.4)",
+        borderRadius: "18px",
+        padding: "16px 16px 12px",
+        backdropFilter: "blur(32px)",
+        boxShadow: "0 12px 48px rgba(109,40,217,0.25), 0 0 0 1px rgba(139,92,246,0.08) inset",
+      }}>
+        {/* 헤더 */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+          <div style={{
+            width: "44px", height: "44px", borderRadius: "12px", overflow: "hidden", flexShrink: 0,
+            background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)",
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/characters/wiki/talk_${frame}.png`}
+              alt="위키"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#c4b5fd", marginBottom: "2px" }}>위키 대리</div>
+            <div style={{ fontSize: "10px", color: "#475569" }}>사서 · Knowledge Base</div>
+          </div>
+          <button
+            onClick={handleClose}
+            style={{ color: "#475569", fontSize: "18px", lineHeight: 1, padding: "2px 4px", flexShrink: 0 }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* 말풍선 */}
+        <div style={{
+          background: "rgba(139,92,246,0.06)",
+          border: "1px solid rgba(139,92,246,0.14)",
+          borderRadius: "10px",
+          padding: "10px 12px",
+          marginBottom: "10px",
+        }}>
+          <p style={{ fontSize: "11.5px", color: "#cbd5e1", lineHeight: 1.75, margin: 0 }}>
+            안녕하세요! 저는 위키 대리예요. 리서치 결과가 여기에 자동으로 쌓여요.<br />
+            <span style={{ color: "#a78bfa" }}>노드를 클릭</span>하면 개념 내용을 확인·편집할 수 있고, <span style={{ color: "#a78bfa" }}>폴더 탭</span>에서 내 문서를 직접 추가할 수도 있어요!
+          </p>
+        </div>
+
+        {/* 프로그레스 바 */}
+        <div style={{ height: "2px", background: "rgba(139,92,246,0.12)", borderRadius: "1px", overflow: "hidden" }}>
+          <div style={{
+            height: "100%",
+            width: `${progress}%`,
+            background: "linear-gradient(90deg, #7c3aed, #a78bfa)",
+            borderRadius: "1px",
+            transition: "width 0.08s linear",
+          }} />
+        </div>
+      </div>
     </div>
   );
 }
