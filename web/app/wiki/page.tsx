@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as d3 from "d3";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, Eye, EyeOff, RefreshCw, Clock } from "lucide-react";
 
 function formatNodeTitle(raw: string): string {
   return raw.replace(/[-_]+/g, " ").trim();
@@ -82,6 +82,7 @@ interface GraphNode {
   x?: number;
   y?: number;
   z?: number;
+  createdAt?: string;
 }
 
 interface GraphLink {
@@ -146,22 +147,30 @@ export default function WikiPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSources, setShowSources] = useState(false);
   const graphContainerRef = useRef<HTMLDivElement>(null);
-  const [graphDims, setGraphDims] = useState({ width: 800, height: 600 });
+  const graphDimsRef = useRef({ width: 800, height: 600 }); // state 대신 ref — 리사이즈 시 D3 재렌더 방지
   const svgRef = useRef<SVGSVGElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const zoomRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const containerRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const simulationRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeSelRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linkSelRef = useRef<any>(null);
+  const [timelineDates, setTimelineDates] = useState<string[]>([]);
+  const [timelineIdx, setTimelineIdx] = useState(0);
   const searchQueryRef = useRef("");
   const showSourcesRef = useRef(false);
   const sourceIdsRef = useRef(new Set<string>());
+  const timelineIdxRef = useRef(0);
+  const timelineDatesRef = useRef<string[]>([]);
   // 항상 최신 값 동기화
   searchQueryRef.current = searchQuery;
   showSourcesRef.current = showSources;
+  timelineIdxRef.current = timelineIdx;
+  timelineDatesRef.current = timelineDates;
 
   // 연결된 노드 목록
   const connectedNodes = useMemo(() => {
@@ -173,8 +182,8 @@ export default function WikiPage() {
       if (s === selectedNode.id) ids.add(t);
       if (t === selectedNode.id) ids.add(s);
     });
-    return graphData.nodes.filter((n) => ids.has(n.id));
-  }, [selectedNode, graphData]);
+    return graphData.nodes.filter((n) => ids.has(n.id) && (showSources || n.type !== "source"));
+  }, [selectedNode, graphData, showSources]);
 
   const connectedCount = useMemo(() => {
     if (!selectedNode || !graphData) return 0;
@@ -185,16 +194,24 @@ export default function WikiPage() {
     }).length;
   }, [selectedNode, graphData]);
 
-  // 그래프 컨테이너 크기
+  // 그래프 컨테이너 크기 — ref에만 저장해 D3 재렌더를 트리거하지 않음
+  // 리사이즈 시 SVG 크기와 forceCenter만 갱신
   useEffect(() => {
     if (activeTab !== "graph") return;
     const el = graphContainerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      setGraphDims({ width: el.offsetWidth, height: el.offsetHeight });
-    });
+    const applySize = () => {
+      const w = el.offsetWidth || 800;
+      const h = el.offsetHeight || 600;
+      graphDimsRef.current = { width: w, height: h };
+      if (svgRef.current) {
+        d3.select(svgRef.current).attr("width", w).attr("height", h);
+      }
+      // SVG 크기만 업데이트 — 시뮬레이션 일체 건드리지 않음 (사이드 패널 열릴 때 노드 이동 방지)
+    };
+    const ro = new ResizeObserver(applySize);
     ro.observe(el);
-    setGraphDims({ width: el.offsetWidth, height: el.offsetHeight });
+    applySize();
     return () => ro.disconnect();
   }, [activeTab]);
 
@@ -220,11 +237,17 @@ export default function WikiPage() {
     type SimNode = GraphNode & d3.SimulationNodeDatum;
     type SimLink = d3.SimulationLinkDatum<SimNode> & { weight: number };
 
-    const nodes: SimNode[] = graphData.nodes.map((n) => ({ ...n }));
-    const links: SimLink[] = graphData.links.map((l) => ({ ...l }));
+    const W = graphDimsRef.current.width;
+    const H = graphDimsRef.current.height;
 
-    const W = graphDims.width;
-    const H = graphDims.height;
+    // 백엔드 spring_layout 좌표는 (0,0) 기준 ±280 → W/2, H/2 오프셋으로 화면 중앙 정렬
+    // 이렇게 해야 줌 시 다른 노드들도 화면 안에 남음
+    const nodes: SimNode[] = graphData.nodes.map((n) => ({
+      ...n,
+      x: (n.x ?? 0) + W / 2,
+      y: (n.y ?? 0) + H / 2,
+    }));
+    const links: SimLink[] = graphData.links.map((l) => ({ ...l }));
 
     // 연결 수로 노드 크기 결정
     const connCount = new Map<string, number>();
@@ -257,10 +280,15 @@ export default function WikiPage() {
       m.append("feMergeNode").attr("in", "SourceGraphic");
     });
 
-    // Zoom
+    // Zoom — 노드 위에서 시작한 pointer 이벤트는 pan 무시, wheel만 허용
     const container = svg.append("g").attr("class", "root");
+    containerRef.current = container;
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 6])
+      .filter((event: Event) => {
+        if (event.type === "wheel") return true;
+        return !(event.target as Element).closest(".nodes");
+      })
       .on("zoom", (e) => container.attr("transform", e.transform.toString()));
     svg.call(zoom).on("dblclick.zoom", null);
     zoomRef.current = zoom;
@@ -314,8 +342,7 @@ export default function WikiPage() {
       g.append("circle")
         .attr("r", r * 2.0)
         .attr("fill", color)
-        .attr("fill-opacity", 0.09)
-        .attr("pointer-events", "none");
+        .attr("fill-opacity", 0.09);
 
       g.append("circle")
         .attr("r", r)
@@ -381,6 +408,8 @@ export default function WikiPage() {
     // 호버: 연결 하이라이트
     nodeSel
       .on("mouseenter", function (_, d) {
+        // 호버된 노드를 DOM 맨 뒤로 올려 z-order 최상위 → 클릭이 올바른 노드에 전달됨
+        d3.select(this).raise();
         const connected = new Set([d.id]);
         links.forEach((l) => {
           const s = typeof l.source === "object" ? (l.source as SimNode).id : String(l.source);
@@ -414,33 +443,31 @@ export default function WikiPage() {
         setSelectedNode(d as GraphNode);
         container.selectAll<SVGCircleElement, SimNode>(".sel-ring").attr("stroke-opacity", 0);
         d3.select(this).select(".sel-ring").attr("stroke-opacity", 0.9);
-        // 클릭한 노드로 줌
-        const scale = 2.0;
-        const tx = W / 2 - scale * (d.x ?? 0);
-        const ty = H / 2 - scale * (d.y ?? 0);
-        d3.select(svgRef.current!)
-          .transition().duration(500)
-          .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
       });
 
     // 드래그
+    let isDragging = false;
     nodeSel.call(
       d3.drag<SVGGElement, SimNode>()
-        .on("start", (event, d) => {
-          if (!event.active) sim.alphaTarget(0.3).restart();
+        .clickDistance(6)
+        .on("start", (_, d) => {
+          isDragging = false;
           d.fx = d.x; d.fy = d.y;
         })
         .on("drag", (event, d) => {
+          // 실제 drag 이벤트가 왔을 때만 시뮬레이션 재시작 — 단순 클릭 시 노드 이동 방지
+          if (!isDragging) { isDragging = true; if (!event.active) sim.alphaTarget(0.3).restart(); }
           d.fx = event.x; d.fy = event.y;
         })
         .on("end", (event, d) => {
-          if (!event.active) sim.alphaTarget(0);
+          if (isDragging && !event.active) sim.alphaTarget(0);
           d.fx = null; d.fy = null;
+          isDragging = false;
         })
     );
-
     // Force 시뮬레이션 — 생성 시 link.source/target이 node ref로 변환됨
     const sim = d3.forceSimulation<SimNode>(nodes)
+      .alphaDecay(0.05)  // default 0.0228 → ~5초, 0.05 → ~1초 내 정착
       .force(
         "link",
         d3.forceLink<SimNode, SimLink>(links)
@@ -482,21 +509,42 @@ export default function WikiPage() {
 
     simulationRef.current = sim;
     return () => { sim.stop(); };
-  }, [graphData, graphDims]);
+  }, [graphData]);
 
-  // 소스 노드 토글
+  // 소스 토글 + 타임라인 필터 통합 display effect
   useEffect(() => {
-    if (!nodeSelRef.current || !linkSelRef.current) return;
+    const nodeSel = nodeSelRef.current;
+    const linkSel = linkSelRef.current;
+    if (!nodeSel || !linkSel) return;
+
+    const hasTimeline = timelineDates.length > 0;
+    const cutoff = hasTimeline && timelineIdx > 0 ? timelineDates[timelineIdx - 1] : null;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    nodeSelRef.current.filter((d: any) => d.type === "source").attr("display", showSources ? null : "none");
+    nodeSel.attr("display", (d: any) => {
+      if (d.type === "source") return showSources ? null : "none";
+      if (hasTimeline && cutoff === null) return "none";
+      if (hasTimeline && d.createdAt && d.createdAt > cutoff!) return "none";
+      return null;
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    linkSelRef.current.attr("display", (d: any) => {
-      if (showSources) return null;
+    linkSel.attr("display", (d: any) => {
       const sType = typeof d.source === "object" ? d.source.type : null;
       const tType = typeof d.target === "object" ? d.target.type : null;
-      return (sType === "source" || tType === "source") ? "none" : null;
+      if (sType === "source" || tType === "source") return showSources ? null : "none";
+      if (hasTimeline && cutoff === null) return "none";
+      if (hasTimeline && cutoff) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sCreated = typeof d.source === "object" ? (d.source as any).createdAt : null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tCreated = typeof d.target === "object" ? (d.target as any).createdAt : null;
+        if (sCreated && sCreated > cutoff) return "none";
+        if (tCreated && tCreated > cutoff) return "none";
+      }
+      return null;
     });
-  }, [showSources]);
+  }, [showSources, timelineIdx, timelineDates, graphData]);
 
   // 검색 필터
   useEffect(() => {
@@ -515,6 +563,22 @@ export default function WikiPage() {
     });
     linkSelRef.current?.attr("stroke-opacity", 0.05);
   }, [searchQuery]);
+
+  // 타임라인 날짜 목록 계산
+  useEffect(() => {
+    if (!graphData) {
+      setTimelineDates([]);
+      setTimelineIdx(0);
+      return;
+    }
+    const dates = [...new Set(
+      graphData.nodes
+        .filter((n) => n.type === "concept" && n.createdAt)
+        .map((n) => n.createdAt!)
+    )].sort();
+    setTimelineDates(dates);
+    setTimelineIdx(dates.length); // 초기: 모두 표시
+  }, [graphData]);
 
   // 폴더 탭 핸들러
   const connectFolder = useCallback(async () => {
@@ -585,20 +649,11 @@ export default function WikiPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       nodeSelRef.current.filter((d: any) => d.id === node.id).select(".sel-ring").attr("stroke-opacity", 0.9);
     }
-    if (simulationRef.current && svgRef.current && zoomRef.current) {
+    if (nodeSelRef.current) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const simNode = simulationRef.current.nodes().find((n: any) => n.id === node.id);
-      if (simNode?.x != null) {
-        const { width: W, height: H } = graphDims;
-        const scale = 2.0;
-        const tx = W / 2 - scale * simNode.x;
-        const ty = H / 2 - scale * simNode.y;
-        d3.select(svgRef.current)
-          .transition().duration(600)
-          .call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
-      }
+      nodeSelRef.current.filter((d: any) => d.id === node.id).select(".sel-ring").attr("stroke-opacity", 0.9);
     }
-  }, [graphDims]);
+  }, []);
 
   const doneCount = files.filter((f) => f.status === "done").length;
   const errorCount = files.filter((f) => f.status === "error").length;
@@ -844,6 +899,46 @@ export default function WikiPage() {
                     <span style={{ color: "#334155" }}>소스</span>
                   </div>
                 </div>
+
+                {/* 타임라인 슬라이더 */}
+                {timelineDates.length > 1 && (
+                  <div
+                    className="absolute bottom-4 z-10 flex items-center gap-3 px-4 py-2 rounded-xl"
+                    style={{
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      background: "rgba(5,7,20,0.82)",
+                      border: "1px solid rgba(99,60,220,0.2)",
+                      backdropFilter: "blur(12px)",
+                    }}
+                  >
+                    <Clock size={11} style={{ color: "#475569" }} />
+                    <span className="text-[10px] shrink-0" style={{ color: "#334155" }}>
+                      {timelineDates[0]}
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={timelineDates.length}
+                      value={timelineIdx}
+                      onChange={(e) => setTimelineIdx(Number(e.target.value))}
+                      style={{ width: "160px", accentColor: "#8b5cf6", cursor: "pointer" }}
+                    />
+                    <span className="text-[10px] shrink-0" style={{ color: "#334155" }}>
+                      {timelineDates[timelineDates.length - 1]}
+                    </span>
+                    <span
+                      className="text-[10px] shrink-0 min-w-[72px] text-center px-2 py-0.5 rounded-full"
+                      style={{ background: "rgba(109,40,217,0.18)", color: "#a78bfa" }}
+                    >
+                      {timelineIdx === 0
+                        ? "없음"
+                        : timelineIdx === timelineDates.length
+                        ? "전체"
+                        : `≤ ${timelineDates[timelineIdx - 1]}`}
+                    </span>
+                  </div>
+                )}
 
                 <svg ref={svgRef} className="absolute inset-0" style={{ cursor: "grab" }} />
               </>

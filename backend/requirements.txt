@@ -12,5 +12,7 @@ sentence-transformers
 weasyprint
 openpyxl
 markdown
+networkx
+numpy
 pytest
 pytest-asyncio

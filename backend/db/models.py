@@ -102,4 +102,5 @@ class WikiEntry(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     embedding = Column(Vector(384), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())

@@ -225,6 +225,7 @@ def get_wiki_graph():
                 "x": round(px, 2),
                 "y": round(py, 2),
                 "z": round(pz, 2),
+                "createdAt": e.created_at.date().isoformat() if e.created_at else None,
             })
 
         links = []
