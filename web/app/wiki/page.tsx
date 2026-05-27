@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as d3 from "d3";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, Eye, EyeOff, RefreshCw } from "lucide-react";
 
 function formatNodeTitle(raw: string): string {
   return raw.replace(/[-_]+/g, " ").trim();
@@ -271,6 +271,20 @@ export default function WikiPage() {
       container.selectAll<SVGCircleElement, SimNode>(".sel-ring").attr("stroke-opacity", 0);
     });
 
+    // Hull 레이어 (links·nodes 아래)
+    const hullG = container.append("g").attr("class", "hulls");
+    const clusterIds = [...new Set(nodes.filter(n => n.type === "concept").map(n => n.cluster))].sort((a, b) => a - b);
+    const hullPaths = hullG
+      .selectAll<SVGPathElement, number>("path")
+      .data(clusterIds)
+      .join("path")
+      .attr("fill-opacity", 0.055)
+      .attr("stroke-opacity", 0.18)
+      .attr("stroke-width", 1.5)
+      .attr("stroke-linejoin", "round")
+      .attr("fill", (c) => CLUSTER_COLORS[c % CLUSTER_COLORS.length])
+      .attr("stroke", (c) => CLUSTER_COLORS[c % CLUSTER_COLORS.length]);
+
     // 링크
     const linkG = container.append("g").attr("class", "links");
     const linkSel = linkG
@@ -439,6 +453,25 @@ export default function WikiPage() {
       .force("collision", d3.forceCollide<SimNode>().radius((d) => getR(d) + 22).strength(0.9));
 
     sim.on("tick", () => {
+      // convex hull 업데이트
+      hullPaths.attr("d", (c) => {
+        const pts = nodes
+          .filter(n => n.type === "concept" && n.cluster === c && n.x != null && n.y != null)
+          .map(n => [n.x!, n.y!] as [number, number]);
+        if (pts.length < 3) return null;
+        const hull = d3.polygonHull(pts);
+        if (!hull) return null;
+        // centroid 기준으로 30px 바깥으로 확장
+        const cx = hull.reduce((s, p) => s + p[0], 0) / hull.length;
+        const cy = hull.reduce((s, p) => s + p[1], 0) / hull.length;
+        const expanded = hull.map(([x, y]) => {
+          const dx = x - cx, dy = y - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          return [x + (dx / dist) * 30, y + (dy / dist) * 30] as [number, number];
+        });
+        return `M${expanded.map(p => p.join(",")).join("L")}Z`;
+      });
+
       linkSel
         .attr("x1", (d) => (d.source as SimNode).x ?? 0)
         .attr("y1", (d) => (d.source as SimNode).y ?? 0)
@@ -773,6 +806,16 @@ export default function WikiPage() {
                   >
                     {showSources ? <Eye size={11} /> : <EyeOff size={11} />}
                     소스
+                  </button>
+
+                  {/* 동기화 */}
+                  <button
+                    onClick={() => { setGraphData(null); setSearchQuery(""); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                    style={{ background: "rgba(5,7,20,0.8)", border: "1px solid rgba(99,60,220,0.18)", backdropFilter: "blur(12px)", color: "#64748b" }}
+                  >
+                    <RefreshCw size={11} />
+                    동기화
                   </button>
 
                   {/* 전체 보기 */}
