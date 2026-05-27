@@ -1108,12 +1108,20 @@ export default function WikiPage() {
   );
 }
 
+const WIKI_FEATURES = [
+  { icon: "🗂", label: "지식 그래프", desc: "리서치가 끝날 때마다 핵심 개념이 자동으로 여기에 저장돼요. 시간이 쌓일수록 노드 간 연결이 풍부해져요." },
+  { icon: "✏️", label: "노드 편집", desc: "노드를 클릭하면 사이드 패널이 열려요. 연필 아이콘으로 내용을 직접 수정하고 저장할 수 있어요." },
+  { icon: "🤖", label: "에이전트 활용", desc: "리서치를 시작하면 위키 대리가 관련 개념을 먼저 검색해서 다른 에이전트들에게 배경 지식을 전달해요." },
+  { icon: "📂", label: "폴더 연결", desc: "폴더 탭에서 내 .md / .txt 파일을 연결하면 자동으로 개념을 추출해 그래프에 추가해요." },
+];
+
 function WikiIntroToast({ onClose }: { onClose: () => void }) {
   const [frame, setFrame] = useState(0);
   const [visible, setVisible] = useState(false);
   const [progress, setProgress] = useState(100);
-
-  const DURATION = 7000;
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const DURATION = 12000;
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 200);
@@ -1126,91 +1134,111 @@ function WikiIntroToast({ onClose }: { onClose: () => void }) {
   }, []);
 
   useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
+  useEffect(() => {
     const step = 100 / (DURATION / 80);
     const interval = setInterval(() => {
+      if (pausedRef.current) return;
       setProgress((p) => {
-        if (p <= 0) { clearInterval(interval); return 0; }
+        if (p <= step) { clearInterval(interval); return 0; }
         return p - step;
       });
     }, 80);
     const dismiss = setTimeout(() => {
+      if (pausedRef.current) return;
       setVisible(false);
       setTimeout(onClose, 400);
     }, DURATION);
     return () => { clearInterval(interval); clearTimeout(dismiss); };
   }, [onClose]);
 
-  const handleClose = () => {
-    setVisible(false);
-    setTimeout(onClose, 400);
-  };
+  const handleClose = () => { setVisible(false); setTimeout(onClose, 400); };
 
   return (
-    <div
-      style={{
-        position: "fixed", bottom: "28px", right: "28px", zIndex: 100,
-        transform: visible ? "translateY(0) scale(1)" : "translateY(24px) scale(0.95)",
-        opacity: visible ? 1 : 0,
-        transition: "transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
-        width: "300px",
-        pointerEvents: visible ? "auto" : "none",
-      }}
-    >
+    <div style={{
+      position: "fixed", bottom: "28px", right: "28px", zIndex: 100,
+      transform: visible ? "translateY(0) scale(1)" : "translateY(28px) scale(0.94)",
+      opacity: visible ? 1 : 0,
+      transition: "transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
+      width: "330px",
+      pointerEvents: visible ? "auto" : "none",
+    }}>
       <div style={{
-        background: "rgba(5,7,20,0.96)",
+        background: "rgba(5,7,20,0.97)",
         border: "1px solid rgba(139,92,246,0.4)",
-        borderRadius: "18px",
-        padding: "16px 16px 12px",
+        borderRadius: "20px",
+        padding: "18px 18px 14px",
         backdropFilter: "blur(32px)",
-        boxShadow: "0 12px 48px rgba(109,40,217,0.25), 0 0 0 1px rgba(139,92,246,0.08) inset",
+        boxShadow: "0 16px 56px rgba(109,40,217,0.28), 0 0 0 1px rgba(139,92,246,0.07) inset",
       }}>
-        {/* 헤더 */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+        {/* 헤더 — 큰 이미지 + 이름 + 버튼들 */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "14px" }}>
           <div style={{
-            width: "44px", height: "44px", borderRadius: "12px", overflow: "hidden", flexShrink: 0,
-            background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)",
+            width: "68px", height: "68px", borderRadius: "16px", overflow: "hidden", flexShrink: 0,
+            background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
+            boxShadow: "0 0 20px rgba(139,92,246,0.15)",
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/characters/wiki/talk_${frame}.png`}
-              alt="위키"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
+            <img src={`/characters/wiki/talk_${frame}.png`} alt="위키" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#c4b5fd", marginBottom: "2px" }}>위키 대리</div>
-            <div style={{ fontSize: "10px", color: "#475569" }}>사서 · Knowledge Base</div>
+          <div style={{ flex: 1, paddingTop: "2px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#c4b5fd", marginBottom: "3px" }}>위키 대리</div>
+            <div style={{ fontSize: "10.5px", color: "#475569", marginBottom: "8px" }}>사서 · Knowledge Base</div>
+            <p style={{ fontSize: "11.5px", color: "#94a3b8", lineHeight: 1.65, margin: 0 }}>
+              안녕하세요! 이 공간에 대해 간단히 안내해 드릴게요.
+            </p>
           </div>
-          <button
-            onClick={handleClose}
-            style={{ color: "#475569", fontSize: "18px", lineHeight: 1, padding: "2px 4px", flexShrink: 0 }}
-          >
-            ×
-          </button>
+          <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+            <button
+              onClick={() => setPaused((p) => !p)}
+              title={paused ? "재개" : "일시정지"}
+              style={{
+                width: "26px", height: "26px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+                background: paused ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
+                border: paused ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                color: paused ? "#c4b5fd" : "#475569", fontSize: "11px", cursor: "pointer",
+              }}
+            >
+              {paused ? "▶" : "⏸"}
+            </button>
+            <button
+              onClick={handleClose}
+              style={{
+                width: "26px", height: "26px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                color: "#475569", fontSize: "16px", lineHeight: 1, cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
-        {/* 말풍선 */}
-        <div style={{
-          background: "rgba(139,92,246,0.06)",
-          border: "1px solid rgba(139,92,246,0.14)",
-          borderRadius: "10px",
-          padding: "10px 12px",
-          marginBottom: "10px",
-        }}>
-          <p style={{ fontSize: "11.5px", color: "#cbd5e1", lineHeight: 1.75, margin: 0 }}>
-            안녕하세요! 저는 위키 대리예요. 리서치 결과가 여기에 자동으로 쌓여요.<br />
-            <span style={{ color: "#a78bfa" }}>노드를 클릭</span>하면 개념 내용을 확인·편집할 수 있고, <span style={{ color: "#a78bfa" }}>폴더 탭</span>에서 내 문서를 직접 추가할 수도 있어요!
-          </p>
+        {/* 기능 목록 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
+          {WIKI_FEATURES.map((f) => (
+            <div key={f.label} style={{
+              display: "flex", gap: "10px", alignItems: "flex-start",
+              background: "rgba(139,92,246,0.04)", border: "1px solid rgba(139,92,246,0.1)",
+              borderRadius: "10px", padding: "9px 11px",
+            }}>
+              <span style={{ fontSize: "14px", flexShrink: 0, marginTop: "1px" }}>{f.icon}</span>
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#c4b5fd", marginBottom: "2px" }}>{f.label}</div>
+                <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.6 }}>{f.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* 프로그레스 바 */}
-        <div style={{ height: "2px", background: "rgba(139,92,246,0.12)", borderRadius: "1px", overflow: "hidden" }}>
+        <div style={{ height: "2px", background: "rgba(139,92,246,0.1)", borderRadius: "1px", overflow: "hidden" }}>
           <div style={{
-            height: "100%",
-            width: `${progress}%`,
-            background: "linear-gradient(90deg, #7c3aed, #a78bfa)",
-            borderRadius: "1px",
-            transition: "width 0.08s linear",
+            height: "100%", width: `${progress}%`,
+            background: paused ? "rgba(139,92,246,0.4)" : "linear-gradient(90deg, #7c3aed, #a78bfa)",
+            borderRadius: "1px", transition: "width 0.08s linear",
           }} />
         </div>
       </div>
