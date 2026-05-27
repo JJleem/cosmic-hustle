@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as d3 from "d3";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, Eye, EyeOff, RefreshCw, Clock } from "lucide-react";
+import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, RefreshCw, Clock } from "lucide-react";
 
 function formatNodeTitle(raw: string): string {
   return raw.replace(/[-_]+/g, " ").trim();
@@ -145,7 +145,6 @@ export default function WikiPage() {
   const [graphError, setGraphError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showSources, setShowSources] = useState(false);
   const graphContainerRef = useRef<HTMLDivElement>(null);
   const graphDimsRef = useRef({ width: 800, height: 600 }); // state 대신 ref — 리사이즈 시 D3 재렌더 방지
   const svgRef = useRef<SVGSVGElement>(null);
@@ -162,13 +161,10 @@ export default function WikiPage() {
   const [timelineDates, setTimelineDates] = useState<string[]>([]);
   const [timelineIdx, setTimelineIdx] = useState(0);
   const searchQueryRef = useRef("");
-  const showSourcesRef = useRef(false);
-  const sourceIdsRef = useRef(new Set<string>());
   const timelineIdxRef = useRef(0);
   const timelineDatesRef = useRef<string[]>([]);
   // 항상 최신 값 동기화
   searchQueryRef.current = searchQuery;
-  showSourcesRef.current = showSources;
   timelineIdxRef.current = timelineIdx;
   timelineDatesRef.current = timelineDates;
 
@@ -182,16 +178,29 @@ export default function WikiPage() {
       if (s === selectedNode.id) ids.add(t);
       if (t === selectedNode.id) ids.add(s);
     });
-    return graphData.nodes.filter((n) => ids.has(n.id) && (showSources || n.type !== "source"));
-  }, [selectedNode, graphData, showSources]);
+    return graphData.nodes.filter((n) => ids.has(n.id) && n.type === "concept");
+  }, [selectedNode, graphData]);
 
   const connectedCount = useMemo(() => {
     if (!selectedNode || !graphData) return 0;
+    const sourceIds = new Set(graphData.nodes.filter(n => n.type === "source").map(n => n.id));
     return graphData.links.filter((l) => {
       const src = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
       const tgt = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
-      return src === selectedNode.id || tgt === selectedNode.id;
+      return (src === selectedNode.id || tgt === selectedNode.id) && !sourceIds.has(src) && !sourceIds.has(tgt);
     }).length;
+  }, [selectedNode, graphData]);
+
+  const sourceDocs = useMemo(() => {
+    if (!selectedNode || !graphData) return [];
+    const ids = new Set<string>();
+    graphData.links.forEach((l) => {
+      const s = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
+      const t = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
+      if (s === selectedNode.id) ids.add(t);
+      if (t === selectedNode.id) ids.add(s);
+    });
+    return graphData.nodes.filter((n) => ids.has(n.id) && n.type === "source");
   }, [selectedNode, graphData]);
 
   // 그래프 컨테이너 크기 — ref에만 저장해 D3 재렌더를 트리거하지 않음
@@ -242,16 +251,21 @@ export default function WikiPage() {
 
     // 백엔드 spring_layout 좌표는 (0,0) 기준 ±280 → W/2, H/2 오프셋으로 화면 중앙 정렬
     // 이렇게 해야 줌 시 다른 노드들도 화면 안에 남음
-    const nodes: SimNode[] = graphData.nodes.map((n) => ({
-      ...n,
-      x: (n.x ?? 0) + W / 2,
-      y: (n.y ?? 0) + H / 2,
-    }));
-    const links: SimLink[] = graphData.links.map((l) => ({ ...l }));
+    const sourceIdSet = new Set(graphData.nodes.filter(n => n.type === "source").map(n => n.id));
+    const nodes: SimNode[] = graphData.nodes
+      .filter((n) => n.type === "concept")
+      .map((n) => ({
+        ...n,
+        x: (n.x ?? 0) + W / 2,
+        y: (n.y ?? 0) + H / 2,
+      }));
+    const links: SimLink[] = graphData.links
+      .filter((l) => !sourceIdSet.has(String(l.source)) && !sourceIdSet.has(String(l.target)))
+      .map((l) => ({ ...l }));
 
     // 연결 수로 노드 크기 결정
     const connCount = new Map<string, number>();
-    graphData.links.forEach((l) => {
+    links.forEach((l) => {
       const s = String(l.source), t = String(l.target);
       connCount.set(s, (connCount.get(s) || 0) + 1);
       connCount.set(t, (connCount.get(t) || 0) + 1);
@@ -378,32 +392,9 @@ export default function WikiPage() {
         .text(display);
     });
 
-    // 소스 노드 (작은 점)
-    nodeSel.filter((d) => d.type === "source").each(function () {
-      d3.select(this).append("circle")
-        .attr("r", 4)
-        .attr("fill", "#334155")
-        .attr("fill-opacity", 0.5);
-    });
-
     // refs 저장 (시뮬레이션 생성 전)
     nodeSelRef.current = nodeSel;
     linkSelRef.current = linkSel;
-
-    // 소스 ID 세트
-    const sourceIds = new Set(graphData.nodes.filter(n => n.type === "source").map(n => n.id));
-    sourceIdsRef.current = sourceIds;
-
-    // 소스 노드/링크 초기 가시성 적용 — 시뮬레이션이 link.source/target을 node ref로 변환하기 전에 실행
-    if (!showSourcesRef.current) {
-      nodeSel.filter((d) => d.type === "source").attr("display", "none");
-      linkSel.attr("display", (d: SimLink) => {
-        // 이 시점엔 아직 string ID
-        const sId = d.source as unknown as string;
-        const tId = d.target as unknown as string;
-        return (sourceIds.has(sId) || sourceIds.has(tId)) ? "none" : null;
-      });
-    }
 
     // 호버: 연결 하이라이트
     nodeSel
@@ -511,7 +502,7 @@ export default function WikiPage() {
     return () => { sim.stop(); };
   }, [graphData]);
 
-  // 소스 토글 + 타임라인 필터 통합 display effect
+  // 타임라인 필터 effect
   useEffect(() => {
     const nodeSel = nodeSelRef.current;
     const linkSel = linkSelRef.current;
@@ -522,7 +513,6 @@ export default function WikiPage() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     nodeSel.attr("display", (d: any) => {
-      if (d.type === "source") return showSources ? null : "none";
       if (hasTimeline && cutoff === null) return "none";
       if (hasTimeline && d.createdAt && d.createdAt > cutoff!) return "none";
       return null;
@@ -530,9 +520,6 @@ export default function WikiPage() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     linkSel.attr("display", (d: any) => {
-      const sType = typeof d.source === "object" ? d.source.type : null;
-      const tType = typeof d.target === "object" ? d.target.type : null;
-      if (sType === "source" || tType === "source") return showSources ? null : "none";
       if (hasTimeline && cutoff === null) return "none";
       if (hasTimeline && cutoff) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -544,7 +531,7 @@ export default function WikiPage() {
       }
       return null;
     });
-  }, [showSources, timelineIdx, timelineDates, graphData]);
+  }, [timelineIdx, timelineDates, graphData]);
 
   // 검색 필터
   useEffect(() => {
@@ -848,21 +835,6 @@ export default function WikiPage() {
                     )}
                   </div>
 
-                  {/* 소스 토글 */}
-                  <button
-                    onClick={() => setShowSources((v) => !v)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
-                    style={{
-                      background: "rgba(5,7,20,0.8)",
-                      border: showSources ? "1px solid rgba(99,60,220,0.4)" : "1px solid rgba(99,60,220,0.18)",
-                      backdropFilter: "blur(12px)",
-                      color: showSources ? "#a78bfa" : "#64748b",
-                    }}
-                  >
-                    {showSources ? <Eye size={11} /> : <EyeOff size={11} />}
-                    소스
-                  </button>
-
                   {/* 동기화 */}
                   <button
                     onClick={() => { setGraphData(null); setSearchQuery(""); }}
@@ -894,10 +866,6 @@ export default function WikiPage() {
                       <span style={{ color: "#475569" }}>그룹 {c + 1}</span>
                     </div>
                   ))}
-                  <div className="flex items-center gap-2 mt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "6px" }}>
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "#334155" }} />
-                    <span style={{ color: "#334155" }}>소스</span>
-                  </div>
                 </div>
 
                 {/* 타임라인 슬라이더 */}
@@ -1006,13 +974,13 @@ export default function WikiPage() {
                 <ContentRenderer text={stripFrontmatter(selectedNode.preview || "")} />
               </div>
 
-              {/* 연결된 노드 목록 */}
+              {/* 연결된 개념 목록 */}
               {connectedNodes.length > 0 && (
                 <div className="shrink-0" style={{ borderTop: "1px solid rgba(99,60,220,0.1)" }}>
                   <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold" style={{ color: "#334155" }}>
-                    연결된 노드 ({connectedNodes.length})
+                    연결된 개념 ({connectedNodes.length})
                   </p>
-                  <div className="overflow-y-auto" style={{ maxHeight: "160px" }}>
+                  <div className="overflow-y-auto" style={{ maxHeight: "140px" }}>
                     {connectedNodes.map((node) => (
                       <button
                         key={node.id}
@@ -1021,17 +989,31 @@ export default function WikiPage() {
                       >
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{
-                            background: node.type === "source" ? "#334155" : CLUSTER_COLORS[node.cluster % CLUSTER_COLORS.length],
-                          }}
+                          style={{ background: CLUSTER_COLORS[node.cluster % CLUSTER_COLORS.length] }}
                         />
                         <span className="text-xs truncate" style={{ color: "#64748b" }}>
                           {formatNodeTitle(node.title || node.id)}
                         </span>
-                        <span className="text-[9px] shrink-0 ml-auto" style={{ color: "#1e293b" }}>
-                          {node.type === "concept" ? "개념" : "소스"}
-                        </span>
                       </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 출처 문서 */}
+              {sourceDocs.length > 0 && (
+                <div className="shrink-0" style={{ borderTop: "1px solid rgba(99,60,220,0.08)" }}>
+                  <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold" style={{ color: "#334155" }}>
+                    출처 문서 ({sourceDocs.length})
+                  </p>
+                  <div className="overflow-y-auto" style={{ maxHeight: "100px" }}>
+                    {sourceDocs.map((doc) => (
+                      <div key={doc.id} className="flex items-center gap-2.5 px-5 py-1.5">
+                        <FileText size={10} style={{ color: "#334155", flexShrink: 0 }} />
+                        <span className="text-[11px] truncate" style={{ color: "#475569" }}>
+                          {formatNodeTitle(doc.title || doc.id)}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>
