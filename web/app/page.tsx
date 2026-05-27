@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { BookOpen, Settings, X } from "lucide-react";
+import { BookOpen, Settings, X, Library } from "lucide-react";
 import AgentImage from "@/components/AgentImage";
 import BottomAgentBar from "@/components/BottomAgentBar";
 import AgentFullScreen from "@/components/AgentFullScreen";
@@ -568,6 +568,14 @@ export default function Home() {
         )}
 
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <a
+            href="/wiki"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all"
+            style={{ color: "#475569", border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <Library size={12} />
+            <span>위키</span>
+          </a>
           <button
             onClick={() => session.setSideDrawerOpen(!sideDrawerOpen)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all"
