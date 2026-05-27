@@ -1103,7 +1103,33 @@ export default function WikiPage() {
           )}
         </div>
       )}
-      {showIntroToast && <WikiIntroToast onClose={() => setShowIntroToast(false)} />}
+      {showIntroToast && (
+        <WikiIntroToast
+          onClose={() => setShowIntroToast(false)}
+          onFolderClick={() => { setActiveTab("folder"); setShowIntroToast(false); }}
+        />
+      )}
+      {/* 토스트 닫힌 후 남는 ? 도우미 버튼 */}
+      <button
+        onClick={() => setShowIntroToast(true)}
+        title="위키 안내 다시 보기"
+        style={{
+          position: "fixed", bottom: "28px", right: "28px", zIndex: 99,
+          width: "36px", height: "36px", borderRadius: "50%",
+          background: "rgba(5,7,20,0.92)",
+          border: "1px solid rgba(139,92,246,0.35)",
+          color: "#a78bfa", fontSize: "15px", fontWeight: 700,
+          backdropFilter: "blur(12px)",
+          boxShadow: "0 4px 20px rgba(109,40,217,0.2)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          opacity: showIntroToast ? 0 : 1,
+          transform: showIntroToast ? "scale(0.7)" : "scale(1)",
+          transition: "opacity 0.3s ease, transform 0.3s ease",
+          pointerEvents: showIntroToast ? "none" : "auto",
+        }}
+      >
+        ?
+      </button>
     </div>
   );
 }
@@ -1115,7 +1141,7 @@ const WIKI_FEATURES = [
   { icon: "📂", label: "폴더 연결", desc: "폴더 탭에서 내 .md / .txt 파일을 연결하면 자동으로 개념을 추출해 그래프에 추가해요." },
 ];
 
-function WikiIntroToast({ onClose }: { onClose: () => void }) {
+function WikiIntroToast({ onClose, onFolderClick }: { onClose: () => void; onFolderClick: () => void }) {
   const [frame, setFrame] = useState(0);
   const [visible, setVisible] = useState(false);
   const [progress, setProgress] = useState(100);
@@ -1218,19 +1244,32 @@ function WikiIntroToast({ onClose }: { onClose: () => void }) {
 
         {/* 기능 목록 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
-          {WIKI_FEATURES.map((f) => (
-            <div key={f.label} style={{
-              display: "flex", gap: "10px", alignItems: "flex-start",
-              background: "rgba(139,92,246,0.04)", border: "1px solid rgba(139,92,246,0.1)",
-              borderRadius: "10px", padding: "9px 11px",
-            }}>
-              <span style={{ fontSize: "14px", flexShrink: 0, marginTop: "1px" }}>{f.icon}</span>
-              <div>
-                <div style={{ fontSize: "11px", fontWeight: 600, color: "#c4b5fd", marginBottom: "2px" }}>{f.label}</div>
-                <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.6 }}>{f.desc}</div>
+          {WIKI_FEATURES.map((f, i) => {
+            const isFolder = i === WIKI_FEATURES.length - 1;
+            return (
+              <div
+                key={f.label}
+                onClick={isFolder ? onFolderClick : undefined}
+                style={{
+                  display: "flex", gap: "10px", alignItems: "flex-start",
+                  background: isFolder ? "rgba(139,92,246,0.08)" : "rgba(139,92,246,0.04)",
+                  border: isFolder ? "1px solid rgba(139,92,246,0.25)" : "1px solid rgba(139,92,246,0.1)",
+                  borderRadius: "10px", padding: "9px 11px",
+                  cursor: isFolder ? "pointer" : "default",
+                  transition: "background 0.15s, border-color 0.15s",
+                }}
+              >
+                <span style={{ fontSize: "14px", flexShrink: 0, marginTop: "1px" }}>{f.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#c4b5fd", marginBottom: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
+                    {f.label}
+                    {isFolder && <span style={{ fontSize: "10px", color: "#7c3aed" }}>→ 폴더 탭 열기</span>}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.6 }}>{f.desc}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* 프로그레스 바 */}
