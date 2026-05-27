@@ -132,6 +132,12 @@ async function writeFile(dir: FileSystemDirectoryHandle, filename: string, conte
 export default function WikiPage() {
   const [activeTab, setActiveTab] = useState<"folder" | "graph">("graph");
   const [showIntroToast, setShowIntroToast] = useState(true);
+  const [showFolderToast, setShowFolderToast] = useState(false);
+
+  // 폴더 탭으로 전환 시 폴더 토스트 표시
+  useEffect(() => {
+    if (activeTab === "folder") setShowFolderToast(true);
+  }, [activeTab]);
 
   // 폴더 탭
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
@@ -1109,27 +1115,36 @@ export default function WikiPage() {
           onFolderClick={() => { setActiveTab("folder"); setShowIntroToast(false); }}
         />
       )}
-      {/* 토스트 닫힌 후 남는 ? 도우미 버튼 */}
-      <button
-        onClick={() => setShowIntroToast(true)}
-        title="위키 안내 다시 보기"
-        style={{
-          position: "fixed", bottom: "28px", right: "28px", zIndex: 99,
-          width: "36px", height: "36px", borderRadius: "50%",
-          background: "rgba(5,7,20,0.92)",
-          border: "1px solid rgba(139,92,246,0.35)",
-          color: "#a78bfa", fontSize: "15px", fontWeight: 700,
-          backdropFilter: "blur(12px)",
-          boxShadow: "0 4px 20px rgba(109,40,217,0.2)",
-          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-          opacity: showIntroToast ? 0 : 1,
-          transform: showIntroToast ? "scale(0.7)" : "scale(1)",
-          transition: "opacity 0.3s ease, transform 0.3s ease",
-          pointerEvents: showIntroToast ? "none" : "auto",
-        }}
-      >
-        ?
-      </button>
+      {showFolderToast && (
+        <WikiFolderToast onClose={() => setShowFolderToast(false)} />
+      )}
+      {/* ? 도우미 버튼 — 현재 탭 토스트 재표시 */}
+      {(() => {
+        const activeToast = activeTab === "graph" ? showIntroToast : showFolderToast;
+        const handleClick = () => activeTab === "graph" ? setShowIntroToast(true) : setShowFolderToast(true);
+        return (
+          <button
+            onClick={handleClick}
+            title="안내 다시 보기"
+            style={{
+              position: "fixed", bottom: "28px", right: "28px", zIndex: 99,
+              width: "36px", height: "36px", borderRadius: "50%",
+              background: "rgba(5,7,20,0.92)",
+              border: "1px solid rgba(139,92,246,0.35)",
+              color: "#a78bfa", fontSize: "15px", fontWeight: 700,
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 4px 20px rgba(109,40,217,0.2)",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: activeToast ? 0 : 1,
+              transform: activeToast ? "scale(0.7)" : "scale(1)",
+              transition: "opacity 0.3s ease, transform 0.3s ease",
+              pointerEvents: activeToast ? "none" : "auto",
+            }}
+          >
+            ?
+          </button>
+        );
+      })()}
     </div>
   );
 }
@@ -1270,6 +1285,154 @@ function WikiIntroToast({ onClose, onFolderClick }: { onClose: () => void; onFol
               </div>
             );
           })}
+        </div>
+
+        {/* 프로그레스 바 */}
+        <div style={{ height: "2px", background: "rgba(139,92,246,0.1)", borderRadius: "1px", overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: `${progress}%`,
+            background: paused ? "rgba(139,92,246,0.4)" : "linear-gradient(90deg, #7c3aed, #a78bfa)",
+            borderRadius: "1px", transition: "width 0.08s linear",
+          }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FOLDER_FEATURES = [
+  {
+    icon: "🔒",
+    label: "원본 파일은 서버에 저장 안 돼요",
+    desc: "파일 내용은 개념 추출 처리에만 사용돼요. 원본 텍스트는 서버 파일 시스템에 저장되지 않아요.",
+  },
+  {
+    icon: "🗂",
+    label: "폴더 구조 자동 생성",
+    desc: "선택한 폴더 안에 wiki/concepts/ 와 wiki/sources/ 디렉토리가 자동으로 만들어져요. 내 컴퓨터에만 저장돼요.",
+  },
+  {
+    icon: "🧠",
+    label: "개념 추출 → DB 저장",
+    desc: "각 파일에서 핵심 개념을 추출해 마크다운으로 변환한 뒤, 개념만 서버 DB에 임베딩과 함께 저장해요.",
+  },
+  {
+    icon: "📡",
+    label: "지식 그래프에 즉시 반영",
+    desc: "인제스트가 완료되면 자동으로 그래프 탭으로 이동해요. 새 노드들을 바로 확인할 수 있어요.",
+  },
+];
+
+function WikiFolderToast({ onClose }: { onClose: () => void }) {
+  const [frame, setFrame] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [progress, setProgress] = useState(100);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const DURATION = 12000;
+
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => setFrame((f) => (f + 1) % 3), 350);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+
+  useEffect(() => {
+    const step = 100 / (DURATION / 80);
+    const interval = setInterval(() => {
+      if (pausedRef.current) return;
+      setProgress((p) => { if (p <= step) { clearInterval(interval); return 0; } return p - step; });
+    }, 80);
+    const dismiss = setTimeout(() => {
+      if (pausedRef.current) return;
+      setVisible(false);
+      setTimeout(onClose, 400);
+    }, DURATION);
+    return () => { clearInterval(interval); clearTimeout(dismiss); };
+  }, [onClose]);
+
+  const handleClose = () => { setVisible(false); setTimeout(onClose, 400); };
+
+  return (
+    <div style={{
+      position: "fixed", bottom: "28px", right: "28px", zIndex: 100,
+      transform: visible ? "translateY(0) scale(1)" : "translateY(28px) scale(0.94)",
+      opacity: visible ? 1 : 0,
+      transition: "transform 0.45s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
+      width: "330px",
+      pointerEvents: visible ? "auto" : "none",
+    }}>
+      <div style={{
+        background: "rgba(5,7,20,0.97)",
+        border: "1px solid rgba(139,92,246,0.4)",
+        borderRadius: "20px", padding: "18px 18px 14px",
+        backdropFilter: "blur(32px)",
+        boxShadow: "0 16px 56px rgba(109,40,217,0.28), 0 0 0 1px rgba(139,92,246,0.07) inset",
+      }}>
+        {/* 헤더 */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "14px" }}>
+          <div style={{
+            width: "68px", height: "68px", borderRadius: "16px", overflow: "hidden", flexShrink: 0,
+            background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
+            boxShadow: "0 0 20px rgba(139,92,246,0.15)",
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/characters/wiki/talk_${frame}.png`} alt="위키" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
+          <div style={{ flex: 1, paddingTop: "2px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#c4b5fd", marginBottom: "3px" }}>위키 대리</div>
+            <div style={{ fontSize: "10.5px", color: "#475569", marginBottom: "8px" }}>사서 · 폴더 연결 안내</div>
+            <p style={{ fontSize: "11.5px", color: "#94a3b8", lineHeight: 1.65, margin: 0 }}>
+              폴더를 연결하기 전에 몇 가지 알아두세요!
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+            <button
+              onClick={() => setPaused((p) => !p)}
+              title={paused ? "재개" : "일시정지"}
+              style={{
+                width: "26px", height: "26px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+                background: paused ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
+                border: paused ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                color: paused ? "#c4b5fd" : "#475569", fontSize: "11px", cursor: "pointer",
+              }}
+            >
+              {paused ? "▶" : "⏸"}
+            </button>
+            <button
+              onClick={handleClose}
+              style={{
+                width: "26px", height: "26px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                color: "#475569", fontSize: "16px", lineHeight: 1, cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* 기능 목록 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
+          {FOLDER_FEATURES.map((f) => (
+            <div key={f.label} style={{
+              display: "flex", gap: "10px", alignItems: "flex-start",
+              background: "rgba(139,92,246,0.04)", border: "1px solid rgba(139,92,246,0.1)",
+              borderRadius: "10px", padding: "9px 11px",
+            }}>
+              <span style={{ fontSize: "14px", flexShrink: 0, marginTop: "1px" }}>{f.icon}</span>
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#c4b5fd", marginBottom: "2px" }}>{f.label}</div>
+                <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.6 }}>{f.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* 프로그레스 바 */}
