@@ -88,6 +88,19 @@ WebSearch 최소 3회 완료 후 JSON 출력. 한국어·영어 번갈아 검색
 {{"sources": [{{"title": "...", "summary": "2문장 이내 핵심 요약", "url": "..."}}], "key_facts": ["팩트1", "팩트2", "팩트3"], "unverified_count": 0}}  # noqa: E501
 ```""",
 
+    "pocke_design_ui": """포케 대리. UI 디자인 리서처.
+주제: "{topic}". 키워드: {keywords}.
+WebSearch 2~3회. 아래 순서로 검색:
+1. "{topic} UI design reference 2024" — 유사 서비스·제품의 UI 레이아웃·컴포넌트 구성
+2. "{topic} color palette" 또는 해당 분야 컬러 트렌드
+3. 핵심 컴포넌트 패턴 (예: hero section, card grid, dashboard layout)
+수치·날짜보다 시각적 패턴·컬러 방향·컴포넌트 구성 사례 중심 수집.
+⚠️ 압축 규칙: sources 최대 3개. summary는 디자인 방향·컬러·컴포넌트 특징만 2문장 이내.
+⚠️ 검색 완료 즉시 아래 JSON만 출력. 이후 추가 텍스트 없을 것.
+```json
+{{"sources": [{{"title": "...", "summary": "디자인 방향·컬러·컴포넌트 특징", "url": "..."}}], "key_facts": ["레이아웃 패턴", "컬러 방향", "핵심 컴포넌트", "인터랙션 패턴"], "unverified_count": 0}}
+```""",
+
     "pocke_recheck": """포케 대리. 팩트 재조사 모드.
 주제: "{topic}". 팩트 부장 검증 요청 항목:
 {research_queries}
@@ -362,7 +375,7 @@ TASK_CONFIG = {
     "tech":      {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_tech"},
     "marketing": {"pocke": "pocke_marketing", "ka": "ka_marketing", "writer": "over_marketing"},  # noqa: E501
     "design_ux": {"pocke": "pocke",          "ka": "ka_design_ux", "writer": "pixel_ux"},
-    "design_ui": {"pocke": "pocke",          "ka": "ka_design_ui", "writer": "pixel_ui"},
+    "design_ui": {"pocke": "pocke_design_ui", "ka": "ka_design_ui", "writer": "pixel_ui"},
     "dev":       {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "run"},
     "dev_plan":  {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_dev_plan"},
     "dev_spec":  {"pocke": "pocke_tech",     "ka": "ka_tech",     "writer": "over_dev_spec"},

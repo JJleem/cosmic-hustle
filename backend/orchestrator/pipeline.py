@@ -357,9 +357,11 @@ class _Pipeline:
 
         async def _pocke_full():
             try:
+                _turns = 3 if self.task_type == "design_ui" else 5
+                _timeout = 180 if self.task_type == "design_ui" else 300
                 raw, _ = await self.run_a(
                     build_prompt(config["pocke"], topic=self.topic, context=self.topic, keywords=self.topic),
-                    tools=pocke_tools, max_turns=5, agent_id="pocke", timeout=300,
+                    tools=pocke_tools, max_turns=_turns, agent_id="pocke", timeout=_timeout,
                 )
                 self.send({"type": "agent_expression", "agentId": "pocke", "expression": "happy"})
                 self.emit("agent_done", agentId="pocke", message="볼따구 터질것같아! 카 과장한테 넘길게요.")
