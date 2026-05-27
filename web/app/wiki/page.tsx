@@ -97,6 +97,49 @@ interface GraphData {
   links: GraphLink[];
 }
 
+// IndexedDB — FileSystemDirectoryHandle 영속 저장
+const IDB_NAME = "wiki-idb";
+const IDB_STORE = "handles";
+
+function openWikiIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function saveHandleToIDB(handle: FileSystemDirectoryHandle) {
+  const db = await openWikiIDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(handle, "dirHandle");
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function loadHandleFromIDB(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openWikiIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).get("dirHandle");
+      req.onsuccess = () => resolve((req.result as FileSystemDirectoryHandle) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return null; }
+}
+async function clearHandleFromIDB() {
+  try {
+    const db = await openWikiIDB();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).delete("dirHandle");
+      tx.oncomplete = () => resolve();
+    });
+  } catch { /* ignore */ }
+}
+
 async function readAllMdTxt(
   dir: FileSystemDirectoryHandle,
   prefix = ""
@@ -141,11 +184,18 @@ export default function WikiPage() {
 
   // 폴더 탭
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [savedHandle, setSavedHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [restoringHandle, setRestoringHandle] = useState(false);
   const [files, setFiles] = useState<WikiFile[]>([]);
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const abortRef = useRef(false);
+
+  // 마운트 시 IDB에서 이전 핸들 복원
+  useEffect(() => {
+    loadHandleFromIDB().then((h) => { if (h) setSavedHandle(h); }).catch(() => {});
+  }, []);
 
   // 그래프 탭
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -587,11 +637,54 @@ export default function WikiPage() {
       }
       const filtered = found.filter((f) => !f.path.startsWith("wiki/"));
       setDirHandle(handle);
+      setSavedHandle(handle);
+      setFiles(filtered.map((f) => ({ ...f, status: "pending" })));
+      setDone(false);
+      await saveHandleToIDB(handle).catch(() => {});
+    } catch (e) {
+      if (e instanceof Error && e.name !== "AbortError") setConnectError(e.message);
+    }
+  }, []);
+
+  const restoreFolder = useCallback(async () => {
+    if (!savedHandle) return;
+    setRestoringHandle(true);
+    setConnectError(null);
+    try {
+      let perm = await savedHandle.queryPermission({ mode: "readwrite" });
+      if (perm !== "granted") {
+        perm = await savedHandle.requestPermission({ mode: "readwrite" });
+      }
+      if (perm !== "granted") {
+        setSavedHandle(null);
+        await clearHandleFromIDB();
+        return;
+      }
+      let found: { handle: FileSystemFileHandle; name: string; path: string }[] = [];
+      try {
+        found = await readAllMdTxt(savedHandle);
+      } catch (e) {
+        setConnectError(`파일 읽기 실패: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      const filtered = found.filter((f) => !f.path.startsWith("wiki/"));
+      setDirHandle(savedHandle);
       setFiles(filtered.map((f) => ({ ...f, status: "pending" })));
       setDone(false);
     } catch (e) {
       if (e instanceof Error && e.name !== "AbortError") setConnectError(e.message);
+    } finally {
+      setRestoringHandle(false);
     }
+  }, [savedHandle]);
+
+  const disconnectFolder = useCallback(async () => {
+    await clearHandleFromIDB();
+    setSavedHandle(null);
+    setDirHandle(null);
+    setFiles([]);
+    setDone(false);
+    setConnectError(null);
   }, []);
 
   const startIngest = useCallback(async () => {
@@ -705,7 +798,49 @@ export default function WikiPage() {
       {/* 폴더 탭 */}
       {activeTab === "folder" && (
         <main className="flex-1 flex flex-col items-center justify-start px-6 py-12 max-w-2xl mx-auto w-full">
-          {!dirHandle ? (
+          {!dirHandle && savedHandle ? (
+            /* 이전 폴더 복원 UI */
+            <div className="flex flex-col items-center gap-6 text-center mt-16">
+              <div
+                className="w-20 h-20 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}
+              >
+                <FolderOpen size={32} style={{ color: "#a78bfa" }} />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold mb-2" style={{ color: "#e2e8f0" }}>이전 폴더 이어서 사용</h2>
+                <p className="text-sm" style={{ color: "#64748b" }}>
+                  마지막으로 연결했던 폴더를 다시 열까요?
+                </p>
+                <p className="text-sm font-medium mt-1" style={{ color: "#a78bfa" }}>
+                  📂 {savedHandle.name}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={restoreFolder}
+                  disabled={restoringHandle}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all"
+                  style={{ background: "linear-gradient(135deg, rgba(109,40,217,0.6) 0%, rgba(79,70,229,0.6) 100%)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.35)", boxShadow: "0 0 20px rgba(109,40,217,0.2)", opacity: restoringHandle ? 0.6 : 1 }}
+                >
+                  {restoringHandle ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+                  이어서 계속
+                </button>
+                <button
+                  onClick={connectFolder}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all"
+                  style={{ color: "#64748b", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  다른 폴더
+                </button>
+              </div>
+              {connectError && (
+                <div className="w-full max-w-sm px-4 py-2.5 rounded-xl text-xs text-center" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
+                  {connectError}
+                </div>
+              )}
+            </div>
+          ) : !dirHandle ? (
             <div className="flex flex-col items-center gap-6 text-center mt-16">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center"
@@ -748,7 +883,7 @@ export default function WikiPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {done && <span className="text-xs" style={{ color: "#34d399" }}>완료 {doneCount} / 오류 {errorCount}</span>}
-                  <button onClick={connectFolder} className="text-xs px-3 py-1 rounded-full transition-all" style={{ color: "#475569", border: "1px solid rgba(255,255,255,0.07)" }}>폴더 변경</button>
+                  <button onClick={disconnectFolder} className="text-xs px-3 py-1 rounded-full transition-all" style={{ color: "#475569", border: "1px solid rgba(255,255,255,0.07)" }}>폴더 변경</button>
                 </div>
               </div>
               {files.length === 0 ? (
