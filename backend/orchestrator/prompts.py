@@ -266,8 +266,13 @@ UX 리서치 리포트. ## 구조로: 사용자 퍼소나 → 핵심 페인포�
 {feedback}
 규칙:
 - 반드시 완성된 단일 HTML 파일을 ```html 코드블록으로 출력
-- 인라인 CSS 포함 (외부 파일 없이 동작해야 함)
-- 모던·반응형 디자인. 실제 데이터·수치 활용
+- CDN 적극 활용: Tailwind CSS (https://cdn.tailwindcss.com), Font Awesome 6 (https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css), Google Fonts
+- 인라인 <style> + Tailwind 클래스 병행 가능. 외부 파일 없이 동작해야 함
+- 반드시 포함: hover 효과, CSS transition/animation 1개 이상, 그라디언트·그림자
+- 실제 데이터·수치·이름 하드코딩 (Lorem ipsum 금지. 팩트 데이터를 실제 콘텐츠로 활용)
+- 모바일 반응형 (Tailwind sm:/md: 프리픽스 또는 @media 쿼리)
+- 섹션별 HTML 주석 추가 (<!-- Hero -->, <!-- Features -->, <!-- CTA --> 등)
+- 완성도 높은 실제 서비스 수준으로. 빈 섹션·미완성 컴포넌트 없을 것
 - HTML 앞뒤로 설명 텍스트 없음. 코드블록만 출력
 ```html
 <!DOCTYPE html>
