@@ -245,35 +245,17 @@ def get_wiki_graph():
                 if w > 0.5:
                     links.append({"source": slugs[i], "target": slugs[j], "weight": round(w, 3)})
 
-        # source 노드 — 파일시스템에서 읽기
-        rng = np.random.RandomState(42)
+        # source 메타데이터 — 노드로 추가하지 않고 concept 노드의 sourceDocs 필드로 첨부
         sources_dir = WIKI_DIR / "wiki" / "sources"
+        concept_sources: dict[str, list[str]] = {}
         if sources_dir.exists():
             for src_file in sorted(sources_dir.glob("*.md")):
                 stem = src_file.stem
                 parent_id = stem[:-7] if stem.endswith("-source") else stem
-                preview = ""
-                try:
-                    preview = src_file.read_text(encoding="utf-8", errors="replace")[:3000]
-                except Exception:
-                    pass
-                ppx, ppy, ppz = slug_to_pos.get(parent_id, (0.0, 0.0, 0.0))
-                offset = rng.randn(3) * 18.0
-                nodes.append({
-                    "id": stem,
-                    "type": "source",
-                    "parentId": parent_id,
-                    "size": 1,
-                    "cluster": filename_to_cluster.get(parent_id, 0),
-                    "tags": [],
-                    "preview": preview,
-                    "title": stem,
-                    "x": round(ppx + float(offset[0]), 2),
-                    "y": round(ppy + float(offset[1]), 2),
-                    "z": round(ppz + float(offset[2]), 2),
-                })
-                if parent_id in slug_set:
-                    links.append({"source": parent_id, "target": stem, "weight": 0.8})
+                concept_sources.setdefault(parent_id, []).append(stem)
+
+        for node in nodes:
+            node["sourceDocs"] = concept_sources.get(node["id"], [])
 
         return {"nodes": nodes, "links": links}
     finally:

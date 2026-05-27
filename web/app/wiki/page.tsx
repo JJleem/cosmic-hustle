@@ -79,6 +79,7 @@ interface GraphNode {
   preview: string;
   title: string;
   parentId?: string;
+  sourceDocs?: string[];
   x?: number;
   y?: number;
   z?: number;
@@ -194,17 +195,10 @@ export default function WikiPage() {
     }).length;
   }, [selectedNode, graphData]);
 
-  const sourceDocs = useMemo(() => {
-    if (!selectedNode || !graphData) return [];
-    const ids = new Set<string>();
-    graphData.links.forEach((l) => {
-      const s = typeof l.source === "object" ? (l.source as GraphNode).id : l.source;
-      const t = typeof l.target === "object" ? (l.target as GraphNode).id : l.target;
-      if (s === selectedNode.id) ids.add(t);
-      if (t === selectedNode.id) ids.add(s);
-    });
-    return graphData.nodes.filter((n) => ids.has(n.id) && n.type === "source");
-  }, [selectedNode, graphData]);
+  const sourceDocs = useMemo(
+    () => selectedNode?.sourceDocs ?? [],
+    [selectedNode]
+  );
 
   // 그래프 컨테이너 크기 — ref에만 저장해 D3 재렌더를 트리거하지 않음
   // 리사이즈 시 SVG 크기와 forceCenter만 갱신
@@ -1089,11 +1083,11 @@ export default function WikiPage() {
                     출처 문서 ({sourceDocs.length})
                   </p>
                   <div className="overflow-y-auto" style={{ maxHeight: "100px" }}>
-                    {sourceDocs.map((doc) => (
-                      <div key={doc.id} className="flex items-center gap-2.5 px-5 py-1.5">
+                    {sourceDocs.map((stem) => (
+                      <div key={stem} className="flex items-center gap-2.5 px-5 py-1.5">
                         <FileText size={10} style={{ color: "#334155", flexShrink: 0 }} />
                         <span className="text-[11px] truncate" style={{ color: "#475569" }}>
-                          {formatNodeTitle(doc.title || doc.id)}
+                          {formatNodeTitle(stem)}
                         </span>
                       </div>
                     ))}
