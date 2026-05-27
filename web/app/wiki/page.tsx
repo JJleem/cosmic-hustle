@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as d3 from "d3";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, RefreshCw, Clock } from "lucide-react";
+import { ArrowLeft, FolderOpen, FileText, CheckCircle2, XCircle, Loader2, Library, Network, Maximize2, Search, RefreshCw, Clock, Pencil } from "lucide-react";
 
 function formatNodeTitle(raw: string): string {
   return raw.replace(/[-_]+/g, " ").trim();
@@ -144,6 +144,9 @@ export default function WikiPage() {
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const graphContainerRef = useRef<HTMLDivElement>(null);
   const graphDimsRef = useRef({ width: 800, height: 600 }); // state 대신 ref — 리사이즈 시 D3 재렌더 방지
@@ -629,6 +632,33 @@ export default function WikiPage() {
     setActiveTab("graph");  // 완료 후 그래프 탭으로 이동
   }, [dirHandle, files, running]);
 
+  // selectedNode 바뀌면 edit mode 초기화
+  useEffect(() => {
+    setEditMode(false);
+    setEditContent("");
+  }, [selectedNode?.id]);
+
+  const handleEditSave = useCallback(async () => {
+    if (!selectedNode) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/wiki/${selectedNode.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editContent }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const updated = { ...selectedNode, preview: editContent };
+      setSelectedNode(updated);
+      setGraphData((prev) =>
+        prev ? { ...prev, nodes: prev.nodes.map((n) => n.id === selectedNode.id ? { ...n, preview: editContent } : n) } : null
+      );
+      setEditMode(false);
+    } finally {
+      setEditSaving(false);
+    }
+  }, [selectedNode, editContent]);
+
   // 연결 노드 클릭 → 해당 노드로 이동 + 줌
   const handleConnectedNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
@@ -949,17 +979,29 @@ export default function WikiPage() {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelectedNode(null)}
-                  className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
-                  style={{ color: "#475569", fontSize: "16px" }}
-                >
-                  ×
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {selectedNode.type === "concept" && !editMode && (
+                    <button
+                      onClick={() => { setEditContent(stripFrontmatter(selectedNode.preview || "")); setEditMode(true); }}
+                      className="w-6 h-6 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
+                      style={{ color: "#475569" }}
+                      title="편집"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedNode(null)}
+                    className="w-6 h-6 flex items-center justify-center rounded-full transition-colors hover:bg-white/5"
+                    style={{ color: "#475569", fontSize: "16px" }}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
 
               {/* 태그 */}
-              {selectedNode.tags.length > 0 && (
+              {!editMode && selectedNode.tags.length > 0 && (
                 <div className="px-5 py-2.5 flex flex-wrap gap-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                   {selectedNode.tags.map((tag) => (
                     <span key={tag} className="px-2 py-0.5 rounded-full text-[10px]"
@@ -970,13 +1012,52 @@ export default function WikiPage() {
                 </div>
               )}
 
-              {/* 본문 */}
-              <div className="flex-1 overflow-y-auto px-5 py-4" style={{ minHeight: 0 }}>
-                <ContentRenderer text={stripFrontmatter(selectedNode.preview || "")} />
-              </div>
+              {/* 본문 / 편집 */}
+              {editMode ? (
+                <div className="flex-1 flex flex-col px-4 py-3 gap-2" style={{ minHeight: 0 }}>
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="flex-1 resize-none rounded-lg p-3 text-xs leading-relaxed outline-none"
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(99,60,220,0.25)",
+                      color: "#cbd5e1",
+                      fontFamily: "monospace",
+                      caretColor: "#a78bfa",
+                      minHeight: 0,
+                    }}
+                  />
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={handleEditSave}
+                      disabled={editSaving}
+                      className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style={{
+                        background: editSaving ? "rgba(255,255,255,0.03)" : "rgba(109,40,217,0.5)",
+                        border: "1px solid rgba(139,92,246,0.35)",
+                        color: editSaving ? "#334155" : "#c4b5fd",
+                      }}
+                    >
+                      {editSaving ? <Loader2 size={12} className="animate-spin mx-auto" /> : "저장"}
+                    </button>
+                    <button
+                      onClick={() => setEditMode(false)}
+                      className="px-4 py-1.5 rounded-lg text-xs transition-all"
+                      style={{ border: "1px solid rgba(255,255,255,0.07)", color: "#475569" }}
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto px-5 py-4" style={{ minHeight: 0 }}>
+                  <ContentRenderer text={stripFrontmatter(selectedNode.preview || "")} />
+                </div>
+              )}
 
               {/* 연결된 개념 목록 */}
-              {connectedNodes.length > 0 && (
+              {!editMode && connectedNodes.length > 0 && (
                 <div className="shrink-0" style={{ borderTop: "1px solid rgba(99,60,220,0.1)" }}>
                   <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold" style={{ color: "#334155" }}>
                     연결된 개념 ({connectedNodes.length})
@@ -1002,7 +1083,7 @@ export default function WikiPage() {
               )}
 
               {/* 출처 문서 */}
-              {sourceDocs.length > 0 && (
+              {!editMode && sourceDocs.length > 0 && (
                 <div className="shrink-0" style={{ borderTop: "1px solid rgba(99,60,220,0.08)" }}>
                   <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold" style={{ color: "#334155" }}>
                     출처 문서 ({sourceDocs.length})

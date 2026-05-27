@@ -1,7 +1,7 @@
 import re
 from datetime import date
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import numpy as np
 import networkx as nx
@@ -68,6 +68,10 @@ class IngestRequest(BaseModel):
 
 class IngestLocalRequest(BaseModel):
     filename: str
+    content: str
+
+
+class PatchWikiRequest(BaseModel):
     content: str
 
 
@@ -274,6 +278,32 @@ def get_wiki_graph():
         return {"nodes": nodes, "links": links}
     finally:
         db.close()
+
+
+@router.get("/{entry_id}")
+def get_wiki_entry(entry_id: str):
+    db = SessionLocal()
+    try:
+        entry = db.query(WikiEntry).filter(WikiEntry.filename == f"{entry_id}.md").first()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Not found")
+        return {"id": entry_id, "title": entry.title, "content": entry.content}
+    finally:
+        db.close()
+
+
+@router.patch("/{entry_id}")
+def patch_wiki_entry(entry_id: str, body: PatchWikiRequest):
+    db = SessionLocal()
+    try:
+        entry = db.query(WikiEntry).filter(WikiEntry.filename == f"{entry_id}.md").first()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Not found")
+        title = entry.title
+    finally:
+        db.close()
+    upsert_wiki_entry(f"{entry_id}.md", title, body.content)
+    return {"ok": True, "id": entry_id}
 
 
 @router.post("/sync")
