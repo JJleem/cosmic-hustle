@@ -135,101 +135,63 @@ cd web && npm install && npm run dev   # → http://localhost:3000
 
 ---
 
-## 현재 상태 (2026-05-26)
+## 현재 상태 (2026-05-27)
 
-### 완료된 기능
+### 완료된 기능 (전체 요약)
 
-- 엔드투엔드 파이프라인 동작 (plan → wiki+pocke 병렬 → ka → writer → fact 루프 → ping+wiki)
-- SSE 실시간 스트리밍 (청크 단위)
-- 포케 WebSearch 직접 사용 (Tavily 제거)
-- 포케 0-data 버그 수정 + 자동 1회 재시도
-- 오버 무한 작업 버그 수정
-- AgentImage talk 애니메이션: talk_0~2만 표시, 다른 레이어 차단
-- 에이전트별 CLAUDE.md + cwd 격리 (토큰 절감)
-- 프로젝트 생성 UI → 채팅 pre-flight 교체 (플랜 → writer 순차 질문)
-- PDF/Excel export (`GET /api/reports/{id}/export?format=pdf|excel`)
-- 리포트 버전 관리 + diff 뷰 (v1/v2/v3 탭)
-- 타임라인 간트 뷰
-- pgvector 위키 시맨틱 서치
-- 에러 처리 강화 (503/502 구분, 에러 배너 타이핑 효과)
-- **UI 전면 개편 완료** — 오피스 퍼스트 레이아웃
-  - 탭 제거, 오피스가 기본 화면
-  - 대시보드 → 우측 사령부 서랍 (리포트/히스토리/메모)
-  - 헤더 슬림화 (임무 상태 + 사령부/설정/임무배정 버튼)
-  - 플랜 클릭 → 임무 배정 모달 직접 연결
-  - 에이전트 클릭 시 live 스트림 + thinking 힌트 표시
-  - holo-scan 애니메이션, floor-glow, console-glow-top
-  - 파이프라인 바 에이전트 미니 아바타
-  - 13인치 반응형 개선
-- 에이전트 11명 사원증 이미지 제작 완료 (`web/public/id/{agentId}.png`) — 실버 ID카드 프레임 3D 일러스트
-- **엔터프라이즈 리팩토링 완료 (Phase 1~3)**
-  - Phase 2: ReportBoard 936→42줄 컴포넌트 분리 (ReportList, ReportViewer, reportUtils)
-  - Phase 3-A: `orchestrator/types.py` Pydantic v2 모델 7개 (`_parse_typed` 헬퍼)
-  - Phase 3-B: Zustand 5 스토어 3개 분리 — `page.tsx` 984→728줄, useState 25→2개
-  - Phase 3-C: pytest 단위 테스트 52개 (types/prompts/pipeline 전체 커버)
-  - 버그 수정: pipeline.py `ka.get()` dict 접근 패턴 3곳 → `.conclusion` 속성 접근
-  - 버그 수정: `speak` useCallback `[agent]` 의존성 무한루프 → `getState()` 직접 호출
-- **루트 에러 로그 시스템**
-  - `system_logs` DB 테이블 + Alembic 005 마이그레이션
-  - `db/logger.py` `log_error()` — 파이프라인 7개 except 블록 연결
-  - `GET/POST /api/logs` (level/source/session_id 필터)
-  - 프론트 `console.error` 인터셉트 훅 (`useErrorLogger`)
-  - Root 에이전트 워크스페이스 — 에러 로그 탭 (level 필터, stack_trace 펼치기)
-- **파이프라인 안정성 강화 (2026-05-15)**
-  - Fact Option B: 팩트는 피드백만 전달(passed 항상 true), 라이터 2회 실행 구조로 변경
-  - 팩트 루프 2회 → writer 1회+fact+writer 1회 고정 흐름 (불필요한 반복 제거)
-  - 포케 max_turns 5→8: ToolSearch+WebSearch n회 후 JSON 출력 턴 부족 문제 수정
-  - `result` 이벤트 subtype 무관 캡처: max_turns 초과 시 포케 JSON 유실 방지
-  - `stage_plan` try/except 추가: 플랜 실패해도 fallback으로 파이프라인 계속 진행
-  - wiki_update 경로 수정: `wiki-llm/concepts/` → `wiki/concepts/` (sync 경로 일치)
-  - `find_claude()` 플랫폼 분기: macOS `.bin/claude` 우선, Windows `claude.exe` 우선
-  - stderr drain 추가: subprocess 버퍼 블로킹 방지
-  - 프론트 에러 이벤트: 3초 타이머 제거, 즉시 idle 전환 + finally 경쟁 조건 해결
-  - MemoBoard 에러 UX: toast + 재시도 버튼 (sonner)
-  - WikiIngest silent fail 수정: inner try-catch가 에러 이벤트 삼키던 문제 해결
-- **태스크 중단·재시작** — pause/restart endpoint + checkpoint 저장
-  - `POST /api/research/{id}/pause` / `POST /api/research/{id}/restart`
-  - `_save_checkpoint()`: after_plan / after_research / after_analysis 단계별 저장
-  - pipeline.py 각 스테이지에서 pause 체크포인트 삽입
-- **사원증 UI** — TeamRoster.tsx, `/public/id/*.png` 11개 활용
-  - 호버 시 scale + glow 효과 (에이전트별 컬러)
-  - 활성/비활성/완료 상태 뱃지 표시
-- **토큰 최적화 (2026-05-26)**
-  - plan·pocke → Haiku 전환, wiki dir 범위 축소, key_facts 7개 슬라이싱
-  - 프로젝트당 ~30% → ~17% 절감
-- **design_ui 전용 파이프라인 개선 (2026-05-26)**
-  - pre-flight 질문: 컬러계열·레이아웃·primary color 텍스트 입력
-  - 위키 읽기·업데이트 스킵
-  - ka_design_ui 전용 프롬프트 (레이아웃·컬러 관점)
-  - pixel 라이터 타임아웃 300초
-- **design_ux 전용 ka_design_ux 프롬프트** — 사용자 관점 분석
-- **전 태스크 타임아웃 교정** — over계열 180초, root/wiki_update 명시적 120초
-- **파이프라인 완료 후 에이전트 상태 복구** — 3초 후 idle 리셋
+**코어 파이프라인**
+- 엔드투엔드 파이프라인 (plan → wiki+pocke 병렬 → ka → writer → fact → ping+wiki)
+- SSE 실시간 스트리밍, 포케 WebSearch 직접 사용, 팩트 항상 통과 + writer 2회 고정 실행
+- 태스크 중단·재시작 (`POST /api/research/{id}/pause|restart` + checkpoint 3단계)
+- PDF/Excel export, 리포트 버전 관리 + diff 뷰, 타임라인 간트 뷰
+- 에러 로그 시스템 (`system_logs` DB + `GET/POST /api/logs` + 루트 워크스페이스 탭)
+- 에이전트별 CLAUDE.md + cwd 격리, 토큰 최적화 (plan·pocke Haiku, ~30%→~17%)
 
-### 파이프라인 핵심 동작 (현재)
+**UI / 오피스**
+- 오피스 퍼스트 레이아웃 (헤더 슬림화, 사령부 서랍, 에이전트 클릭 live 스트림)
+- 사원증 UI (TeamRoster.tsx, `web/public/id/*.png` 11개)
+- Zustand 5 스토어 3개 분리 (agentStore / sessionStore / dataStore)
+- pytest 단위 테스트 52개 (types/prompts/pipeline 전체 커버)
+
+**위키 페이지** (`web/app/wiki/page.tsx`) — 2026-05-27 완성
+- D3 v7 지식 그래프: 코사인 유사도 엣지 + Leiden 커뮤니티 클러스터 + convex hull 오버레이
+- 백엔드 서버사이드 spring_layout 3D 좌표 → 클라이언트 alphaDecay(0.05) 빠른 정착
+- 검색 필터, 타임라인 슬라이더 (createdAt 기준), 클러스터 범례
+- **카메라 고정**: zoom.filter()로 노드 클릭 시 pan 차단 / ResizeObserver는 SVG 크기만 갱신
+- **노드 드래그**: 표준 D3 drag 패턴 (isDragging 플래그 없음, event.active 정상 동작)
+- 소스 노드 그래프에서 제거 → 사이드 패널 "출처 문서" 섹션으로 이동
+- 인라인 편집: Pencil 버튼 → textarea → PATCH /api/wiki/{id} → 즉시 반영
+- 위키 대리 인트로 토스트 (talk_0~2 애니메이션, 68px 이미지, 12s 타이머, ⏸ 버튼)
+- 폴더 탭 진입 시 별도 폴더 안내 토스트, `?` 버튼으로 탭별 재표시
+- **IndexedDB 폴더 영속화**: 브라우저 재방문/페이지 이동 후에도 이전 폴더 자동 복원 UI
+  - `saveHandleToIDB` / `loadHandleFromIDB` / `clearHandleFromIDB` 헬퍼
+  - 복원 UI: 폴더명 표시 + "이어서 계속" / "다른 폴더" 버튼
+  - `restoreFolder`: queryPermission → requestPermission → 파일 재스캔
+  - 폴더 변경 버튼: `disconnectFolder()` → IDB 클리어 + 상태 전체 초기화
+- ingest-local 완료 → DB 자동 upsert + 그래프 탭 자동 이동
+
+**백엔드 위키 API** (`backend/routers/wiki.py`)
+- `GET /api/wiki/graph` — concept 노드만 반환, sourceDocs[] 필드 첨부 (소스 노드 제거)
+- `GET /api/wiki/{entry_id}` — 단일 항목 조회
+- `PATCH /api/wiki/{entry_id}` — 내용 수정 + 재임베딩 (upsert_wiki_entry)
+- `POST /api/wiki/ingest-local` — concept → DB 자동 upsert
+- `POST /api/wiki/sync` — wiki/concepts/ 폴더 전체 DB 동기화
+
+### 파이프라인 핵심 동작
 
 ```
 writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 → 완료
-                                                  ↑ fact_feedback 반영
 ```
 - 팩트는 절대 passed:false 반환 안 함 (프롬프트 강제)
-- 라이터는 항상 정확히 2번 실행 (1회 초안 → 1회 수정본)
+- 라이터 정확히 2번 실행 (초안 → 수정본)
 - 포케 max_turns=8 (ToolSearch 1 + WebSearch 최대 6 + JSON 출력 1)
 
-### 에이전트 모델 배정 (2026-05-26 기준)
+### 에이전트 모델 배정
 
-| 에이전트 | 모델 | 이유 |
-|---------|------|------|
-| wiki, fact, ping, root, plan, pocke | Haiku | 단순 포맷팅·검색·분류 |
-| ka, over, pixel, buzz, run | Sonnet | 분석·창작·복잡한 추론 |
-
-### 토큰 최적화 내역 (2026-05-26)
-
-- wiki dir을 wiki 에이전트에만 전달 (기존: 전체 에이전트)
-- key_facts 최대 7개 슬라이싱 (카·라이터 input 절감)
-- plan, pocke → Haiku 전환
-- design_ui: 위키 읽기·업데이트 스킵 (HTML 생성에 과거 리서치 무의미)
-- 프로젝트당 토큰 사용량: ~30% → ~17%
+| 에이전트 | 모델 |
+|---------|------|
+| wiki, fact, ping, root, plan, pocke | Haiku |
+| ka, over, pixel, buzz, run | Sonnet |
 
 ### 남은 로드맵
 
@@ -239,7 +201,7 @@ writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 �
 [ ] 배경 리서치 — CEO가 다른 일 하는 동안 실행, 완료 알림
 
 새 기능
-[ ] 에이전트 expression 시스템 — 기본 구조(agentStore + SSE) 완료, sad/err/happy 이미지 파일만 추가하면 됨 (현재 항상 null 발신)
+[ ] 에이전트 expression 시스템 — agentStore+SSE 구조 완료, sad/err/happy 이미지 파일만 추가하면 됨
 [ ] 리포트 → Notion/슬랙 내보내기
 [ ] 정기 리서치 예약 — cron 기반 ("매주 월요일 경쟁사 동향")
 [ ] 멀티 프로젝트 동시 실행 (현재 1개만)
@@ -248,7 +210,7 @@ writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 �
 [ ] AWS Lightsail 배포
 [ ] Phase 5: LangGraph + Anthropic API 전환
 [ ] 3D 회의실 UI
-[ ] Gemini Imagen 썸네일 자동 생성 — pixel_thumbnail 프롬프트 이미 존재, Google AI Studio 무료 티어 활용 예정
+[ ] Gemini Imagen 썸네일 자동 생성 (pixel_thumbnail 프롬프트 완료, Google AI Studio 무료 티어)
 ```
 
 ---
@@ -273,6 +235,11 @@ POST   /api/memos                           # 메모 생성
 DELETE /api/memos/{id}
 GET    /api/wiki/search?q=                  # 위키 시맨틱 서치
 POST   /api/wiki/ingest                     # 위키 저장 + 임베딩
+POST   /api/wiki/ingest-local               # 로컬 파일 → concept+source 마크다운 변환 + DB upsert
+GET    /api/wiki/graph                      # 전체 그래프 (nodes + links, concept만)
+GET    /api/wiki/{entry_id}                 # 단일 위키 항목 조회
+PATCH  /api/wiki/{entry_id}                 # 위키 내용 수정 + 재임베딩
+POST   /api/wiki/sync                       # wiki/concepts/ 폴더 전체 DB 동기화
 GET    /api/logs?level=&source=&session_id= # 에러 로그 조회 (최신순, 최대 200)
 POST   /api/logs                            # 에러 로그 저장 (프론트엔드 → 백엔드)
 ```
