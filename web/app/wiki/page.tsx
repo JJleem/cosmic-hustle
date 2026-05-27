@@ -433,24 +433,19 @@ export default function WikiPage() {
         d3.select(this).select(".sel-ring").attr("stroke-opacity", 0.9);
       });
 
-    // 드래그
-    let isDragging = false;
+    // 드래그 — 표준 D3 패턴. 카메라 이동은 zoom.filter로 차단하므로 sim restart 제한 불필요
     nodeSel.call(
       d3.drag<SVGGElement, SimNode>()
-        .clickDistance(6)
-        .on("start", (_, d) => {
-          isDragging = false;
+        .on("start", (event, d) => {
+          if (!event.active) sim.alphaTarget(0.3).restart();
           d.fx = d.x; d.fy = d.y;
         })
         .on("drag", (event, d) => {
-          // 실제 drag 이벤트가 왔을 때만 시뮬레이션 재시작 — 단순 클릭 시 노드 이동 방지
-          if (!isDragging) { isDragging = true; if (!event.active) sim.alphaTarget(0.3).restart(); }
           d.fx = event.x; d.fy = event.y;
         })
         .on("end", (event, d) => {
-          if (isDragging && !event.active) sim.alphaTarget(0);
+          if (!event.active) sim.alphaTarget(0);
           d.fx = null; d.fy = null;
-          isDragging = false;
         })
     );
     // Force 시뮬레이션 — 생성 시 link.source/target이 node ref로 변환됨
