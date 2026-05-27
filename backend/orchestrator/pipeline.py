@@ -632,6 +632,8 @@ class _Pipeline:
         self.emit("agent_done", agentId="fact", message="피드백 전달. 수정 부탁해요.")
         if is_dev_task:
             feedback = "초안을 스스로 검토해. 보안 취약점·로직 오류·미구현 항목을 점검하고 완성도를 높여줘."
+        elif self.task_type == "design_ui":
+            feedback = "HTML을 스스로 검토해. 접근성(alt 속성·색상 대비), 반응형(모바일 브레이크포인트), 빠진 섹션·버튼·hover 효과 완성도를 점검하고 개선해줘."
         else:
             feedback = "초안을 스스로 검토해. 출처 없는 수치·날짜는 삭제하거나 완화하고, 논리 흐름을 점검해서 완성도를 높여줘."
         return True, feedback, live_pocke
