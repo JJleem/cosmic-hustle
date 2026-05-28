@@ -349,6 +349,8 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
 
     full_prompt = (
         f"{scene_prompt}, "
+        f"featuring {persona['appearance']}, "
+        "full scene wide shot showing character in environment, dynamic action composition, "
         "Pixar 3D animation style, cinematic soft lighting, vibrant saturated colors, "
         "expressive cartoon character, smooth polished 3D render, "
         "high quality animation still frame, no text, no watermark"
@@ -362,7 +364,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
             arguments={
                 "image_url": char_url,
                 "prompt": full_prompt,
-                "strength": 0.60,
+                "strength": 0.35,
                 "num_inference_steps": 30,
                 "guidance_scale": 7.5,
                 "image_size": "landscape_4_3",
