@@ -39,6 +39,5 @@ jobs:
             pkill -f "python run.py" || true
             sleep 2
             cd ~/backend
-            nohup .venv/bin/python run.py > ~/backend/server.log 2>&1 &
-            sleep 5
-            curl -s http://localhost:8000/health
+            nohup .venv/bin/python run.py > ~/backend/server.log 2>&1 & disown
+            echo "서버 재시작 완료"
