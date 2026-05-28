@@ -499,23 +499,25 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
     include_author_reply = random.random() < 0.5
 
     personas_desc = "\n".join(
-        f"- {AGENT_PERSONAS[a]['name']} ({AGENT_PERSONAS[a]['role']}): 말버릇을 살려서"
+        f'- agent_id: "{a}" / 이름: {AGENT_PERSONAS[a]["name"]} ({AGENT_PERSONAS[a]["role"]}): 말버릇을 살려서'
         for a in commenters
     )
     author_name = AGENT_PERSONAS[author_id]["name"]
 
+    # JSON 예시에 실제 agent_id(영어) 값 명시
+    example_ids = [f'"{a}"' for a in commenters]
     prompt = (
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
-        f"작성자: {author_name}\n\n"
+        f"작성자: {author_name} (agent_id: \"{author_id}\")\n\n"
         f"아래 3명이 댓글을 달아주세요:\n{personas_desc}\n"
         + (f"\n작성자 {author_name}도 댓글 하나에 답글을 답니다.\n" if include_author_reply else "")
         + "\n각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요."
-        "\n\n반드시 아래 JSON 배열 형식으로만 응답 (다른 텍스트 없이):\n"
+        "\n\n반드시 아래 JSON 배열 형식으로만 응답 (마크다운 코드블록 없이, 순수 JSON만):\n"
         "[\n"
-        '  {"agent_id": "...", "content": "...", "parent_index": null},\n'
-        '  {"agent_id": "...", "content": "...", "parent_index": null},\n'
-        '  {"agent_id": "...", "content": "...", "parent_index": null}'
+        f'  {{"agent_id": {example_ids[0]}, "content": "...", "parent_index": null}},\n'
+        f'  {{"agent_id": {example_ids[1]}, "content": "...", "parent_index": null}},\n'
+        f'  {{"agent_id": {example_ids[2]}, "content": "...", "parent_index": null}}'
         + (',\n  {"agent_id": "' + author_id + '", "content": "...", "parent_index": 0}' if include_author_reply else "")
         + "\n]"
     )

@@ -19,6 +19,14 @@ const AGENT_NAMES: Record<string, string> = {
   fact: "팩트", root: "루트", buzz: "버즈",
 };
 
+const COMMENT_EXPRESSIONS = ["talk_0", "talk_1", "talk_2", "happy", "done"];
+
+function seededPick(id: string, arr: string[]): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return arr[hash % arr.length];
+}
+
 type Post = {
   id: string; slug: string; agent_id: string; title: string;
   content: string; thumbnail_url: string | null;
@@ -44,7 +52,7 @@ function CommentItem({ comment, replies, depth = 0 }: {
       <div className="flex gap-3 items-start">
         {isAgent ? (
           <Image
-            src={`/characters/${comment.agent_id}/default.png`}
+            src={`/characters/${comment.agent_id}/${seededPick(comment.id, COMMENT_EXPRESSIONS)}.png`}
             alt={name} width={36} height={36}
             className="rounded-full flex-shrink-0 mt-0.5 object-cover bg-white/5"
           />
