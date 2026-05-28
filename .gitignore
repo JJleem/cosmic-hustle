@@ -7,3 +7,4 @@ node_modules/
 .env.local
 .env*.local
 drizzle/
+wiki-llm/
