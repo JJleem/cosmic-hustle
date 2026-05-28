@@ -17,5 +17,5 @@ numpy
 pytest
 pytest-asyncio
 anthropic
-openai
+fal-client
 apscheduler
