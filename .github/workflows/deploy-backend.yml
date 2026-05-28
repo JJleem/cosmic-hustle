@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            backend
+          sparse-checkout-cone-mode: true
 
       - name: Deploy to Lightsail
         env:
