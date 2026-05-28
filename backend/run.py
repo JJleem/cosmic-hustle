@@ -7,4 +7,5 @@ if sys.platform == "win32":
 import uvicorn
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    # host="0.0.0.0" — 외부 접속 허용 (Lightsail 배포용)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
