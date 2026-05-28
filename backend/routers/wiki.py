@@ -242,7 +242,7 @@ def get_wiki_graph():
         for i in range(n):
             for j in range(i + 1, n):
                 w = float(sim[i, j])
-                if w > 0.5:
+                if w > 0.75:
                     links.append({"source": slugs[i], "target": slugs[j], "weight": round(w, 3)})
 
         # source 메타데이터 — 노드로 추가하지 않고 concept 노드의 sourceDocs 필드로 첨부
