@@ -16,21 +16,28 @@ jobs:
             backend
           sparse-checkout-cone-mode: true
 
-      - name: Deploy to Lightsail
-        env:
-          SSH_KEY: ${{ secrets.LIGHTSAIL_KEY }}
-          HOST: ${{ secrets.LIGHTSAIL_HOST }}
-        run: |
-          echo "$SSH_KEY" > /tmp/deploy_key.pem
-          chmod 600 /tmp/deploy_key.pem
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_KEY }}
+          source: "backend/"
+          target: "~/"
+          strip_components: 0
+          rm: false
+          exclude: ".venv,__pycache__,*.pyc,.env"
 
-          rsync -avz --delete \
-            --exclude '.venv' \
-            --exclude '__pycache__' \
-            --exclude '*.pyc' \
-            --exclude '.env' \
-            -e "ssh -i /tmp/deploy_key.pem -o StrictHostKeyChecking=no" \
-            backend/ ubuntu@$HOST:~/backend/
-
-          ssh -i /tmp/deploy_key.pem -o StrictHostKeyChecking=no ubuntu@$HOST \
-            "pkill -f 'python run.py' || true; sleep 2; cd ~/backend && nohup .venv/bin/python run.py > ~/backend/server.log 2>&1 &"
+      - name: Restart server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_KEY }}
+          script: |
+            pkill -f "python run.py" || true
+            sleep 2
+            cd ~/backend
+            nohup .venv/bin/python run.py > ~/backend/server.log 2>&1 &
+            sleep 5
+            curl -s http://localhost:8000/health
