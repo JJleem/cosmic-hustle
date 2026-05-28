@@ -101,6 +101,6 @@ class WikiEntry(Base):
     filename = Column(String, unique=True, nullable=False)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(384), nullable=True)
+    embedding = Column(Vector(768), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())
