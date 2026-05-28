@@ -528,6 +528,10 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
     )
 
     raw = message.content[0].text.strip()
+    # ```json ... ``` 코드블록 제거
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw.strip())
     try:
         items = json.loads(raw)
     except json.JSONDecodeError:
