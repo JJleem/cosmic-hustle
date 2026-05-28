@@ -89,7 +89,7 @@ export default function BlogPreviewPage() {
             const color = AGENT_COLORS[post.agent_id] ?? "#ffffff";
             const name  = AGENT_NAMES[post.agent_id] ?? post.agent_id;
             const date  = new Date(post.published_at).toLocaleDateString("ko-KR", {
-              month: "long", day: "numeric",
+              month: "long", day: "numeric", timeZone: "Asia/Seoul",
             });
             return (
               <Link key={post.id} href={`/blog-preview/${post.slug}`} className="group block rounded-xl overflow-hidden border border-white/10 hover:border-white/25 bg-white/5 transition-colors">

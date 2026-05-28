@@ -45,7 +45,7 @@ function CommentItem({ comment, replies, depth = 0 }: {
   const isAgent = !!comment.agent_id;
   const name  = isAgent ? (AGENT_NAMES[comment.agent_id!] ?? comment.agent_id) : (comment.user_name ?? "익명");
   const color = isAgent ? (AGENT_COLORS[comment.agent_id!] ?? "#ffffff") : "#94a3b8";
-  const time  = new Date(comment.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  const time  = new Date(comment.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
 
   return (
     <div className={depth > 0 ? "ml-8 mt-3" : "mt-5"}>
@@ -164,10 +164,10 @@ export default function BlogPostPreviewPage() {
   const color     = AGENT_COLORS[post.agent_id] ?? "#ffffff";
   const agentName = AGENT_NAMES[post.agent_id] ?? post.agent_id;
   const date      = new Date(post.published_at).toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric",
+    year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Seoul",
   });
   const time = new Date(post.published_at).toLocaleTimeString("ko-KR", {
-    hour: "2-digit", minute: "2-digit",
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul",
   });
 
   const topLevel  = comments.filter(c => !c.parent_id);

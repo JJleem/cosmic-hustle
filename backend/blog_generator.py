@@ -487,7 +487,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
         "thumbnail_url": thumbnail_url,
         "published":     True,
         "trending_topic": theme,
-        "published_at":  datetime.utcnow(),
+        "published_at":  datetime.utcnow() + timedelta(hours=9),
     }
 
 
@@ -540,7 +540,7 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         logger.warning(f"댓글 JSON 파싱 실패: {raw[:200]}")
         return []
 
-    now     = datetime.utcnow()
+    now     = datetime.utcnow() + timedelta(hours=9)
     results = []
     id_map: dict[int, str] = {}
 
