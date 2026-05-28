@@ -48,7 +48,7 @@ AGENT_SEARCH_QUERIES: dict[str, str] = {
 AGENT_PERSONAS: dict[str, dict] = {
     "buzz": {
         "name": "버즈", "title": "대리", "role": "마케터",
-        "appearance": "an enthusiastic marketer character with social media icons and trend graphs floating around them",
+        "appearance": "a cheerful young Korean woman in a colorful trendy blazer, big bright expressive eyes, holding a glowing smartphone triumphantly with confetti bursting around her, wide excited smile",
         "system": """당신은 Cosmic Hustle의 버즈 대리, 마케터입니다.
 
 【성격·말투】
@@ -70,7 +70,7 @@ AGENT_PERSONAS: dict[str, dict] = {
 
     "pocke": {
         "name": "포케", "title": "대리", "role": "리서처",
-        "appearance": "a chubby-cheeked hamster researcher character with big sparkly eyes, stuffing information into cheeks",
+        "appearance": "an adorable little researcher with impossibly chubby round cheeks stuffed full, big oversized sparkly eyes, wearing a tiny white lab coat, small and round body, beaming excited smile",
         "system": """당신은 Cosmic Hustle의 포케 대리, 리서처입니다.
 
 【성격·말투】
@@ -92,7 +92,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "over": {
         "name": "오버", "title": "사원", "role": "작가",
-        "appearance": "a dramatic writer character wearing a beret, holding a feather quill, looking moved by their own words",
+        "appearance": "a soft-featured artistic writer wearing a classic red beret and flowing scarf, wavy hair, holding a glowing feather quill with dreamy starry eyes, looking deeply moved and emotional",
         "system": """당신은 Cosmic Hustle의 오버 사원, 작가입니다.
 
 【성격·말투】
@@ -114,7 +114,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "ka": {
         "name": "카", "title": "과장", "role": "분석가",
-        "appearance": "a tired but sharp-eyed analyst character with heavy dark circles, surrounded by floating charts and data points, eyes gleaming with discovery",
+        "appearance": "a sharp analyst with dramatic dark circles under intensely gleaming eyes, rectangular glasses reflecting holographic data charts, messy hair from long work hours, pointing dramatically at a floating graph mid-discovery",
         "system": """당신은 Cosmic Hustle의 카 과장, 분석가입니다.
 
 【성격·말투】
@@ -136,7 +136,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "pixel": {
         "name": "픽셀", "title": "사원", "role": "디자이너",
-        "appearance": "a meticulous designer character with color swatches and a stylus, looking deeply moved by perfect spacing",
+        "appearance": "a stylish precise designer with perfectly styled hair and minimalist monochrome outfit, wide eyes gleaming with aesthetic appreciation, surrounded by floating color swatches and typographic elements",
         "system": """당신은 Cosmic Hustle의 픽셀 사원, 디자이너입니다.
 
 【성격·말투】
@@ -158,7 +158,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "ping": {
         "name": "핑", "title": "인턴", "role": "아이디어 수집가",
-        "appearance": "an energetic intern character with a lightning bolt antenna sparking on their head, eyes wide with excitement",
+        "appearance": "a bubbly energetic intern with a small glowing lightning bolt antenna on their head, huge sparkling eyes, sparks flying from the antenna, arms raised in excitement with light bulb thought bubbles floating around",
         "system": """당신은 Cosmic Hustle의 핑 인턴, 아이디어 수집가입니다.
 
 【성격·말투】
@@ -180,7 +180,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "wiki": {
         "name": "위키", "title": "대리", "role": "사서",
-        "appearance": "a librarian character surrounded by floating glowing books and connected knowledge nodes",
+        "appearance": "a warm knowledgeable librarian with round glasses and neatly styled hair, gentle smile, surrounded by floating glowing books and interconnected knowledge node webs spinning around them",
         "system": """당신은 Cosmic Hustle의 위키 대리, 사서입니다.
 
 【성격·말투】
@@ -203,7 +203,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
     # 게스트 에이전트 (월 1회 특별 칼럼)
     "plan": {
         "name": "플랜", "title": "차장", "role": "PM",
-        "appearance": "a professional project manager character in a crisp suit with a detailed roadmap and clipboard",
+        "appearance": "a composed professional in a crisp suit, calm authoritative eyes, holding a glowing digital tablet with a detailed roadmap, organized milestone charts floating around in neat rows",
         "system": """당신은 Cosmic Hustle의 플랜 차장, PM입니다.
 
 【성격·말투】
@@ -222,7 +222,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "run": {
         "name": "런", "title": "사원", "role": "개발자",
-        "appearance": "a confident developer character in a hoodie with a glowing laptop, looking like they already built everything",
+        "appearance": "a confident young developer in a worn hoodie, slight knowing smirk, glowing laptop screen reflecting in eyes, surrounded by floating green code snippets and terminal windows",
         "system": """당신은 Cosmic Hustle의 런 사원, 개발자입니다.
 
 【성격·말투】
@@ -241,7 +241,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "fact": {
         "name": "팩트", "title": "부장", "role": "검토자",
-        "appearance": "a stern expressionless reviewer character holding a red pen, surrounded by fact-check stamps",
+        "appearance": "a stern expressionless reviewer with reading glasses, holding a large red pen prominently, surrounded by floating FACT CHECK stamps and red correction marks, utterly neutral face",
         "system": """당신은 Cosmic Hustle의 팩트 부장, 검토자입니다.
 
 【성격·말투】
@@ -260,7 +260,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "root": {
         "name": "루트", "title": "사원", "role": "DevOps",
-        "appearance": "a DevOps character surrounded by server racks, CI/CD pipelines, and automation scripts",
+        "appearance": "a methodical engineer surrounded by glowing server racks and flowing CI/CD pipeline diagrams, calm focused expression, green status lights everywhere, automation scripts streaming in the air",
         "system": """당신은 Cosmic Hustle의 루트 사원, DevOps입니다.
 
 【성격·말투】
@@ -343,38 +343,31 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
 
     persona  = AGENT_PERSONAS[agent_id]
     char_url = await _upload_character(agent_id)
+    if not char_url:
+        logger.warning(f"캐릭터 이미지 업로드 실패 ({agent_id}), 썸네일 생성 건너뜀")
+        return None
+
+    full_prompt = (
+        f"{persona['appearance']}, {scene_prompt}, "
+        "Pixar 3D animation style, cinematic soft lighting, vibrant saturated colors, "
+        "expressive cartoon character, smooth polished 3D render, "
+        "high quality animation still frame, no text, no watermark"
+    )
 
     try:
         import fal_client
-        full_prompt = (
-            f"{persona['appearance']}, {scene_prompt}, "
-            "cartoon illustration style, soft pastel colors, "
-            "clean minimalist Korean blog thumbnail, no text, high quality"
+        result = await asyncio.to_thread(
+            fal_client.subscribe,
+            "fal-ai/flux/dev/image-to-image",
+            arguments={
+                "image_url": char_url,
+                "prompt": full_prompt,
+                "strength": 0.85,
+                "num_inference_steps": 30,
+                "guidance_scale": 7.5,
+                "image_size": "landscape_4_3",
+            },
         )
-        if char_url:
-            result = await asyncio.to_thread(
-                fal_client.subscribe,
-                "fal-ai/flux/dev/image-to-image",
-                arguments={
-                    "image_url": char_url,
-                    "prompt": full_prompt,
-                    "strength": 0.70,
-                    "num_inference_steps": 28,
-                    "guidance_scale": 7.5,
-                    "image_size": "landscape_4_3",
-                },
-            )
-        else:
-            result = await asyncio.to_thread(
-                fal_client.subscribe,
-                "fal-ai/flux/dev",
-                arguments={
-                    "prompt": full_prompt,
-                    "num_inference_steps": 28,
-                    "guidance_scale": 7.5,
-                    "image_size": "landscape_4_3",
-                },
-            )
         return result["images"][0]["url"]
     except Exception as e:
         logger.warning(f"썸네일 생성 실패: {e}")
