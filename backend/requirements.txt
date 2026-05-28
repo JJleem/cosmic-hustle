@@ -16,3 +16,6 @@ networkx
 numpy
 pytest
 pytest-asyncio
+anthropic
+openai
+apscheduler

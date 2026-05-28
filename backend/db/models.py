@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from .connection import Base
@@ -92,6 +92,33 @@ class TokenUsage(Base):
     cost_usd = Column(Float, default=0.0)
     model = Column(String, nullable=True)
     ts = Column(DateTime, server_default=func.now())
+
+
+class BlogPost(Base):
+    __tablename__ = "blog_posts"
+
+    id = Column(String, primary_key=True)
+    agent_id = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    slug = Column(String, unique=True, nullable=False)
+    content = Column(Text, nullable=False)
+    thumbnail_url = Column(String, nullable=True)
+    published = Column(Boolean, default=True)
+    trending_topic = Column(String, nullable=True)
+    published_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class BlogComment(Base):
+    __tablename__ = "blog_comments"
+
+    id = Column(String, primary_key=True)
+    post_id = Column(String, ForeignKey("blog_posts.id"), nullable=False)
+    parent_id = Column(String, ForeignKey("blog_comments.id"), nullable=True)
+    agent_id = Column(String, nullable=True)       # AI 댓글이면 agent_id, 유저 댓글이면 null
+    user_name = Column(String, nullable=True)      # 유저 댓글이면 이름, AI면 null
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class WikiEntry(Base):
