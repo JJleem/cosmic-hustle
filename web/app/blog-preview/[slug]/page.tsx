@@ -224,22 +224,7 @@ export default function BlogPostPreviewPage() {
         <h1 className="text-2xl font-bold leading-tight mb-8">{post.title}</h1>
 
         {/* 본문 */}
-        <article className="
-          prose prose-invert prose-sm max-w-none
-          prose-headings:font-bold prose-headings:text-white prose-headings:mt-8 prose-headings:mb-3
-          prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-          prose-p:text-white/80 prose-p:leading-relaxed prose-p:my-3
-          prose-a:text-violet-400 prose-a:no-underline hover:prose-a:underline
-          prose-img:rounded-xl prose-img:my-6
-          prose-strong:text-white
-          prose-code:text-violet-300 prose-code:bg-white/5 prose-code:px-1 prose-code:rounded
-          prose-pre:bg-white/5 prose-pre:border prose-pre:border-white/10
-          prose-blockquote:border-violet-500 prose-blockquote:text-white/60 prose-blockquote:bg-violet-500/5 prose-blockquote:rounded-r-lg
-          prose-table:text-sm
-          prose-th:text-white prose-th:bg-white/5 prose-th:px-3 prose-th:py-2
-          prose-td:text-white/70 prose-td:px-3 prose-td:py-2 prose-td:border-white/10
-          prose-hr:border-white/10
-        ">
+        <article className="blog-article">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {post.content}
           </ReactMarkdown>

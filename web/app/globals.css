@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 :root {
   --background: 0 0% 100%;
@@ -292,4 +293,120 @@ input[type='range'].appearance-none::-moz-range-thumb {
   cursor: pointer;
   border: none;
   box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+/* ── 블로그 아티클 렌더링 ─────────────────────────────────────── */
+.blog-article {
+  color: rgba(255,255,255,0.82);
+  line-height: 1.85;
+  font-size: 0.9375rem;
+}
+
+.blog-article h1,
+.blog-article h2,
+.blog-article h3,
+.blog-article h4 {
+  color: #fff;
+  font-weight: 700;
+  margin-top: 2.2rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.35;
+}
+.blog-article h1 { font-size: 1.5rem; }
+.blog-article h2 { font-size: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.4rem; }
+.blog-article h3 { font-size: 1.05rem; }
+
+.blog-article p {
+  margin-top: 0;
+  margin-bottom: 1.4rem;
+}
+
+.blog-article strong { color: #fff; }
+.blog-article em { color: rgba(255,255,255,0.7); }
+
+.blog-article a { color: #a78bfa; text-decoration: none; }
+.blog-article a:hover { text-decoration: underline; }
+
+/* 인용구 */
+.blog-article blockquote {
+  border-left: 3px solid #7c3aed;
+  background: rgba(124,58,237,0.08);
+  margin: 1.5rem 0;
+  padding: 0.9rem 1.2rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: rgba(255,255,255,0.65);
+  font-style: italic;
+}
+.blog-article blockquote p { margin-bottom: 0; }
+
+/* 코드 */
+.blog-article code {
+  background: rgba(255,255,255,0.07);
+  color: #c4b5fd;
+  padding: 0.15em 0.4em;
+  border-radius: 0.3rem;
+  font-size: 0.875em;
+}
+.blog-article pre {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0.6rem;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+.blog-article pre code {
+  background: none;
+  padding: 0;
+  color: rgba(255,255,255,0.85);
+}
+
+/* 이미지 — 위아래 여백 확보 */
+.blog-article img {
+  max-width: 100%;
+  border-radius: 0.75rem;
+  margin: 2rem auto;
+  display: block;
+}
+
+/* 수평선 */
+.blog-article hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin: 2.5rem 0;
+}
+
+/* 목록 */
+.blog-article ul,
+.blog-article ol {
+  padding-left: 1.4rem;
+  margin-bottom: 1.4rem;
+}
+.blog-article li { margin-bottom: 0.4rem; }
+.blog-article li::marker { color: rgba(255,255,255,0.3); }
+
+/* 표 ─ 핵심 */
+.blog-article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.75rem 0;
+  font-size: 0.875rem;
+}
+.blog-article thead tr {
+  background: rgba(255,255,255,0.06);
+}
+.blog-article th {
+  color: #fff;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.blog-article td {
+  color: rgba(255,255,255,0.72);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.blog-article tbody tr:hover {
+  background: rgba(255,255,255,0.03);
 }
