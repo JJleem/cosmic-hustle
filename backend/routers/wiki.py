@@ -178,7 +178,7 @@ def get_wiki_graph():
         G.add_nodes_from(range(n))
         for i in range(n):
             for j in range(i + 1, n):
-                if float(sim[i, j]) > 0.5:
+                if float(sim[i, j]) > 0.75:
                     G.add_edge(i, j, weight=float(sim[i, j]))
 
         try:
