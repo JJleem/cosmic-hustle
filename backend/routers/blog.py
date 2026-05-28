@@ -4,6 +4,7 @@ from db.connection import get_db
 from db.models import BlogPost, BlogComment
 from blog_generator import (
     generate_blog_post, generate_comments,
+    generate_scene_prompt_from_content,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -55,12 +56,35 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    for field in ("published", "content", "title"):
+    for field in ("published", "content", "title", "thumbnail_url"):
         if field in body:
             setattr(post, field, body[field])
     db.commit()
     db.refresh(post)
     return post
+
+
+@router.post("/posts/{slug}/regenerate-thumbnail")
+async def regenerate_thumbnail(slug: str, body: dict = None, db: Session = Depends(get_db)):
+    """썸네일만 재생성. scene_prompt 없으면 본문 기반으로 자동 생성."""
+    from blog_generator import _generate_thumbnail
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    scene_prompt = (body or {}).get("scene_prompt")
+    if not scene_prompt:
+        scene_prompt = await generate_scene_prompt_from_content(
+            post.agent_id, post.title, post.content or ""
+        )
+
+    url = await _generate_thumbnail(post.agent_id, scene_prompt)
+    if not url:
+        raise HTTPException(status_code=500, detail="썸네일 생성 실패 (FAL_KEY 확인)")
+
+    post.thumbnail_url = url
+    db.commit()
+    return {"thumbnail_url": url, "scene_prompt": scene_prompt}
 
 
 # ── 댓글 ──────────────────────────────────────────────────────────────────────

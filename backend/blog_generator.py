@@ -337,37 +337,76 @@ async def _upload_character(agent_id: str) -> str | None:
         return None
 
 
+_THUMBNAIL_STYLES = [
+    # 기본 Pixar 3D — 색감 보정 버전
+    (
+        "Pixar 3D animation style, charming cartoon comedy, "
+        "warm golden hour lighting, slightly desaturated natural palette, "
+        "smooth 3D render, wide shot"
+    ),
+    # 2D 플랫 카툰
+    (
+        "2D flat cartoon illustration style, bold clean outlines, "
+        "graphic novel panel composition, limited flat color palette, "
+        "playful and witty, wide shot"
+    ),
+    # 레트로 팝아트
+    (
+        "retro pop art style, bold limited colors, halftone dot texture, "
+        "vintage 60s poster aesthetic, high contrast, graphic and punchy, wide shot"
+    ),
+    # 수채화 + 잉크 스케치
+    (
+        "loose watercolor and ink illustration, hand-painted feel, "
+        "warm muted tones, slightly rough paper texture, expressive brushstrokes, wide shot"
+    ),
+    # 실사 위트 (사진 합성 느낌)
+    (
+        "hyper-detailed editorial illustration, semi-realistic painterly style, "
+        "sharp witty composition, rich natural colors, magazine cover aesthetic, wide shot"
+    ),
+    # 네온 사이버펑크 (테크/데이터 주제용으로도 잘 맞음)
+    (
+        "neon cyberpunk illustration style, dark background with glowing accents, "
+        "vivid electric colors, futuristic and stylized, wide shot"
+    ),
+]
+
+
 async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
+    """Flux Kontext로 씬 생성.
+    - 레퍼런스 이미지에서 캐릭터 외형(정체성)만 추출
+    - 구도·씬은 텍스트 프롬프트가 완전히 담당
+    - img2img처럼 구도를 복사하지 않고, text-to-image처럼 씬을 새로 생성함
+    """
     if not _fal_available():
         return None
 
-    persona  = AGENT_PERSONAS[agent_id]
     char_url = await _upload_character(agent_id)
     if not char_url:
         logger.warning(f"캐릭터 이미지 업로드 실패 ({agent_id}), 썸네일 생성 건너뜀")
         return None
 
+    # 포스트마다 랜덤 스타일 선택 (공통 base: 색감 보정 + 안전 가이드)
+    style = random.choice(_THUMBNAIL_STYLES)
     full_prompt = (
         f"{scene_prompt}, "
-        f"featuring {persona['appearance']}, "
-        "full scene wide shot showing character in environment, dynamic action composition, "
-        "Pixar 3D animation style, cinematic soft lighting, vibrant saturated colors, "
-        "expressive cartoon character, smooth polished 3D render, "
-        "high quality animation still frame, no text, no watermark"
+        f"{style}, "
+        "exaggerated expressive poses, cute and playful NOT grotesque, "
+        "high quality, no text, no watermark"
     )
 
     try:
         import fal_client
         result = await asyncio.to_thread(
             fal_client.subscribe,
-            "fal-ai/flux/dev/image-to-image",
+            "fal-ai/flux-kontext/dev",
             arguments={
                 "image_url": char_url,
                 "prompt": full_prompt,
-                "strength": 0.35,
-                "num_inference_steps": 30,
-                "guidance_scale": 7.5,
-                "image_size": "landscape_4_3",
+                "num_inference_steps": 28,
+                "guidance_scale": 3.5,
+                "aspect_ratio": "4:3",
             },
         )
         return result["images"][0]["url"]
@@ -376,21 +415,51 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
         return None
 
 
+async def generate_scene_prompt_from_content(agent_id: str, title: str, content: str) -> str:
+    """블로그 본문을 읽고 Flux Kontext용 씬 프롬프트를 Haiku로 생성."""
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    truncated = content[:1500]
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=150,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Blog title: {title}\nContent excerpt:\n{truncated}\n\n"
+                "Write a funny, witty Flux image generation scene prompt (English only, max 70 words) for a blog thumbnail.\n"
+                "COMEDY DIRECTION — pick ONE that fits the content:\n"
+                "  A) Slapstick overload: buried under avalanche of related objects, arms flailing\n"
+                "  B) Absurd scale: tiny character on giant object OR towering over tiny things\n"
+                "  C) Ironic situation: character is the ONLY one enthusiastic while everything around them is chaos or indifferent\n"
+                "  D) Too many things at once: juggling/holding ridiculous number of props, sweating, panicked but smiling\n"
+                "RULES:\n"
+                "- Clear dynamic ACTION (no standing still, no posing for camera)\n"
+                "- Costume matching the scene\n"
+                "- Cute and charming, NOT grotesque or disturbing\n"
+                "- Environment reflects blog content\n"
+                "Output only the raw prompt, no explanation."
+            ),
+        }],
+    )
+    return message.content[0].text.strip()
+
+
 async def _generate_content_image(prompt: str) -> str | None:
+    """flux/schnell 사용 — flux/dev 대비 약 8배 저렴."""
     if not _fal_available():
         return None
     try:
         import fal_client
         result = await asyncio.to_thread(
             fal_client.subscribe,
-            "fal-ai/flux/dev",
+            "fal-ai/flux/schnell",
             arguments={
                 "prompt": (
-                    f"Pixar 3D animation style illustration. {prompt} "
-                    "Vibrant colors, cinematic lighting, smooth 3D render, expressive and fun, no text, no watermark."
+                    f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
+                    "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
+                    "smooth 3D render, playful and charming, no text, no watermark."
                 ),
-                "num_inference_steps": 28,
-                "guidance_scale": 7.5,
+                "num_inference_steps": 4,
                 "image_size": "square_hd",
             },
         )
@@ -402,7 +471,7 @@ async def _generate_content_image(prompt: str) -> str | None:
 
 async def _process_content_images(content: str) -> str:
     matches = _IMAGE_RE.findall(content)
-    for prompt in matches[:3]:
+    for prompt in matches[:1]:  # 비용 절감: 본문 이미지 최대 1개
         url    = await _generate_content_image(prompt)
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
@@ -434,15 +503,25 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
 - 딱딱하고 어려운 글보다 가볍고 재미있게 — 사람이 쓴 블로그처럼
 - ## 소제목으로 글을 3~5개 섹션으로 나눌 것
 - 필요하면 표(markdown table), 인용구(>), 강조(**굵게**)도 활용
-- 글 맨 앞 첫 줄에 반드시 썸네일 태그 삽입 (영어로):
-  {{THUMBNAIL: 이 글의 핵심 감정·메시지를 표현하는 역동적인 장면. 반드시 포함할 것:
-  ① 구체적 동작·포즈 (단순히 서있거나 보고있는 장면 금지 — 뛰거나, 가리키거나, 놀라거나, 폭발적으로 반응하는 등 생동감 있는 행동)
-  ② 얼굴 표정 (excited / shocked / triumphant / moved / intense 등 감정 명시)
-  ③ 글 주제를 나타내는 소품·배경 요소
-  예시: "Ka leaning forward with intensely glowing eyes, dramatically pointing at a single tiny data point amid mountains of gray useless charts, triumphant shocked expression, holographic graphs exploding around"
+- 글 맨 끝 (참고자료 섹션 다음)에 반드시 썸네일 태그 삽입 (반드시 영어로):
+  {{THUMBNAIL: 이 글의 핵심 메시지를 표현하는 역동적 씬. 규칙:
+  ① 동작·포즈 (뛰거나, 가리키거나, 무너지거나, 올라서거나 — 가만히 서있거나 카메라 보는 장면 금지)
+  ② 감정 표현 (excited / shocked / triumphant / devastated / intense 중 하나 명시)
+  ③ 배경·소품 (어떤 공간인지, 무엇이 주변에 있는지 — 환경이 씬의 반은 먹음)
+  ④ 이 글에서 다룬 핵심 소재·이벤트를 씬에 반영할 것 (글 내용과 직접 연결된 씬)
+  ⑤ 의상 (씬에 어울리는 옷 명시 — 뉴스앵커면 "navy suit and tie", 해변이면 "casual shirt", 실험실이면 "white lab coat", 운동이면 "sportswear" 등)
+  좋은 예시: "wearing a navy news anchor suit and tie, sitting at a glowing news desk in a TV studio, pointing at breaking news on a giant LED screen, intense focused expression, dramatic studio lighting"
+  나쁜 예시: "standing and looking at charts with a happy face" (서있음, 환경 없음, 의상 없음, 글 내용 미반영)
   }}
-- 본문 중간 이미지가 필요한 곳에 (1~3개, 선택적):
-  {{IMAGE: 삽입할 이미지 설명 (영어, 캐릭터 없는 주제 관련 일러스트)}}
+- 본문 중간 이미지가 필요한 곳에 (선택적, 최대 1개):
+  {{IMAGE: 이 단락의 핵심을 표현하는 일러스트 (반드시 영어, 사람·캐릭터 없는 오브젝트/풍경/개념 시각화).
+  작성 규칙:
+  ① 단락에서 다룬 구체적 소재를 그대로 시각화할 것 (추상적 설명 금지)
+  ② 위트·유머를 넣을 것 — 오브젝트가 과장되게 쌓이거나, 예상 밖 조합이거나, 아이러니한 상황
+  ③ 분위기·색감·스타일도 한 줄 명시
+  좋은 예시: "a towering skyscraper built entirely out of stacked coffee cups wobbling dangerously, pastel morning light, whimsical illustration style"
+  나쁜 예시: "an image related to marketing trends" (너무 추상적, 유머 없음)
+  }}
 - 글 맨 끝에 반드시 다음 형식으로 출처 섹션 추가:
   ---
   **📎 참고한 자료**
@@ -456,7 +535,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
     else:
         user_content += "\n당신의 관점에서 가장 흥미로운 내용을 골라 블로그 포스트를 작성해주세요."
 
-    user_content += "\n\n{{THUMBNAIL: ...}} 태그를 맨 앞에 쓰고, 그 다음 줄부터 포스트를 작성하세요."
+    user_content += "\n\n포스트 전체를 다 작성한 뒤, 맨 끝에 {{THUMBNAIL: ...}} 태그를 붙이세요. 글 내용을 충분히 읽고 그 내용을 직접 반영한 씬을 묘사해야 합니다."
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -507,23 +586,32 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         for a in commenters
     )
     author_name = AGENT_PERSONAS[author_id]["name"]
+    total = 4 if include_author_reply else 3
 
-    # JSON 예시에 실제 agent_id(영어) 값 명시
-    example_ids = [f'"{a}"' for a in commenters]
+    reply_instruction = (
+        f"\n\n【중요】 위 3개 댓글 외에, 작성자 {author_name}(agent_id: \"{author_id}\")이 "
+        f"0번 댓글(index 0)에 답글을 1개 추가로 작성합니다. 반드시 총 {total}개를 출력하세요."
+        if include_author_reply else ""
+    )
+
+    reply_example = (
+        f',\n  {{"agent_id": "{author_id}", "content": "실제 답글 내용", "parent_index": 0}}'
+        if include_author_reply else ""
+    )
+
     prompt = (
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
         f"작성자: {author_name} (agent_id: \"{author_id}\")\n\n"
-        f"아래 3명이 댓글을 달아주세요:\n{personas_desc}\n"
-        + (f"\n작성자 {author_name}도 댓글 하나에 답글을 답니다.\n" if include_author_reply else "")
-        + "\n각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요."
-        "\n\n반드시 아래 JSON 배열 형식으로만 응답 (마크다운 코드블록 없이, 순수 JSON만):\n"
+        f"【댓글 작성자 {total}명】\n{personas_desc}"
+        f"{reply_instruction}\n\n"
+        "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n\n"
+        f"반드시 아래 형식으로 총 {total}개의 JSON 배열만 출력 (코드블록 없이):\n"
         "[\n"
-        f'  {{"agent_id": {example_ids[0]}, "content": "...", "parent_index": null}},\n'
-        f'  {{"agent_id": {example_ids[1]}, "content": "...", "parent_index": null}},\n'
-        f'  {{"agent_id": {example_ids[2]}, "content": "...", "parent_index": null}}'
-        + (',\n  {"agent_id": "' + author_id + '", "content": "...", "parent_index": 0}' if include_author_reply else "")
-        + "\n]"
+        f'  {{"agent_id": "{commenters[0]}", "content": "실제 댓글 내용", "parent_index": null}},\n'
+        f'  {{"agent_id": "{commenters[1]}", "content": "실제 댓글 내용", "parent_index": null}},\n'
+        f'  {{"agent_id": "{commenters[2]}", "content": "실제 댓글 내용", "parent_index": null}}'
+        f"{reply_example}\n]"
     )
 
     client  = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
