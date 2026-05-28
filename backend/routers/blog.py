@@ -14,11 +14,20 @@ router = APIRouter(prefix="/api/blog", tags=["blog"])
 
 
 @router.get("/posts")
-def list_posts(published_only: bool = True, db: Session = Depends(get_db)):
+def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: Session = Depends(get_db)):
+    offset = (page - 1) * limit
     q = db.query(BlogPost)
     if published_only:
         q = q.filter(BlogPost.published == True)
-    return q.order_by(BlogPost.published_at.desc()).all()
+    total = q.count()
+    posts = q.order_by(BlogPost.published_at.desc()).offset(offset).limit(limit).all()
+    return {
+        "posts": posts,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "has_next": (page * limit) < total,
+    }
 
 
 @router.get("/posts/{slug}")
