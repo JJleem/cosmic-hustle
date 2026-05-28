@@ -13,7 +13,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_CHAR_DIR = Path(__file__).parent.parent / "web" / "public" / "id"
+_CHAR_DIR = Path(__file__).parent.parent / "web" / "public" / "characters"
 
 # ── 요일 스케줄 ────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ AGENT_SEARCH_QUERIES: dict[str, str] = {
 AGENT_PERSONAS: dict[str, dict] = {
     "buzz": {
         "name": "버즈", "title": "대리", "role": "마케터",
-        "appearance": "an orange-skinned cartoon girl with two round fluffy orange pom-pom buns, freckles, wearing an orange blazer suit, holding a glowing smartphone with social media icons floating around",
+        "appearance": "an orange-skinned girl with two fluffy orange pom-pom buns and two springy antennae with star tips on her head, star-shaped freckles on cheeks, pointed ears, wearing an orange blazer, holding a smartphone",
         "system": """당신은 Cosmic Hustle의 버즈 대리, 마케터입니다.
 
 【성격·말투】
@@ -136,7 +136,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "pixel": {
         "name": "픽셀", "title": "사원", "role": "디자이너",
-        "appearance": "a girl with dark hair and slightly pointed elf ears, wearing a dark apron splattered with colorful paint, blue jeans, surrounded by floating color swatches and design UI panels",
+        "appearance": "a girl with dark brown hair loosely tied up, pixel-dot freckles on cheeks, pointed elf ears, wearing a dark apron splattered with multicolor paint, holding a digital stylus pen",
         "system": """당신은 Cosmic Hustle의 픽셀 사원, 디자이너입니다.
 
 【성격·말투】
@@ -180,7 +180,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "wiki": {
         "name": "위키", "title": "대리", "role": "사서",
-        "appearance": "a tall elegant grey-skinned alien woman with silver hair in a neat updo bun, wearing a grey business blazer and skirt, holding a holographic translucent tablet, sophisticated posture",
+        "appearance": "a tall elegant grey-skinned alien woman with silver-grey hair twisted in an elaborate updo bun, wearing a grey-teal fitted suit, cupping a softly glowing orb sphere in both hands, sophisticated posture",
         "system": """당신은 Cosmic Hustle의 위키 대리, 사서입니다.
 
 【성격·말투】
@@ -203,7 +203,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
     # 게스트 에이전트 (월 1회 특별 칼럼)
     "plan": {
         "name": "플랜", "title": "차장", "role": "PM",
-        "appearance": "a golden-yellow skinned boy with messy golden hair and large black-rimmed glasses, wearing a grey blazer over a navy turtleneck and bright yellow pants, holding a holographic notebook",
+        "appearance": "a golden-yellow skinned boy with messy spiky golden hair and large black-rimmed rectangular glasses, wearing a grey tweed blazer covered in colorful sticky note cards, navy turtleneck underneath",
         "system": """당신은 Cosmic Hustle의 플랜 차장, PM입니다.
 
 【성격·말투】
@@ -222,7 +222,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "run": {
         "name": "런", "title": "사원", "role": "개발자",
-        "appearance": "a blue-skinned young character with black messy hair and black headphones around neck, wearing a dark hoodie and dark pants, holding a glowing holographic code terminal, bored half-lidded expression",
+        "appearance": "a blue-cyan skinned young character with black messy hair and large black headphones on head, wearing a dark zip-up hoodie, holding a glowing holographic code terminal, deeply bored half-lidded droopy eyes",
         "system": """당신은 Cosmic Hustle의 런 사원, 개발자입니다.
 
 【성격·말투】
@@ -241,7 +241,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "fact": {
         "name": "팩트", "title": "부장", "role": "검토자",
-        "appearance": "a grey metallic humanoid with a completely flat featureless mask face, wearing a white dress shirt and black trousers, arms crossed, holding a red pen, utterly emotionless",
+        "appearance": "a grey metallic humanoid with a angular low-poly geometric face and glowing red eyes, wearing a white dress shirt, holding a red pen near face, stern intimidating expression",
         "system": """당신은 Cosmic Hustle의 팩트 부장, 검토자입니다.
 
 【성격·말투】
@@ -260,7 +260,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 
     "root": {
         "name": "루트", "title": "사원", "role": "DevOps",
-        "appearance": "a robot character in a full dark navy space suit with green neon accent lights, helmet with glowing rectangular pixel eyes, small robotic antennae on helmet, holding a holographic control panel",
+        "appearance": "a robot in a dark navy spacesuit with teal-green circuit board patterns and accents, rounded dome helmet with black visor, glowing cyan pixel bracket eyes and small smile inside visor, green arrows floating around indicating routing/flow",
         "system": """당신은 Cosmic Hustle의 루트 사원, DevOps입니다.
 
 【성격·말투】
@@ -326,9 +326,7 @@ def _fal_available() -> bool:
 
 
 async def _upload_character(agent_id: str) -> str | None:
-    # 배경 제거된 버전 우선 사용 (카드 프레임 없음 → img2img 품질 향상)
-    bg_removed = _CHAR_DIR / f"'{agent_id}'의 배경이 제거됨.png"
-    char_path  = bg_removed if bg_removed.exists() else _CHAR_DIR / f"{agent_id}.png"
+    char_path = _CHAR_DIR / agent_id / "default.png"
     if not char_path.exists():
         return None
     try:
