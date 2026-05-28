@@ -92,9 +92,40 @@ cosmic-hustle/
 
 ---
 
+## 배포 현황 (2026-05-28)
+
+| 레이어 | 위치 | 비고 |
+|--------|------|------|
+| 백엔드 | AWS Lightsail `3.36.239.214:8000` | systemd `cosmic-backend.service`로 관리 |
+| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB |
+| 자동배포 | GitHub Actions | `backend/` 변경 push → 자동 rsync + restart |
+| 프론트 | 로컬 개발 중 (`localhost:3000`) | Vercel 배포 미완료 |
+| 블로그 레포 | 미생성 | `~/Desktop/repository/cosmic-blog/` 예정 |
+
+### 서버 SSH 접속
+```bash
+ssh -i ~/.ssh/LightsailDefaultKey-ap-northeast-2.pem ubuntu@3.36.239.214
+```
+- pem 키: AWS Lightsail 콘솔에서 다운로드 (또는 기존 맥에서 AirDrop/메일)
+- 서버 관리: `sudo systemctl status|restart|stop cosmic-backend`
+
+### backend/.env (서버 — gitignore됨, 직접 생성)
+```
+DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle
+ANTHROPIC_API_KEY=...
+FAL_KEY=...
+TORCHDYNAMO_DISABLE=1
+```
+
+---
+
 ## 새 컴퓨터에서 시작하는 법
 
 ```bash
+# 0. 레포 클론
+git clone https://github.com/JJleem/cosmic-hustle.git
+cd cosmic-hustle
+
 # 1. PostgreSQL 설치 및 실행 (macOS)
 brew install postgresql@16
 brew services start postgresql@16
@@ -112,26 +143,78 @@ PG_CONFIG=/opt/homebrew/opt/postgresql@16/bin/pg_config make install
 psql -U $(whoami) -d cosmic_hustle -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 # 4. Python 의존성 설치 (venv)
-cd /path/to/cosmic-hustle/backend
+cd cosmic-hustle/backend
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
 # weasyprint 시스템 의존성 (PDF export용)
 brew install pango
 
-# 5. .env 파일 생성
-echo "DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle" > .env
+# 5. .env 파일 생성 (키는 팀 공유 또는 기존 맥에서 복사)
+cat > .env << 'EOF'
+DATABASE_URL=postgresql://cosmic:cosmic1234@localhost:5432/cosmic_hustle
+ANTHROPIC_API_KEY=여기에_키_입력
+FAL_KEY=여기에_키_입력
+EOF
 
 # 6. DB 스키마 생성
 .venv/bin/alembic upgrade head
 
-# 7. 백엔드 실행
+# 7. 백엔드 실행 (로컬 개발용)
 .venv/bin/python run.py   # → http://localhost:8000
 
 # 8. 프론트엔드 (별도 터미널)
 cd web && npm install && npm run dev   # → http://localhost:3000
-# web/.env.local 에 BACKEND_URL=http://localhost:8000 있어야 함
+
+# web/.env.local — 로컬 백엔드 쓸 때:
+echo "BACKEND_URL=http://localhost:8000" > web/.env.local
+# 배포된 서버 백엔드 쓸 때:
+echo "BACKEND_URL=http://3.36.239.214:8000" > web/.env.local
 ```
+
+---
+
+## 블로그 프로젝트 구상 (2026-05-28)
+
+### 개요
+AI 에이전트 11명이 매일 1개씩 블로그 포스트를 자동 생성하는 공개 블로그.
+백엔드는 cosmic-hustle Lightsail 서버 공유, 프론트는 별도 레포/Vercel.
+
+### 레포 구조
+```
+~/Desktop/repository/
+├── cosmic-hustle/   # 내부 도구 (private, 현재 레포)
+└── cosmic-blog/     # 공개 블로그 프론트엔드 (public, 새 레포)
+```
+
+### cosmic-blog 기술 스택
+- Next.js 15 + TypeScript
+- Tailwind CSS
+- 백엔드 API: `http://3.36.239.214:8000/api/blog/`
+- 배포: Vercel (자동배포)
+
+### 블로그 페이지 구성
+| 페이지 | 경로 | 설명 |
+|--------|------|------|
+| 홈/목록 | `/` | 포스트 그리드, 에이전트 필터, 최신순 |
+| 상세 | `/[slug]` | 본문(Markdown), 댓글, 좋아요, 조회수 |
+| 에이전트 소개 | `/agents` | 11명 캐릭터 소개 |
+| 아카이브 | `/archive` | 월별 포스트 목록 |
+
+### 자동 포스트 생성 스케줄
+- 매일 오전 9시 KST (APScheduler, Lightsail 서버)
+- 요일별 담당 에이전트 (buzz/pocke/over/ka/pixel/ping/wiki 순환)
+- Google 뉴스 RSS → Claude 트렌드 수집 → 글 생성 → Flux Kontext 썸네일
+
+### 현재 작업 현황
+- [x] 백엔드 API 완성 (`/api/blog/` 전체)
+- [x] Lightsail 서버 배포 + systemd 서비스
+- [x] GitHub Actions 자동배포 (backend/ 변경 시)
+- [x] 블로그 포스트 3개 DB에 있음
+- [ ] cosmic-blog 레포 생성 (다음 세션)
+- [ ] Vercel 배포
+- [ ] 도메인 연결 (선택)
+- [ ] FAL_KEY 서버 적용 → 썸네일 생성 확인
 
 ---
 
