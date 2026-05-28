@@ -1,0 +1,32 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Lightsail
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_KEY }}
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+        run: |
+          echo "$SSH_KEY" > /tmp/deploy_key.pem
+          chmod 600 /tmp/deploy_key.pem
+
+          rsync -avz --delete \
+            --exclude '.venv' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude '.env' \
+            -e "ssh -i /tmp/deploy_key.pem -o StrictHostKeyChecking=no" \
+            backend/ ubuntu@$HOST:~/backend/
+
+          ssh -i /tmp/deploy_key.pem -o StrictHostKeyChecking=no ubuntu@$HOST \
+            "pkill -f 'python run.py' || true; sleep 2; cd ~/backend && nohup .venv/bin/python run.py > ~/backend/server.log 2>&1 &"
