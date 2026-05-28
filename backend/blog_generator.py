@@ -282,37 +282,27 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 # ── 트렌드 수집 ────────────────────────────────────────────────────────────────
 
 async def _fetch_trending(agent_id: str) -> str:
-    """Tavily로 에이전트 주제에 맞는 최신 뉴스·트렌드 검색."""
-    api_key = os.environ.get("TAVILY_API_KEY")
-    if not api_key:
-        return ""
+    """Google 뉴스 RSS로 에이전트 주제에 맞는 최신 뉴스 검색 (API 키 불필요)."""
+    import feedparser
+    from urllib.parse import quote
 
     query = AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                "https://api.tavily.com/search",
-                json={
-                    "api_key": api_key,
-                    "query": query,
-                    "search_depth": "basic",
-                    "max_results": 3,
-                    "include_answer": True,
-                },
-            )
-        data = resp.json()
+    url   = f"https://news.google.com/rss/search?q={quote(query)}&hl=ko&gl=KR&ceid=KR:ko"
 
-        lines: list[str] = []
-        if data.get("answer"):
-            lines.append(f"[트렌드 요약] {data['answer']}")
-        for r in data.get("results", [])[:3]:
-            title   = r.get("title", "")
-            snippet = r.get("content", "")[:150]
-            lines.append(f"- {title}: {snippet}")
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+
+        feed  = feedparser.parse(resp.text)
+        lines = []
+        for entry in feed.entries[:3]:
+            title   = entry.get("title", "")
+            summary = re.sub(r"<[^>]+>", "", entry.get("summary", ""))[:150]
+            lines.append(f"- {title}: {summary}")
 
         return "\n".join(lines)
     except Exception as e:
-        logger.warning(f"Tavily 검색 실패 ({agent_id}): {e}")
+        logger.warning(f"Google 뉴스 RSS 검색 실패 ({agent_id}): {e}")
         return ""
 
 

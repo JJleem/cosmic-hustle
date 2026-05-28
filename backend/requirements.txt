@@ -19,3 +19,4 @@ pytest-asyncio
 anthropic
 fal-client
 apscheduler
+feedparser
