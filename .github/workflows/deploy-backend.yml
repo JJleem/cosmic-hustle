@@ -36,8 +36,5 @@ jobs:
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_KEY }}
           script: |
-            pkill -f "python run.py" || true
-            sleep 2
-            cd ~/backend
-            nohup .venv/bin/python run.py > ~/backend/server.log 2>&1 & disown
+            sudo systemctl restart cosmic-backend
             echo "서버 재시작 완료"
