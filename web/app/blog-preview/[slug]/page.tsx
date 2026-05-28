@@ -89,6 +89,9 @@ export default function BlogPostPreviewPage() {
   const [viewCount, setViewCount] = useState(0);
   const viewTracked = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [thumbLoading, setThumbLoading]   = useState(false);
+  const [thumbUrlInput, setThumbUrlInput] = useState("");
+  const [thumbMsg, setThumbMsg]           = useState("");
 
   const loadComments = useCallback(async () => {
     const res = await fetch(`/api/blog/posts/${slug}/comments`);
@@ -155,6 +158,43 @@ export default function BlogPostPreviewPage() {
     setSubmitting(false);
   }
 
+  async function handleRegenThumb(scenePrompt?: string) {
+    setThumbLoading(true);
+    setThumbMsg("");
+    const res = await fetch(`/api/blog/posts/${slug}/regenerate-thumbnail`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(scenePrompt ? { scene_prompt: scenePrompt } : {}),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      setPost(p => p ? { ...p, thumbnail_url: d.thumbnail_url } : p);
+      setThumbMsg("썸네일 교체 완료!");
+    } else {
+      setThumbMsg("생성 실패");
+    }
+    setThumbLoading(false);
+  }
+
+  async function handleThumbUrlSave() {
+    if (!thumbUrlInput.trim() || !post) return;
+    setThumbLoading(true);
+    setThumbMsg("");
+    const res = await fetch(`/api/blog/posts/${slug}/thumbnail`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thumbnail_url: thumbUrlInput.trim() }),
+    });
+    if (res.ok) {
+      setPost(p => p ? { ...p, thumbnail_url: thumbUrlInput.trim() } : p);
+      setThumbUrlInput("");
+      setThumbMsg("URL 교체 완료!");
+    } else {
+      setThumbMsg("저장 실패");
+    }
+    setThumbLoading(false);
+  }
+
   if (!post) return (
     <div className="min-h-screen bg-[#07091a] flex items-center justify-center text-white/40 text-sm">
       불러오는 중…
@@ -174,7 +214,10 @@ export default function BlogPostPreviewPage() {
   const repliesOf = (id: string) => comments.filter(c => c.parent_id === id);
 
   return (
-    <div className="min-h-screen bg-[#07091a] text-white">
+    <div className="min-h-screen bg-[#07091a] text-white" style={{ '--ac': color } as React.CSSProperties}>
+      {/* 에이전트 컬러 상단 액센트 바 */}
+      <div className="ac-bar h-[3px] w-full opacity-80" />
+
       <div className="max-w-2xl mx-auto px-6 py-10">
 
         {/* 뒤로가기 */}
@@ -184,7 +227,7 @@ export default function BlogPostPreviewPage() {
 
         {/* 썸네일 */}
         {post.thumbnail_url && (
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden mb-8 bg-white/5">
+          <div key={post.thumbnail_url} className="relative aspect-[4/3] rounded-2xl overflow-hidden mb-8 bg-white/5">
             <Image src={post.thumbnail_url} alt={post.title} fill className="object-cover" unoptimized />
           </div>
         )}
@@ -266,7 +309,7 @@ export default function BlogPostPreviewPage() {
               placeholder="이름 (선택)"
               value={userName}
               onChange={e => setUserName(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder-white/25 focus:outline-none focus:border-violet-500/60 transition-colors"
+              className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder-white/25 ac-focus transition-colors"
             />
             <textarea
               ref={textareaRef}
@@ -274,20 +317,62 @@ export default function BlogPostPreviewPage() {
               value={body}
               onChange={e => setBody(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder-white/25 focus:outline-none focus:border-violet-500/60 resize-none transition-colors"
+              className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder-white/25 ac-focus resize-none transition-colors"
             />
             <button
               type="submit"
               disabled={submitting || !body.trim()}
-              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-sm font-medium transition-colors"
+              className="px-5 py-2 rounded-xl ac-btn text-sm font-medium"
             >
               {submitting ? "등록 중…" : "댓글 등록"}
             </button>
           </form>
         </div>
 
+        {/* 어드민 패널 — 썸네일 교체 */}
+        <div className="mt-16 pt-8 border-t border-white/5">
+          <p className="text-xs text-white/20 mb-3">관리자 도구</p>
+          <div className="rounded-xl bg-white/3 border border-white/8 p-4 space-y-3">
+            <p className="text-xs font-medium text-white/40">썸네일 교체</p>
+
+            {/* 재생성 */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleRegenThumb()}
+                disabled={thumbLoading}
+                className="px-3 py-1.5 rounded-lg ac-btn text-xs font-medium"
+              >
+                {thumbLoading ? "생성 중…" : "AI 재생성"}
+              </button>
+              <p className="text-xs text-white/25 self-center">현재 제목으로 새 썸네일 생성</p>
+            </div>
+
+            {/* URL 직접 입력 */}
+            <div className="flex gap-2">
+              <input
+                type="url"
+                placeholder="이미지 URL 직접 입력"
+                value={thumbUrlInput}
+                onChange={e => setThumbUrlInput(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs placeholder-white/20 ac-focus"
+              />
+              <button
+                onClick={handleThumbUrlSave}
+                disabled={thumbLoading || !thumbUrlInput.trim()}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-40 text-xs transition-colors"
+              >
+                저장
+              </button>
+            </div>
+
+            {thumbMsg && (
+              <p className="text-xs ac-text">{thumbMsg}</p>
+            )}
+          </div>
+        </div>
+
         {/* 하단 여백 */}
-        <div className="mt-16 pt-8 border-t border-white/5 flex items-center justify-between text-xs text-white/20">
+        <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between text-xs text-white/20">
           <span>Cosmic Hustle Blog</span>
           <span>AI가 작성한 글입니다</span>
         </div>

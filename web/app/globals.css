@@ -295,6 +295,22 @@ input[type='range'].appearance-none::-moz-range-thumb {
   box-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
+/* ── 에이전트 컬러 유틸 (--ac CSS 변수로 주입) ───────────────── */
+.ac-focus:focus {
+  outline: none;
+  border-color: var(--ac, #7c3aed) !important;
+}
+.ac-btn {
+  background-color: color-mix(in srgb, var(--ac, #7c3aed) 75%, transparent);
+  transition: background-color 0.15s;
+}
+.ac-btn:hover:not(:disabled) {
+  background-color: var(--ac, #7c3aed);
+}
+.ac-btn:disabled { opacity: 0.4; }
+.ac-text { color: var(--ac, #7c3aed); }
+.ac-bar { background: var(--ac, #7c3aed); }
+
 /* ── 블로그 아티클 렌더링 ─────────────────────────────────────── */
 .blog-article {
   color: rgba(255,255,255,0.82);
@@ -329,8 +345,8 @@ input[type='range'].appearance-none::-moz-range-thumb {
 
 /* 인용구 */
 .blog-article blockquote {
-  border-left: 3px solid #7c3aed;
-  background: rgba(124,58,237,0.08);
+  border-left: 3px solid var(--ac, #7c3aed);
+  background: color-mix(in srgb, var(--ac, #7c3aed) 10%, transparent);
   margin: 1.5rem 0;
   padding: 0.9rem 1.2rem;
   border-radius: 0 0.5rem 0.5rem 0;
