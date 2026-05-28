@@ -460,7 +460,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2500,
+        max_tokens=4096,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
     )
@@ -476,7 +476,11 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
     )
 
     lines = content.split("\n")
-    title = lines[0].lstrip("#").strip() if lines and lines[0].startswith("#") else f"{persona['name']}의 오늘의 생각"
+    if lines and lines[0].startswith("#"):
+        title   = lines[0].lstrip("#").strip()
+        content = "\n".join(lines[1:]).strip()   # h1 중복 방지: 본문에서 제목 제거
+    else:
+        title   = f"{persona['name']}의 오늘의 생각"
 
     return {
         "id":            str(uuid.uuid4()),
