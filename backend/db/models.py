@@ -123,6 +123,13 @@ class BlogComment(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class BlogDailyVisit(Base):
+    __tablename__ = "blog_daily_visits"
+
+    date = Column(String, primary_key=True)  # YYYY-MM-DD
+    count = Column(Integer, default=0, server_default="0")
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 

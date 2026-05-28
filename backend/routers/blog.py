@@ -1,7 +1,9 @@
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from db.connection import get_db
-from db.models import BlogPost, BlogComment
+from db.models import BlogPost, BlogComment, BlogDailyVisit
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
@@ -95,8 +97,27 @@ def increment_view(slug: str, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     post.view_count = (post.view_count or 0) + 1
+
+    today = str(date.today())
+    visit = db.query(BlogDailyVisit).filter(BlogDailyVisit.date == today).first()
+    if visit:
+        visit.count += 1
+    else:
+        db.add(BlogDailyVisit(date=today, count=1))
+
     db.commit()
     return {"view_count": post.view_count}
+
+
+@router.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    today = str(date.today())
+    today_row = db.query(BlogDailyVisit).filter(BlogDailyVisit.date == today).first()
+    total = db.query(func.sum(BlogDailyVisit.count)).scalar() or 0
+    return {
+        "today": today_row.count if today_row else 0,
+        "total": total,
+    }
 
 
 @router.post("/posts/{slug}/like")
