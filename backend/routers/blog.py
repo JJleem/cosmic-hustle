@@ -65,6 +65,36 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
 
 # ── 댓글 ──────────────────────────────────────────────────────────────────────
 
+@router.post("/posts/{slug}/view")
+def increment_view(slug: str, db: Session = Depends(get_db)):
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post.view_count = (post.view_count or 0) + 1
+    db.commit()
+    return {"view_count": post.view_count}
+
+
+@router.post("/posts/{slug}/like")
+def like_post(slug: str, db: Session = Depends(get_db)):
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post.likes = (post.likes or 0) + 1
+    db.commit()
+    return {"likes": post.likes}
+
+
+@router.post("/posts/{slug}/unlike")
+def unlike_post(slug: str, db: Session = Depends(get_db)):
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    post.likes = max(0, (post.likes or 0) - 1)
+    db.commit()
+    return {"likes": post.likes}
+
+
 @router.get("/posts/{slug}/comments")
 def list_comments(slug: str, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()

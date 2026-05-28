@@ -19,7 +19,7 @@ const AGENT_NAMES: Record<string, string> = {
 type Post = {
   id: string; slug: string; agent_id: string; title: string;
   thumbnail_url: string | null; trending_topic: string | null;
-  published_at: string;
+  published_at: string; likes: number; view_count: number;
 };
 
 export default function BlogPreviewPage() {
@@ -99,13 +99,13 @@ export default function BlogPreviewPage() {
                     <Image src={post.thumbnail_url} alt={post.title} fill className="object-cover" unoptimized />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <Image src={`/id/${post.agent_id}.png`} alt={name} width={80} height={80} className="opacity-40" />
+                      <Image src={`/characters/${post.agent_id}/default.png`} alt={name} width={80} height={80} className="opacity-40 object-cover" />
                     </div>
                   )}
                   {/* 에이전트 배지 */}
                   <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium"
                     style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>
-                    <Image src={`/id/${post.agent_id}.png`} alt={name} width={16} height={16} className="rounded-full" />
+                    <Image src={`/characters/${post.agent_id}/default.png`} alt={name} width={16} height={16} className="rounded-full object-cover" />
                     {name}
                   </div>
                 </div>
@@ -114,8 +114,12 @@ export default function BlogPreviewPage() {
                   <p className="text-xs text-white/40 mb-1">{date}</p>
                   <h2 className="font-semibold text-sm leading-snug group-hover:text-violet-300 transition-colors line-clamp-2">{post.title}</h2>
                   {post.trending_topic && (
-                    <p className="text-xs text-white/30 mt-2">{post.trending_topic}</p>
+                    <p className="text-xs text-white/30 mt-2 truncate">{post.trending_topic}</p>
                   )}
+                  <div className="flex items-center gap-3 mt-3 text-xs text-white/25">
+                    <span>🤍 {post.likes ?? 0}</span>
+                    <span>👁 {(post.view_count ?? 0).toLocaleString()}</span>
+                  </div>
                 </div>
               </Link>
             );

@@ -106,6 +106,8 @@ class BlogPost(Base):
     published = Column(Boolean, default=True)
     trending_topic = Column(String, nullable=True)
     published_at = Column(DateTime, nullable=False)
+    likes = Column(Integer, default=0, server_default="0")
+    view_count = Column(Integer, default=0, server_default="0")
     created_at = Column(DateTime, server_default=func.now())
 
 
