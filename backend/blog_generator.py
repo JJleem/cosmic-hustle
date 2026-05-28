@@ -362,7 +362,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
             arguments={
                 "image_url": char_url,
                 "prompt": full_prompt,
-                "strength": 0.75,
+                "strength": 0.60,
                 "num_inference_steps": 30,
                 "guidance_scale": 7.5,
                 "image_size": "landscape_4_3",
@@ -384,8 +384,8 @@ async def _generate_content_image(prompt: str) -> str | None:
             "fal-ai/flux/dev",
             arguments={
                 "prompt": (
-                    f"Minimalist illustration for a Korean tech blog. {prompt} "
-                    "Soft pastel colors, clean layout, no text, high quality."
+                    f"Pixar 3D animation style illustration. {prompt} "
+                    "Vibrant colors, cinematic lighting, smooth 3D render, expressive and fun, no text, no watermark."
                 ),
                 "num_inference_steps": 28,
                 "guidance_scale": 7.5,
@@ -432,8 +432,13 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
 - 딱딱하고 어려운 글보다 가볍고 재미있게 — 사람이 쓴 블로그처럼
 - ## 소제목으로 글을 3~5개 섹션으로 나눌 것
 - 필요하면 표(markdown table), 인용구(>), 강조(**굵게**)도 활용
-- 글 맨 앞 첫 줄에 반드시 썸네일 태그 삽입:
-  {{THUMBNAIL: 당신이 등장하는 장면을 영어로 묘사. 주제와 어울리는 상황·소품·포즈}}
+- 글 맨 앞 첫 줄에 반드시 썸네일 태그 삽입 (영어로):
+  {{THUMBNAIL: 이 글의 핵심 감정·메시지를 표현하는 역동적인 장면. 반드시 포함할 것:
+  ① 구체적 동작·포즈 (단순히 서있거나 보고있는 장면 금지 — 뛰거나, 가리키거나, 놀라거나, 폭발적으로 반응하는 등 생동감 있는 행동)
+  ② 얼굴 표정 (excited / shocked / triumphant / moved / intense 등 감정 명시)
+  ③ 글 주제를 나타내는 소품·배경 요소
+  예시: "Ka leaning forward with intensely glowing eyes, dramatically pointing at a single tiny data point amid mountains of gray useless charts, triumphant shocked expression, holographic graphs exploding around"
+  }}
 - 본문 중간 이미지가 필요한 곳에 (1~3개, 선택적):
   {{IMAGE: 삽입할 이미지 설명 (영어, 캐릭터 없는 주제 관련 일러스트)}}
 - 글 맨 끝에 반드시 다음 형식으로 출처 섹션 추가:
