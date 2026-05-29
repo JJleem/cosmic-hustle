@@ -315,6 +315,7 @@ async def _fetch_trending(agent_id: str) -> str:
 
 _IMAGE_RE     = re.compile(r"\{\{IMAGE:\s*([^}]+?)\s*\}\}")
 _THUMBNAIL_RE = re.compile(r"\{\{THUMBNAIL:\s*([^}]+?)\s*\}\}")
+_TAGS_RE      = re.compile(r"\{\{TAGS:\s*([^}]+?)\s*\}\}")
 
 
 _STATIC_DIR = Path(__file__).parent / "static" / "blog"
@@ -581,7 +582,9 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
 - 글 맨 끝에 반드시 다음 형식으로 출처 섹션 추가:
   ---
   **📎 참고한 자료**
-  참고한 뉴스·자료 제목들을 항목별로 나열 (URL 없이 제목만)"""
+  참고한 뉴스·자료 제목들을 항목별로 나열 (URL 없이 제목만)
+- 출처 섹션 다음 마지막 줄에 반드시 태그 태그 삽입 (한국어, 3~5개, 쉼표 구분):
+  {{TAGS: 태그1, 태그2, 태그3}}"""
 
     user_content = (
         f"오늘({today.strftime('%Y년 %m월 %d일')}, {_weekday_kr(today.weekday())}) 주제: **{theme}**\n"
@@ -603,7 +606,10 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
     raw     = message.content[0].text.strip()
     thumb_m = _THUMBNAIL_RE.search(raw)
     scene   = thumb_m.group(1).strip() if thumb_m else f"{persona['role']} working on {theme}"
+    tags_m  = _TAGS_RE.search(raw)
+    tags    = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
     content = _THUMBNAIL_RE.sub("", raw).strip()
+    content = _TAGS_RE.sub("", content).strip()
 
     content, thumbnail_url = await asyncio.gather(
         _process_content_images(content, agent_id),
@@ -624,6 +630,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
         "slug":          _make_slug(agent_id, today),
         "content":       content,
         "thumbnail_url": thumbnail_url,
+        "tags":          tags,
         "published":     True,
         "trending_topic": theme,
         "published_at":  datetime.now(KST).replace(tzinfo=None),

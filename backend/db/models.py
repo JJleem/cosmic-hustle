@@ -103,6 +103,7 @@ class BlogPost(Base):
     slug = Column(String, unique=True, nullable=False)
     content = Column(Text, nullable=False)
     thumbnail_url = Column(String, nullable=True)
+    tags = Column(Text, nullable=True)  # JSON array string e.g. '["AI", "트렌드"]'
     published = Column(Boolean, default=True)
     trending_topic = Column(String, nullable=True)
     published_at = Column(DateTime, nullable=False)
