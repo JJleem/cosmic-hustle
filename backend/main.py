@@ -44,26 +44,34 @@ app.include_router(blog.router)
 async def _daily_blog_job():
     from blog_generator import generate_blog_post, generate_comments
     from db.models import BlogComment
-    db = SessionLocal()
-    try:
-        data = await generate_blog_post()
-        existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
-        if existing:
-            logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
+
+    for attempt in range(1, 4):
+        db = SessionLocal()
+        try:
+            data = await generate_blog_post()
+            existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
+            if existing:
+                logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
+                return
+            post = BlogPost(**data)
+            db.add(post)
+            db.flush()
+            summary = data["content"][:300]
+            comments = await generate_comments(post.id, post.agent_id, post.title, summary)
+            for c in comments:
+                db.add(BlogComment(**c))
+            db.commit()
+            logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
             return
-        post = BlogPost(**data)
-        db.add(post)
-        db.flush()
-        summary = data["content"][:300]
-        comments = await generate_comments(post.id, post.agent_id, post.title, summary)
-        for c in comments:
-            db.add(BlogComment(**c))
-        db.commit()
-        logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
-    except Exception as e:
-        logger.error(f"블로그 자동 생성 실패: {e}")
-    finally:
-        db.close()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"블로그 자동 생성 실패 (시도 {attempt}/3): {e}")
+            if attempt < 3:
+                await asyncio.sleep(60)
+        finally:
+            db.close()
+
+    logger.error("블로그 자동 생성 3회 모두 실패")
 
 
 @app.on_event("startup")

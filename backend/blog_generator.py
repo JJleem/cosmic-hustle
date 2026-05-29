@@ -334,12 +334,16 @@ def _fal_available() -> bool:
 async def _upload_character(agent_id: str) -> str | None:
     char_path = _CHAR_DIR / agent_id / "default.png"
     if not char_path.exists():
+        logger.warning(f"캐릭터 이미지 없음: {char_path}")
         return None
     try:
         import fal_client
-        return await asyncio.to_thread(fal_client.upload_file, str(char_path))
+        return await asyncio.wait_for(
+            asyncio.to_thread(fal_client.upload_file, str(char_path)),
+            timeout=30.0,
+        )
     except Exception as e:
-        logger.warning(f"캐릭터 업로드 실패: {e}")
+        logger.warning(f"캐릭터 업로드 실패 ({agent_id}): {e}")
         return None
 
 
@@ -426,9 +430,9 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
 
 async def generate_scene_prompt_from_content(agent_id: str, title: str, content: str) -> str:
     """블로그 본문을 읽고 Flux Kontext용 씬 프롬프트를 Haiku로 생성."""
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     truncated = content[:1500]
-    message = client.messages.create(
+    message = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=150,
         messages=[{
@@ -484,8 +488,11 @@ async def _generate_content_image(prompt: str) -> str | None:
 async def _process_content_images(content: str, agent_id: str = "") -> str:
     limit = 4 if agent_id == "pixel" else 2
     matches = _IMAGE_RE.findall(content)
-    for prompt in matches[:limit]:
-        url    = await _generate_content_image(prompt)
+    selected = matches[:limit]
+    if not selected:
+        return content
+    urls = await asyncio.gather(*[_generate_content_image(p) for p in selected])
+    for prompt, url in zip(selected, urls):
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
     return content
@@ -508,7 +515,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
     # 최신 트렌드 수집 (Tavily)
     trending_context = await _fetch_trending(agent_id)
 
-    client      = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     system_text = persona["system"] + """
 
 【공통 작성 규칙】
@@ -562,9 +569,9 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
 
     user_content += "\n\n포스트 전체를 다 작성한 뒤, 맨 끝에 {{THUMBNAIL: ...}} 태그를 붙이세요. 글 내용을 충분히 읽고 그 내용을 직접 반영한 씬을 묘사해야 합니다."
 
-    message = client.messages.create(
+    message = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4096,
+        max_tokens=6000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
     )
@@ -595,7 +602,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
         "thumbnail_url": thumbnail_url,
         "published":     True,
         "trending_topic": theme,
-        "published_at":  datetime.utcnow() + timedelta(hours=9),
+        "published_at":  datetime.now(KST).replace(tzinfo=None),
     }
 
 
@@ -639,10 +646,10 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         f"{reply_example}\n]"
     )
 
-    client  = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    message = client.messages.create(
+    client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = await client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=512,
+        max_tokens=800,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -657,7 +664,7 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         logger.warning(f"댓글 JSON 파싱 실패: {raw[:200]}")
         return []
 
-    now     = datetime.utcnow() + timedelta(hours=9)
+    now     = datetime.now(KST).replace(tzinfo=None)
     results = []
     id_map: dict[int, str] = {}
 
