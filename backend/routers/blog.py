@@ -198,6 +198,8 @@ def add_user_comment(slug: str, body: dict, db: Session = Depends(get_db)):
         parent = db.query(BlogComment).filter(BlogComment.id == parent_id).first()
         if not parent or parent.post_id != post.id:
             raise HTTPException(status_code=400, detail="잘못된 parent_id")
+        if parent.parent_id is not None:
+            raise HTTPException(status_code=400, detail="대댓글에는 답글을 달 수 없습니다")
 
     import uuid
     comment = BlogComment(
