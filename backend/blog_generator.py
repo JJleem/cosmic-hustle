@@ -480,7 +480,7 @@ async def _generate_content_image(prompt: str) -> str | None:
 
 async def _process_content_images(content: str) -> str:
     matches = _IMAGE_RE.findall(content)
-    for prompt in matches[:1]:  # 비용 절감: 본문 이미지 최대 1개
+    for prompt in matches[:2]:
         url    = await _generate_content_image(prompt)
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
@@ -534,7 +534,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
   좋은 예시: "wearing a navy news anchor suit and tie, sitting at a glowing news desk in a TV studio, pointing at breaking news on a giant LED screen, intense focused expression, dramatic studio lighting"
   나쁜 예시: "standing and looking at charts with a happy face" (서있음, 환경 없음, 의상 없음, 글 내용 미반영)
   }}
-- 본문 중간 이미지가 필요한 곳에 (선택적, 최대 1개):
+- 본문 중간 이미지가 필요한 곳에 (선택적, 최대 2개):
   {{IMAGE: 이 단락의 핵심을 표현하는 일러스트 (반드시 영어, 사람·캐릭터 없는 오브젝트/풍경/개념 시각화).
   작성 규칙:
   ① 단락에서 다룬 구체적 소재를 그대로 시각화할 것 (추상적 설명 금지)
