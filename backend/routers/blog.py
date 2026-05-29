@@ -110,13 +110,19 @@ def get_post(slug: str, db: Session = Depends(get_db)):
 
 
 @router.post("/generate")
-async def trigger_generate(agent_id: str | None = None, db: Session = Depends(get_db)):
-    """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용)."""
+async def trigger_generate(agent_id: str | None = None, force: bool = False, db: Session = Depends(get_db)):
+    """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
     data = await generate_blog_post(agent_id)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:
-        raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}")
+        if not force:
+            raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}")
+        n = 2
+        base_slug = data["slug"]
+        while db.query(BlogPost).filter(BlogPost.slug == f"{base_slug}-{n}").first():
+            n += 1
+        data["slug"] = f"{base_slug}-{n}"
 
     post = BlogPost(**data)
     db.add(post)

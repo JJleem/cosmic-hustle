@@ -130,7 +130,15 @@
       "Bash(node_modules/.bin/claude -p --verbose --output-format stream-json --dangerously-skip-permissions --max-turns 1 \"hi\")",
       "Bash(kill 11775)",
       "Bash(backend/.venv/bin/python -m pytest backend/tests/ -q)",
-      "Bash(.venv/bin/alembic current *)"
+      "Bash(.venv/bin/alembic current *)",
+      "Bash(pip --version)",
+      "Bash(python -c \"import fastapi\")",
+      "Bash(python -c \"import sqlalchemy\")",
+      "Bash(python -c \"import sentence_transformers\")",
+      "Bash(python -c \"import pgvector\")",
+      "Bash(pg_isready)",
+      "Bash(python -c \"import uvicorn\")",
+      "Bash(python -c \"import sse_starlette\")"
     ]
   }
 }
