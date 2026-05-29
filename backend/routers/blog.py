@@ -144,12 +144,23 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    for field in ("published", "content", "title", "thumbnail_url"):
+    for field in ("published", "content", "title", "thumbnail_url", "slug"):
         if field in body:
             setattr(post, field, body[field])
     db.commit()
     db.refresh(post)
     return post
+
+
+@router.delete("/posts/{post_id}")
+def delete_post(post_id: str, db: Session = Depends(get_db)):
+    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    db.query(BlogComment).filter(BlogComment.post_id == post_id).delete()
+    db.delete(post)
+    db.commit()
+    return {"deleted": post_id}
 
 
 @router.post("/posts/{slug}/regenerate-thumbnail")
