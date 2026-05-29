@@ -492,10 +492,12 @@ async def _process_content_images(content: str) -> str:
 async def generate_blog_post(agent_id: str | None = None) -> dict:
     today = datetime.now(KST).date()
 
+    _AGENT_THEMES = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}
+
     if agent_id is None:
         agent_id, theme = get_today_agent()
     else:
-        theme = "자유 주제 (게스트 칼럼)"
+        theme = _AGENT_THEMES.get(agent_id, "자유 주제 (게스트 칼럼)")
 
     persona = AGENT_PERSONAS[agent_id]
 
