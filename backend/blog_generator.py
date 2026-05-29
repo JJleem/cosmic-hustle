@@ -317,6 +317,28 @@ _IMAGE_RE     = re.compile(r"\{\{IMAGE:\s*([^}]+?)\s*\}\}")
 _THUMBNAIL_RE = re.compile(r"\{\{THUMBNAIL:\s*([^}]+?)\s*\}\}")
 
 
+_STATIC_DIR = Path(__file__).parent / "static" / "blog"
+
+
+async def _download_image(fal_url: str) -> str:
+    """fal URL → backend/static/blog/{uuid}.jpg 저장 → 로컬 URL 반환."""
+    _STATIC_DIR.mkdir(parents=True, exist_ok=True)
+    ext = fal_url.split(".")[-1].split("?")[0]
+    if ext not in ("jpg", "jpeg", "png", "webp"):
+        ext = "jpg"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.get(fal_url)
+            resp.raise_for_status()
+            (_STATIC_DIR / filename).write_bytes(resp.content)
+        base = os.environ.get("BACKEND_URL", "http://3.36.239.214:8000")
+        return f"{base}/static/blog/{filename}"
+    except Exception as e:
+        logger.warning(f"이미지 다운로드 실패 ({fal_url[:60]}): {e}")
+        return fal_url  # 실패 시 원본 URL fallback
+
+
 def get_today_agent() -> tuple[str, str]:
     today_kst = datetime.now(KST).date()
     sched = DAY_SCHEDULE[today_kst.weekday()]
@@ -422,7 +444,8 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
             ),
             timeout=120.0,
         )
-        return result["images"][0]["url"]
+        fal_url = result["images"][0]["url"]
+        return await _download_image(fal_url)
     except Exception as e:
         logger.warning(f"썸네일 생성 실패: {e}")
         return None
@@ -479,7 +502,8 @@ async def _generate_content_image(prompt: str) -> str | None:
             ),
             timeout=60.0,
         )
-        return result["images"][0]["url"]
+        fal_url = result["images"][0]["url"]
+        return await _download_image(fal_url)
     except Exception as e:
         logger.warning(f"본문 이미지 생성 실패: {e}")
         return None
