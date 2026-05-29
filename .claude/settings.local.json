@@ -138,7 +138,13 @@
       "Bash(python -c \"import pgvector\")",
       "Bash(pg_isready)",
       "Bash(python -c \"import uvicorn\")",
-      "Bash(python -c \"import sse_starlette\")"
+      "Bash(python -c \"import sse_starlette\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\DonghaeChoi\\\\Desktop\\\\personal repository\\\\cosmic-hustle\\\\backend\" -Exclude venv -Recurse -Filter \"*.py\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(gh run *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(Start-Sleep -Seconds 60)",
+      "Bash(ping -c 30 3.36.239.214)"
     ]
   }
 }
