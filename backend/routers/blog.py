@@ -1,3 +1,5 @@
+import hashlib
+import os
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
@@ -8,6 +10,53 @@ from db.connection import get_db
 from db.models import BlogPost, BlogComment, BlogDailyVisit
 
 limiter = Limiter(key_func=get_remote_address)
+
+# ── 익명 정체성 ────────────────────────────────────────────────────────────────
+
+_PLANETS = [
+    "방구행성", "감자행성", "도넛행성", "수박행성", "먼지행성",
+    "구름행성", "치즈행성", "고양이행성", "버섯행성", "졸음행성",
+    "라면행성", "양말행성", "하품행성", "탕수육행성", "눈물행성",
+    "지각행성", "낮잠행성", "번개행성", "얼음행성", "비밀행성",
+]
+_ADJECTIVES = [
+    "출신 백수", "주민", "망명자", "여행자", "행상인",
+    "연구원", "탐험가", "길잡이", "은둔자", "밀입국자",
+    "관광객", "이주민", "수집가", "도망자", "견습생",
+    "식객", "표류자", "감시자", "밀수꾼", "철학자",
+]
+_ANON_SALT = os.environ.get("ANON_SALT", "cosmic-hustle-2026")
+_TOTAL = len(_PLANETS) * len(_ADJECTIVES)  # 400
+
+
+def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
+    """IP + post_id → (이름, 아바타 인덱스). 같은 IP는 같은 포스트에서 항상 동일."""
+    ip_hash = hashlib.sha256(f"{ip}{post_id}{_ANON_SALT}".encode()).hexdigest()[:16]
+
+    # 이미 이 포스트에서 댓글 단 적 있으면 기존 값 재사용
+    existing = db.query(BlogComment).filter(
+        BlogComment.post_id == post_id,
+        BlogComment.ip_hash == ip_hash,
+    ).first()
+    if existing:
+        return existing.user_name, existing.anon_avatar
+
+    # 이 포스트에서 이미 사용된 이름 목록
+    taken = {
+        c.user_name for c in db.query(BlogComment).filter(
+            BlogComment.post_id == post_id,
+            BlogComment.ip_hash.isnot(None),
+        ).all()
+    }
+
+    seed = int(hashlib.md5(f"{ip}{post_id}{_ANON_SALT}".encode()).hexdigest(), 16)
+    for offset in range(_TOTAL):
+        idx = (seed + offset) % _TOTAL
+        name = f"{_PLANETS[idx % len(_PLANETS)]} {_ADJECTIVES[(idx // len(_PLANETS)) % len(_ADJECTIVES)]}"
+        if name not in taken:
+            return name, idx % 50
+
+    return "우주 방랑자", seed % 50
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
@@ -200,7 +249,7 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    user_name = (body.get("user_name") or "익명").strip()[:50]
+    raw_name = (body.get("user_name") or "").strip()[:50]
     content = (body.get("content") or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="내용을 입력하세요")
@@ -215,6 +264,14 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
         if parent.parent_id is not None:
             raise HTTPException(status_code=400, detail="대댓글에는 답글을 달 수 없습니다")
 
+    # 이름 미입력 시 익명 정체성 자동 부여
+    ip = request.client.host
+    if raw_name:
+        user_name, anon_avatar, ip_hash = raw_name, None, None
+    else:
+        user_name, anon_avatar = _anon_identity(ip, post.id, db)
+        ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
+
     import uuid
     comment = BlogComment(
         id=str(uuid.uuid4()),
@@ -222,6 +279,8 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
         parent_id=parent_id,
         agent_id=None,
         user_name=user_name,
+        anon_avatar=anon_avatar,
+        ip_hash=ip_hash,
         content=content,
     )
     db.add(comment)

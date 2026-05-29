@@ -117,8 +117,10 @@ class BlogComment(Base):
     id = Column(String, primary_key=True)
     post_id = Column(String, ForeignKey("blog_posts.id"), nullable=False)
     parent_id = Column(String, ForeignKey("blog_comments.id"), nullable=True)
-    agent_id = Column(String, nullable=True)       # AI 댓글이면 agent_id, 유저 댓글이면 null
-    user_name = Column(String, nullable=True)      # 유저 댓글이면 이름, AI면 null
+    agent_id = Column(String, nullable=True)
+    user_name = Column(String, nullable=True)
+    anon_avatar = Column(Integer, nullable=True)   # 익명 아바타 인덱스 (0-49)
+    ip_hash = Column(String(16), nullable=True)    # hash(ip+post_id+salt) 앞 16자 — IP 미저장
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
