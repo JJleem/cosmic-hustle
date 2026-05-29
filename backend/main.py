@@ -9,8 +9,11 @@ load_dotenv(Path(__file__).parent / ".env")
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
@@ -20,7 +23,10 @@ from routers import health, research, wiki, memos, versions, export, logs, thumb
 Base.metadata.create_all(bind=engine)
 
 logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Cosmic Hustle API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 scheduler = AsyncIOScheduler()
 
 app.add_middleware(

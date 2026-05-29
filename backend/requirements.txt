@@ -20,3 +20,4 @@ anthropic
 fal-client
 apscheduler
 feedparser
+slowapi

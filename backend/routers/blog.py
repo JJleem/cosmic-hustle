@@ -1,9 +1,13 @@
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from db.connection import get_db
 from db.models import BlogPost, BlogComment, BlogDailyVisit
+
+limiter = Limiter(key_func=get_remote_address)
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
@@ -182,7 +186,8 @@ def list_comments(slug: str, db: Session = Depends(get_db)):
 
 
 @router.post("/posts/{slug}/comments")
-def add_user_comment(slug: str, body: dict, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depends(get_db)):
     """실사용자 댓글 추가."""
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
@@ -192,6 +197,8 @@ def add_user_comment(slug: str, body: dict, db: Session = Depends(get_db)):
     content = (body.get("content") or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="내용을 입력하세요")
+    if len(content) > 1000:
+        raise HTTPException(status_code=400, detail="댓글은 1000자 이하로 작성해주세요")
 
     parent_id = body.get("parent_id")
     if parent_id:
