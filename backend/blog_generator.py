@@ -15,7 +15,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_CHAR_DIR = Path(__file__).parent.parent / "web" / "public" / "characters"
+_CHAR_DIR = Path(__file__).parent / "characters"
 
 # ── 요일 스케줄 ────────────────────────────────────────────────────────────────
 
