@@ -13,6 +13,22 @@ from blog_generator import (
 router = APIRouter(prefix="/api/blog", tags=["blog"])
 
 
+def _comment_counts(db: Session, post_ids: list) -> dict:
+    rows = (
+        db.query(BlogComment.post_id, func.count(BlogComment.id))
+        .filter(BlogComment.post_id.in_(post_ids))
+        .group_by(BlogComment.post_id)
+        .all()
+    )
+    return {post_id: count for post_id, count in rows}
+
+
+def _with_comment_count(post, count: int) -> dict:
+    d = {c.name: getattr(post, c.name) for c in post.__table__.columns}
+    d["comment_count"] = count
+    return d
+
+
 @router.get("/posts")
 def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: Session = Depends(get_db)):
     offset = (page - 1) * limit
@@ -21,8 +37,9 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
         q = q.filter(BlogPost.published == True)
     total = q.count()
     posts = q.order_by(BlogPost.published_at.desc()).offset(offset).limit(limit).all()
+    counts = _comment_counts(db, [p.id for p in posts])
     return {
-        "posts": posts,
+        "posts": [_with_comment_count(p, counts.get(p.id, 0)) for p in posts],
         "total": total,
         "page": page,
         "limit": limit,
@@ -35,7 +52,8 @@ def get_post(slug: str, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    return post
+    count = db.query(func.count(BlogComment.id)).filter(BlogComment.post_id == post.id).scalar()
+    return _with_comment_count(post, count or 0)
 
 
 @router.post("/generate")
