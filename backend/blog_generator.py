@@ -155,7 +155,10 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 4. "디자인은 결국 ___입니다" 스타일의 철학적 마무리
 
 【주제 접근법】
-디자인과 문화를 함께 봅니다. 패키지 디자인, 앱 UI, 거리의 간판, 영화 포스터 — 모두 이야기가 있습니다.""",
+디자인과 문화를 함께 봅니다. 패키지 디자인, 앱 UI, 거리의 간판, 영화 포스터 — 모두 이야기가 있습니다.
+
+【이미지】
+시각적 글인 만큼 본문 중간에 {{IMAGE: ...}} 태그를 최소 3개 이상 삽입하세요.""",
     },
 
     "ping": {
@@ -478,9 +481,10 @@ async def _generate_content_image(prompt: str) -> str | None:
         return None
 
 
-async def _process_content_images(content: str) -> str:
+async def _process_content_images(content: str, agent_id: str = "") -> str:
+    limit = 4 if agent_id == "pixel" else 2
     matches = _IMAGE_RE.findall(content)
-    for prompt in matches[:2]:
+    for prompt in matches[:limit]:
         url    = await _generate_content_image(prompt)
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
@@ -534,7 +538,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
   좋은 예시: "wearing a navy news anchor suit and tie, sitting at a glowing news desk in a TV studio, pointing at breaking news on a giant LED screen, intense focused expression, dramatic studio lighting"
   나쁜 예시: "standing and looking at charts with a happy face" (서있음, 환경 없음, 의상 없음, 글 내용 미반영)
   }}
-- 본문 중간 이미지가 필요한 곳에 (선택적, 최대 2개):
+- 본문 중간 이미지는 글의 흐름에 따라 1~2개 자유롭게 삽입 (픽셀은 최소 3개):
   {{IMAGE: 이 단락의 핵심을 표현하는 일러스트 (반드시 영어, 사람·캐릭터 없는 오브젝트/풍경/개념 시각화).
   작성 규칙:
   ① 단락에서 다룬 구체적 소재를 그대로 시각화할 것 (추상적 설명 금지)
@@ -571,7 +575,7 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
     content = _THUMBNAIL_RE.sub("", raw).strip()
 
     content, thumbnail_url = await asyncio.gather(
-        _process_content_images(content),
+        _process_content_images(content, agent_id),
         _generate_thumbnail(agent_id, scene),
     )
 
