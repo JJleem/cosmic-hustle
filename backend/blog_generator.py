@@ -664,7 +664,7 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         logger.warning(f"댓글 JSON 파싱 실패: {raw[:200]}")
         return []
 
-    now     = datetime.now(KST).replace(tzinfo=None)
+    now     = datetime.now(timezone.utc).replace(tzinfo=None)
     results = []
     id_map: dict[int, str] = {}
 

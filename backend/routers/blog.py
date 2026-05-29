@@ -171,6 +171,13 @@ def unlike_post(slug: str, db: Session = Depends(get_db)):
     return {"likes": post.likes}
 
 
+def _serialize_comment(c) -> dict:
+    d = {col.name: getattr(c, col.name) for col in c.__table__.columns}
+    if d.get("created_at"):
+        d["created_at"] = d["created_at"].isoformat() + "Z"
+    return d
+
+
 @router.get("/posts/{slug}/comments")
 def list_comments(slug: str, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
@@ -182,7 +189,7 @@ def list_comments(slug: str, db: Session = Depends(get_db)):
         .order_by(BlogComment.created_at)
         .all()
     )
-    return comments
+    return [_serialize_comment(c) for c in comments]
 
 
 @router.post("/posts/{slug}/comments")
@@ -220,7 +227,7 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    return comment
+    return _serialize_comment(comment)
 
 
 # ── 메타 ──────────────────────────────────────────────────────────────────────
