@@ -70,7 +70,7 @@ async def _daily_blog_job():
 async def startup():
     scheduler.add_job(
         _daily_blog_job,
-        CronTrigger(hour=0, minute=0, timezone="Asia/Seoul"),  # 매일 KST 09:00
+        CronTrigger(hour=9, minute=0, timezone="Asia/Seoul"),
         id="daily_blog",
         replace_existing=True,
     )

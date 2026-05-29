@@ -6,7 +6,9 @@ import random
 import asyncio
 import logging
 from pathlib import Path
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 
 import anthropic
 import httpx
@@ -313,7 +315,8 @@ _THUMBNAIL_RE = re.compile(r"\{\{THUMBNAIL:\s*([^}]+?)\s*\}\}")
 
 
 def get_today_agent() -> tuple[str, str]:
-    sched = DAY_SCHEDULE[date.today().weekday()]
+    today_kst = datetime.now(KST).date()
+    sched = DAY_SCHEDULE[today_kst.weekday()]
     return sched["agent_id"], sched["theme"]
 
 
@@ -398,16 +401,19 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
 
     try:
         import fal_client
-        result = await asyncio.to_thread(
-            fal_client.subscribe,
-            "fal-ai/flux-kontext/dev",
-            arguments={
-                "image_url": char_url,
-                "prompt": full_prompt,
-                "num_inference_steps": 28,
-                "guidance_scale": 3.5,
-                "aspect_ratio": "4:3",
-            },
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                fal_client.subscribe,
+                "fal-ai/flux-kontext/dev",
+                arguments={
+                    "image_url": char_url,
+                    "prompt": full_prompt,
+                    "num_inference_steps": 28,
+                    "guidance_scale": 3.5,
+                    "aspect_ratio": "4:3",
+                },
+            ),
+            timeout=120.0,
         )
         return result["images"][0]["url"]
     except Exception as e:
@@ -450,18 +456,21 @@ async def _generate_content_image(prompt: str) -> str | None:
         return None
     try:
         import fal_client
-        result = await asyncio.to_thread(
-            fal_client.subscribe,
-            "fal-ai/flux/schnell",
-            arguments={
-                "prompt": (
-                    f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
-                    "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
-                    "smooth 3D render, playful and charming, no text, no watermark."
-                ),
-                "num_inference_steps": 4,
-                "image_size": "square_hd",
-            },
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                fal_client.subscribe,
+                "fal-ai/flux/schnell",
+                arguments={
+                    "prompt": (
+                        f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
+                        "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
+                        "smooth 3D render, playful and charming, no text, no watermark."
+                    ),
+                    "num_inference_steps": 4,
+                    "image_size": "square_hd",
+                },
+            ),
+            timeout=60.0,
         )
         return result["images"][0]["url"]
     except Exception as e:
@@ -481,7 +490,7 @@ async def _process_content_images(content: str) -> str:
 # ── 포스트 생성 ────────────────────────────────────────────────────────────────
 
 async def generate_blog_post(agent_id: str | None = None) -> dict:
-    today = date.today()
+    today = datetime.now(KST).date()
 
     if agent_id is None:
         agent_id, theme = get_today_agent()
