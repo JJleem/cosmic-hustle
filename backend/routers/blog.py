@@ -112,7 +112,16 @@ def get_post(slug: str, db: Session = Depends(get_db)):
 @router.post("/generate")
 async def trigger_generate(agent_id: str | None = None, force: bool = False, db: Session = Depends(get_db)):
     """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
-    data = await generate_blog_post(agent_id)
+    from datetime import datetime, timedelta
+    from sqlalchemy import desc
+    cutoff = datetime.now() - timedelta(days=14)
+    recent_titles = [
+        r[0] for r in db.query(BlogPost.title)
+        .filter(BlogPost.published_at >= cutoff)
+        .order_by(desc(BlogPost.published_at))
+        .limit(30).all()
+    ]
+    data = await generate_blog_post(agent_id, recent_titles=recent_titles)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:

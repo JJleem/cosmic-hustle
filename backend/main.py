@@ -1,6 +1,7 @@
 import sys
 import asyncio
 import logging
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -59,7 +60,15 @@ async def _daily_blog_job():
     for attempt in range(1, 4):
         db = SessionLocal()
         try:
-            data = await generate_blog_post()
+            from datetime import timedelta
+            cutoff = datetime.now() - timedelta(days=14)
+            recent_titles = [
+                r[0] for r in db.query(BlogPost.title)
+                .filter(BlogPost.published_at >= cutoff)
+                .order_by(BlogPost.published_at.desc())
+                .limit(30).all()
+            ]
+            data = await generate_blog_post(recent_titles=recent_titles)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")

@@ -530,7 +530,7 @@ async def _process_content_images(content: str, agent_id: str = "") -> str:
 
 # ── 포스트 생성 ────────────────────────────────────────────────────────────────
 
-async def generate_blog_post(agent_id: str | None = None) -> dict:
+async def generate_blog_post(agent_id: str | None = None, recent_titles: list[str] | None = None) -> dict:
     today = datetime.now(KST).date()
 
     _AGENT_THEMES = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}
@@ -594,6 +594,9 @@ async def generate_blog_post(agent_id: str | None = None) -> dict:
     user_content = (
         f"오늘({today.strftime('%Y년 %m월 %d일')}, {_weekday_kr(today.weekday())}) 주제: **{theme}**\n"
     )
+    if recent_titles:
+        titles_str = "\n".join(f"- {t}" for t in recent_titles)
+        user_content += f"\n【최근 2주간 이미 발행된 포스트 제목 — 이와 동일하거나 유사한 주제·각도는 피할 것】\n{titles_str}\n"
     if trending_context:
         user_content += f"\n【오늘의 최신 트렌드 참고자료】\n{trending_context}\n\n위 자료를 참고하되, 당신만의 시각과 말투로 블로그 포스트를 작성하세요."
     else:
