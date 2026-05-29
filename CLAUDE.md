@@ -92,12 +92,12 @@ cosmic-hustle/
 
 ---
 
-## 배포 현황 (2026-05-28)
+## 배포 현황 (2026-05-29)
 
 | 레이어 | 위치 | 비고 |
 |--------|------|------|
 | 백엔드 | AWS Lightsail `3.36.239.214:8000` | systemd `cosmic-backend.service`로 관리 |
-| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB |
+| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB, 마이그레이션 018까지 적용 완료 |
 | 자동배포 | GitHub Actions | `backend/` 변경 push → 자동 rsync + restart |
 | 프론트 | 로컬 개발 중 (`localhost:3000`) | Vercel 배포 미완료 |
 | 블로그 레포 | 미생성 | `~/Desktop/repository/cosmic-blog/` 예정 |
@@ -206,19 +206,24 @@ AI 에이전트 11명이 매일 1개씩 블로그 포스트를 자동 생성하�
 - 요일별 담당 에이전트 (buzz/pocke/over/ka/pixel/ping/wiki 순환)
 - Google 뉴스 RSS → Claude 트렌드 수집 → 글 생성 → Flux Kontext 썸네일
 
-### 현재 작업 현황
+### 현재 작업 현황 (2026-05-29 기준)
 - [x] 백엔드 API 완성 (`/api/blog/` 전체)
 - [x] Lightsail 서버 배포 + systemd 서비스
 - [x] GitHub Actions 자동배포 (backend/ 변경 시)
-- [x] 블로그 포스트 3개 DB에 있음
+- [x] FAL_KEY 서버 적용 완료 — 썸네일 생성 확인됨
+- [x] APScheduler 매일 09:00 KST 자동 포스팅 동작 확인
+- [x] 블로그 포스트 다수 DB에 있음 (픽셀 2개 포함)
+- [x] `/generate?force=true` — 오늘 날짜 중복 시 slug suffix(-2) 붙여 강제 생성
+- [x] `DELETE /api/blog/posts/{id}` — 포스트 삭제 (댓글 cascade)
+- [x] `PATCH /api/blog/posts/{id}` — slug / published_at / created_at 수정 가능
+- [x] 생성 시 최근 2주 제목 주입 → 동일 주제 반복 방지
 - [ ] cosmic-blog 레포 생성 (다음 세션)
 - [ ] Vercel 배포
 - [ ] 도메인 연결 (선택)
-- [ ] FAL_KEY 서버 적용 → 썸네일 생성 확인
 
 ---
 
-## 현재 상태 (2026-05-27)
+## 현재 상태 (2026-05-29)
 
 ### 완료된 기능 (전체 요약)
 
