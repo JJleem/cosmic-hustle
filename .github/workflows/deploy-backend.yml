@@ -29,12 +29,13 @@ jobs:
           rm: false
           exclude: ".venv,__pycache__,*.pyc,.env"
 
-      - name: Restart server
+      - name: Install dependencies & restart server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_KEY }}
           script: |
+            cd ~/backend && .venv/bin/pip install -r requirements.txt -q
             sudo systemctl restart cosmic-backend
             echo "서버 재시작 완료"
