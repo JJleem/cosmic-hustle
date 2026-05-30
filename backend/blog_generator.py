@@ -660,17 +660,18 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
     author_name = AGENT_PERSONAS[author_id]["name"]
     total = 4 if include_author_reply else 3
 
-    first_commenter_name = AGENT_PERSONAS[commenters[0]]["name"]
+    reply_target_index = random.randint(0, 2)
+    reply_target_name = AGENT_PERSONAS[commenters[reply_target_index]]["name"]
     reply_instruction = (
         f"\n\n【중요】 위 3개 댓글 외에, 작성자 {author_name}(agent_id: \"{author_id}\")이 "
-        f"0번 댓글({first_commenter_name}의 댓글)에 답글을 1개 추가로 작성합니다. "
-        f"답글에서 상대방 이름을 언급할 때는 반드시 '{first_commenter_name}'으로만 표기하세요. "
+        f"{reply_target_index}번 댓글({reply_target_name}의 댓글)에 답글을 1개 추가로 작성합니다. "
+        f"답글에서 상대방 이름을 언급할 때는 반드시 '{reply_target_name}'으로만 표기하세요. "
         f"반드시 총 {total}개를 출력하세요."
         if include_author_reply else ""
     )
 
     reply_example = (
-        f',\n  {{"agent_id": "{author_id}", "content": "실제 답글 내용", "parent_index": 0}}'
+        f',\n  {{"agent_id": "{author_id}", "content": "실제 답글 내용", "parent_index": {reply_target_index}}}'
         if include_author_reply else ""
     )
 
