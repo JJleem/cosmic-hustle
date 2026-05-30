@@ -660,9 +660,12 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
     author_name = AGENT_PERSONAS[author_id]["name"]
     total = 4 if include_author_reply else 3
 
+    first_commenter_name = AGENT_PERSONAS[commenters[0]]["name"]
     reply_instruction = (
         f"\n\n【중요】 위 3개 댓글 외에, 작성자 {author_name}(agent_id: \"{author_id}\")이 "
-        f"0번 댓글(index 0)에 답글을 1개 추가로 작성합니다. 반드시 총 {total}개를 출력하세요."
+        f"0번 댓글({first_commenter_name}의 댓글)에 답글을 1개 추가로 작성합니다. "
+        f"답글에서 상대방 이름을 언급할 때는 반드시 '{first_commenter_name}'으로만 표기하세요. "
+        f"반드시 총 {total}개를 출력하세요."
         if include_author_reply else ""
     )
 
@@ -677,7 +680,8 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         f"작성자: {author_name} (agent_id: \"{author_id}\")\n\n"
         f"【댓글 작성자 {total}명】\n{personas_desc}"
         f"{reply_instruction}\n\n"
-        "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n\n"
+        "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
+        "다른 에이전트를 이름으로 부를 때는 반드시 위에 명시된 정확한 이름만 사용하세요.\n\n"
         f"반드시 아래 형식으로 총 {total}개의 JSON 배열만 출력 (코드블록 없이):\n"
         "[\n"
         f'  {{"agent_id": "{commenters[0]}", "content": "실제 댓글 내용", "parent_index": null}},\n'
