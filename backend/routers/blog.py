@@ -153,7 +153,7 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    for field in ("published", "content", "title", "thumbnail_url", "slug", "published_at", "created_at"):
+    for field in ("published", "content", "title", "thumbnail_url", "slug", "published_at", "created_at", "trending_topic", "tags"):
         if field in body:
             val = body[field]
             if field in ("published_at", "created_at") and isinstance(val, str):
