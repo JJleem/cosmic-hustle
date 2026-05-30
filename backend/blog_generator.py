@@ -641,7 +641,7 @@ async def generate_blog_post(agent_id: str | None = None, recent_titles: list[st
         "thumbnail_url": thumbnail_url,
         "tags":          tags,
         "published":     True,
-        "trending_topic": theme,
+        "trending_topic": trending_context[:200] if trending_context else theme,
         "published_at":  datetime.now(KST).replace(tzinfo=None),
     }
 
