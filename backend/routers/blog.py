@@ -319,6 +319,28 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
     return _serialize_comment(comment)
 
 
+@router.patch("/comments/{comment_id}")
+def update_comment(comment_id: str, body: dict, db: Session = Depends(get_db)):
+    comment = db.query(BlogComment).filter(BlogComment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if "content" in body:
+        comment.content = body["content"]
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+@router.delete("/comments/{comment_id}")
+def delete_comment(comment_id: str, db: Session = Depends(get_db)):
+    comment = db.query(BlogComment).filter(BlogComment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    db.delete(comment)
+    db.commit()
+    return {"deleted": comment_id}
+
+
 # ── 메타 ──────────────────────────────────────────────────────────────────────
 
 @router.get("/schedule")
