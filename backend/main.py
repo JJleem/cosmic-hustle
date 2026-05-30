@@ -62,11 +62,15 @@ async def _daily_blog_job():
         try:
             from datetime import timedelta
             cutoff = datetime.now() - timedelta(days=14)
-            recent_titles = [
-                r[0] for r in db.query(BlogPost.title)
+            recent_rows = (
+                db.query(BlogPost.title, BlogPost.trending_topic)
                 .filter(BlogPost.published_at >= cutoff)
                 .order_by(BlogPost.published_at.desc())
                 .limit(30).all()
+            )
+            recent_titles = [
+                f"{title} (핵심 아이디어: {topic})" if topic else title
+                for title, topic in recent_rows
             ]
             data = await generate_blog_post(recent_titles=recent_titles)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
