@@ -295,7 +295,9 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
             raise HTTPException(status_code=400, detail="대댓글에는 답글을 달 수 없습니다")
 
     # 이름 미입력 시 익명 정체성 자동 부여
-    ip = request.client.host
+    # Vercel 프록시 통과 시 X-Forwarded-For에 실제 클라이언트 IP가 담김
+    forwarded_for = request.headers.get("x-forwarded-for")
+    ip = forwarded_for.split(",")[0].strip() if forwarded_for else request.client.host
     if raw_name:
         user_name, anon_avatar, ip_hash = raw_name, None, None
     else:
