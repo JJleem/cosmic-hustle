@@ -43,7 +43,7 @@ def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
 
     # 이 포스트에서 이미 사용된 이름 목록
     taken = {
-        c.user_name for c in db.query(BlogComment).filter(
+        row[0] for row in db.query(BlogComment.user_name).filter(
             BlogComment.post_id == post_id,
             BlogComment.ip_hash.isnot(None),
         ).all()
@@ -158,7 +158,10 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
             val = body[field]
             if field in ("published_at", "created_at") and isinstance(val, str):
                 from datetime import datetime
-                val = datetime.fromisoformat(val)
+                try:
+                    val = datetime.fromisoformat(val)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid datetime format for {field}")
             setattr(post, field, val)
     db.commit()
     db.refresh(post)
@@ -258,17 +261,27 @@ def _serialize_comment(c) -> dict:
 
 
 @router.get("/posts/{slug}/comments")
-def list_comments(slug: str, db: Session = Depends(get_db)):
+def list_comments(slug: str, page: int = 1, limit: int = 50, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    offset = (page - 1) * limit
+    total = db.query(func.count(BlogComment.id)).filter(BlogComment.post_id == post.id).scalar()
     comments = (
         db.query(BlogComment)
         .filter(BlogComment.post_id == post.id)
         .order_by(BlogComment.created_at)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
-    return [_serialize_comment(c) for c in comments]
+    return {
+        "comments": [_serialize_comment(c) for c in comments],
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "has_next": offset + limit < total,
+    }
 
 
 @router.post("/posts/{slug}/comments")
