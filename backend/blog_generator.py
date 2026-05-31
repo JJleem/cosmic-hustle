@@ -642,7 +642,7 @@ async def generate_blog_post(agent_id: str | None = None, recent_titles: list[st
         "tags":          tags,
         "published":     True,
         "trending_topic": theme,
-        "published_at":  datetime.now(KST).replace(tzinfo=None),
+        "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
     }
 
 

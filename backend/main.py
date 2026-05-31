@@ -40,6 +40,14 @@ app.add_middleware(
 
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
+
+@app.middleware("http")
+async def cache_static(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/blog/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 app.include_router(health.router)
