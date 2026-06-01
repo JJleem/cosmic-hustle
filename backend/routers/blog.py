@@ -60,6 +60,7 @@ def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
+    generate_intro_post,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -146,6 +147,29 @@ async def trigger_generate(agent_id: str | None = None, force: bool = False, db:
     db.commit()
     db.refresh(post)
     return post
+
+
+@router.post("/generate-intro")
+async def trigger_generate_intro(db: Session = Depends(get_db)):
+    """버즈+핑 콜라보 Cosmic Hustle 자기소개 포스트 생성."""
+    data = await generate_intro_post()
+
+    existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}. 삭제 후 재시도하거나 날짜가 바뀌면 다시 생성하세요.")
+
+    post = BlogPost(**data)
+    db.add(post)
+    db.flush()
+
+    summary = data["content"][:300]
+    comments = await generate_comments(post.id, post.agent_id, post.title, summary)
+    for c in comments:
+        db.add(BlogComment(**c))
+
+    db.commit()
+    db.refresh(post)
+    return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url}
 
 
 @router.patch("/posts/{post_id}")

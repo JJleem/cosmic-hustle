@@ -646,6 +646,134 @@ async def generate_blog_post(agent_id: str | None = None, recent_titles: list[st
     }
 
 
+# ── 자기소개 포스트 생성 (버즈+핑 콜라보) ────────────────────────────────────────
+
+async def generate_intro_post() -> dict:
+    """버즈+핑 콜라보 — Cosmic Hustle 자기소개 포스트.
+    트렌드 수집 없이 프로젝트 내부 컨텍스트로 생성.
+    """
+    today  = datetime.now(KST).date()
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    system_text = """당신은 Cosmic Hustle의 버즈 대리(마케터)와 핑 인턴(아이디어 수집가)이 함께 쓰는 블로그 포스트를 작성합니다.
+
+【버즈 성격·말투】
+- "바이럴 각이다!"를 최소 3회 사용
+- 강렬하고 임팩트 있는 마케팅 훅
+- 숫자, 사례, 비교로 독자를 잡아당김
+
+【핑 성격·말투】
+- "어, 이거 어때요? 이건요?" 최소 3회
+- 짧고 에너지 넘치는 문장, 느낌표 많음
+- 인용구 형식으로 버즈 본문 사이에 끼어듦
+  (예: > [happy] 어, 이거 어때요?! 저도 모르게 입사한 것 같은 느낌이에요!! — 핑)
+
+【공통 작성 규칙】
+- 반드시 한국어로 작성
+- 3,000자 이상 (충분히 길고 화려하게!)
+- 마크다운 형식, 첫 줄은 반드시 # 제목
+- ## 소제목으로 5~6개 섹션으로 나눌 것
+- 표(markdown table), 강조(**굵게**) 적극 활용
+- 인용구 태그 규칙:
+  > [happy]   → 긍정·흥분·감탄
+  > [sad]     → 아쉬움·어려움
+  > [working] → 분석·설명·고민
+  > [err]     → 의문·반문·혼란
+  > [done]    → 완료·결론·성공
+  > [talk_2]  → 일반 발언 (기본값)
+- 본문 중간 이미지 2~3개:
+  {{IMAGE: 구체적인 씬 (반드시 영어, 사람·캐릭터 없는 오브젝트/풍경/개념 시각화, 위트·유머 포함)}}
+- 글 맨 끝 썸네일 태그 (반드시 영어):
+  {{THUMBNAIL: 버즈와 핑이 함께 등장하는 역동적인 씬. 동작·감정·의상·배경·소품 상세하게 명시.
+  예시: "wearing orange blazer and star-pattern hoodie, standing on top of a giant glowing holographic blog post card in a futuristic space office, arms raised triumphantly, sparks flying from ping's antenna, excited expression, neon purple and orange lighting"}}
+- 마지막 줄 태그 (한국어, 5개):
+  {{TAGS: 태그1, 태그2, 태그3, 태그4, 태그5}}"""
+
+    project_context = f"""
+【Cosmic Hustle 프로젝트 정보】
+- 이름: Cosmic Hustle
+- 컨셉: 우주 리서치 회사. AI 에이전트 11명이 일하는 가상 오피스
+- 블로그 URL: https://cosmic-hustle.ai.kr
+- 핵심: AI 에이전트들이 매일 자동으로 블로그 포스트를 직접 작성함
+
+【기술 스택】
+- AI: Anthropic Claude API (Sonnet / Haiku)
+- 백엔드: Python FastAPI, PostgreSQL, AWS Lightsail
+- 프론트엔드: Next.js 15, Vercel
+- 이미지: Flux Kontext (FAL AI) — 에이전트 캐릭터 기반 썸네일 자동 생성
+- 스케줄: APScheduler — 매일 오전 9시 KST 자동 포스팅
+
+【에이전트 11명】
+| 이름 | 직책 | 역할 |
+|------|------|------|
+| 플랜 | 차장 | PM — 요구사항 파악, 태스크 정의 |
+| 위키 | 대리 | 사서 — 지식 누적, 컨텍스트 제공 |
+| 포케 | 대리 | 리서처 — 볼따구에 정보 쑤셔넣는 햄스터형 |
+| 런 | 사원 | 개발자 — "이미 짰어요" |
+| 카 (유레카) | 과장 | 분석가 — 다크서클, "찾았다!" |
+| 오버 | 사원 | 작가 — 베레모, 자기 글에 혼자 감동 |
+| 픽셀 | 사원 | 디자이너 — 폰트 집착, 여백에 감정이입 |
+| 핑 | 인턴 | 아이디어 수집가 — 안테나에서 스파크 |
+| 팩트 | 부장 | 검토자 — 무표정, 빨간펜 |
+| 루트 | 사원 | DevOps — 수동 배포는 범죄 |
+| 버즈 | 대리 | 마케터 — "바이럴 각이다!" |
+
+【오늘의 임무】
+이 블로그(https://cosmic-hustle.ai.kr)를 처음 방문한 사람이 읽는 소개 포스트를 작성하세요.
+"이게 뭔 사이트야?"를 "오 진짜 신기하다, 북마크해야겠다"로 바꾸는 것이 목표입니다.
+
+버즈가 마케터 시각으로 메인 서술을 이끌고,
+핑이 중간중간 흥분된 아이디어·코멘트를 인용구로 끼어드는 구조로 작성하세요.
+
+오늘 날짜: {today.strftime('%Y년 %m월 %d일')}
+포스트 전체를 다 작성한 뒤, 맨 끝에 {{THUMBNAIL: ...}} 태그와 {{TAGS: ...}} 태그를 붙이세요.
+"""
+
+    message = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8000,
+        system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": project_context}],
+    )
+
+    raw     = message.content[0].text.strip()
+    thumb_m = _THUMBNAIL_RE.search(raw)
+    scene   = thumb_m.group(1).strip() if thumb_m else (
+        "wearing orange blazer and star-pattern hoodie, standing on a giant glowing blog card "
+        "in a futuristic space office, arms raised triumphantly, sparks flying, excited expression"
+    )
+    tags_m  = _TAGS_RE.search(raw)
+    tags    = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
+    content = _THUMBNAIL_RE.sub("", raw).strip()
+    content = _TAGS_RE.sub("", content).strip()
+
+    content, thumbnail_url = await asyncio.gather(
+        _process_content_images(content, "buzz"),
+        _generate_thumbnail("buzz", scene),
+    )
+
+    lines = content.split("\n")
+    if lines and lines[0].startswith("#"):
+        raw_title = lines[0].lstrip("#").strip()
+        title     = re.sub(r"\*+([^*]+)\*+", r"\1", raw_title)
+        content   = "\n".join(lines[1:]).strip()
+    else:
+        title = "안녕, 저희가 Cosmic Hustle입니다"
+
+    return {
+        "id":             str(uuid.uuid4()),
+        "agent_id":       "buzz",
+        "title":          title,
+        "slug":           f"intro-cosmic-hustle-{today.isoformat()}",
+        "content":        content,
+        "thumbnail_url":  thumbnail_url,
+        "tags":           tags,
+        "published":      True,
+        "trending_topic": "Cosmic Hustle 소개",
+        "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
+    }
+
+
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────
 
 async def generate_comments(post_id: str, author_id: str, post_title: str, post_summary: str) -> list[dict]:
