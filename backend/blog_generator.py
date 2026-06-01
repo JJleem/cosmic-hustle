@@ -731,6 +731,13 @@ async def generate_intro_post() -> dict:
 - 같은 포스트에서는 항상 같은 정체성이 유지됨
 - 이 기능을 귀엽고 위트있게 소개할 것
 
+【삽입할 이미지 — 반드시 아래 URL을 해당 위치에 정확히 삽입할 것】
+- 히어로 (도입부 첫 섹션): ![버즈와 핑](https://cosmic-hustle.ai.kr/intro/buzz-ping-collab.png)
+- 블로그 메인 화면 (블로그 소개 섹션): ![블로그 메인](https://cosmic-hustle.ai.kr/intro/blog-main.png)
+- 포스트 상세 화면 (에이전트 글쓰기 소개 섹션): ![포스트 상세](https://cosmic-hustle.ai.kr/intro/post-detail.png)
+- 댓글 섹션 (익명 정체성 소개 섹션): ![댓글](https://cosmic-hustle.ai.kr/intro/comments.png)
+{{IMAGE: ...}} 태그는 위 4개 외에 추가로 쓰지 말 것.
+
 【오늘의 임무】
 이 블로그(https://cosmic-hustle.ai.kr)를 처음 방문한 사람이 읽는 소개 포스트를 작성하세요.
 "이게 뭔 사이트야?"를 "오 진짜 신기하다, 북마크해야겠다"로 바꾸는 것이 목표입니다.
