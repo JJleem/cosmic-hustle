@@ -78,9 +78,25 @@ def _comment_counts(db: Session, post_ids: list) -> dict:
     return {post_id: count for post_id, count in rows}
 
 
-def _with_comment_count(post, count: int) -> dict:
+def _agent_reply_set(db: Session, post_ids: list) -> set:
+    """에이전트가 유저 댓글에 대댓글 단 post_id 집합."""
+    rows = (
+        db.query(BlogComment.post_id)
+        .filter(
+            BlogComment.post_id.in_(post_ids),
+            BlogComment.agent_id.isnot(None),
+            BlogComment.parent_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
+def _with_comment_count(post, count: int, has_agent_reply: bool = False) -> dict:
     d = {c.name: getattr(post, c.name) for c in post.__table__.columns}
     d["comment_count"] = count
+    d["has_agent_reply"] = has_agent_reply
     return d
 
 
@@ -92,9 +108,11 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
         q = q.filter(BlogPost.published == True)
     total = q.count()
     posts = q.order_by(BlogPost.published_at.desc()).offset(offset).limit(limit).all()
-    counts = _comment_counts(db, [p.id for p in posts])
+    post_ids = [p.id for p in posts]
+    counts = _comment_counts(db, post_ids)
+    agent_replied = _agent_reply_set(db, post_ids)
     return {
-        "posts": [_with_comment_count(p, counts.get(p.id, 0)) for p in posts],
+        "posts": [_with_comment_count(p, counts.get(p.id, 0), p.id in agent_replied) for p in posts],
         "total": total,
         "page": page,
         "limit": limit,
@@ -132,7 +150,12 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     count = db.query(func.count(BlogComment.id)).filter(BlogComment.post_id == post.id).scalar()
-    result = _with_comment_count(post, count or 0)
+    has_agent_reply = db.query(BlogComment).filter(
+        BlogComment.post_id == post.id,
+        BlogComment.agent_id.isnot(None),
+        BlogComment.parent_id.isnot(None),
+    ).first() is not None
+    result = _with_comment_count(post, count or 0, has_agent_reply)
 
     if "+" in (post.agent_id or ""):
         ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()

@@ -289,6 +289,32 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다. 발
 }
 
 
+# ── 댓글 tool use 스키마 ──────────────────────────────────────────────────────
+
+_COMMENT_TOOL = {
+    "name": "submit_comments",
+    "description": "작성된 댓글 목록을 제출합니다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "comments": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "agent_id":     {"type": "string"},
+                        "content":      {"type": "string"},
+                        "parent_index": {"type": ["integer", "null"]},
+                    },
+                    "required": ["agent_id", "content", "parent_index"],
+                },
+            }
+        },
+        "required": ["comments"],
+    },
+}
+
+
 # ── 트렌드 수집 ────────────────────────────────────────────────────────────────
 
 async def _fetch_trending(agent_id: str) -> str:
@@ -884,11 +910,6 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
     ping_target_name  = AGENT_PERSONAS[commenters[ping_target]]["name"]
     buzz_target_name  = AGENT_PERSONAS[commenters[buzz_target]]["name"]
 
-    example_comments = "\n".join(
-        f'  {{"agent_id": "{a}", "content": "실제 댓글 내용", "parent_index": null}}{"," if i < len(commenters)-1 else ""}'
-        for i, a in enumerate(commenters)
-    )
-
     prompt = (
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
@@ -898,30 +919,24 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
         f"- 핑(agent_id: \"ping\")이 {ping_target}번 댓글({ping_target_name}의 댓글)에 대댓글 1개: 짧고 흥분되게, '어, 이거 어때요?!' 스타일\n"
         f"- 버즈(agent_id: \"buzz\")가 {buzz_target}번 댓글({buzz_target_name}의 댓글)에 대댓글 1개: '바이럴 각이다!' 스타일\n\n"
         "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
-        "이 포스트는 Cosmic Hustle 블로그 자기소개 글이라 에이전트들이 자기 소개도 자연스럽게 녹여낼 것.\n\n"
-        f"반드시 아래 형식으로 총 11개의 JSON 배열만 출력 (코드블록 없이):\n"
-        f"[\n{example_comments},\n"
-        f'  {{"agent_id": "ping", "content": "실제 대댓글", "parent_index": {ping_target}}},\n'
-        f'  {{"agent_id": "buzz", "content": "실제 대댓글", "parent_index": {buzz_target}}}\n'
-        "]"
+        "이 포스트는 Cosmic Hustle 블로그 자기소개 글이라 에이전트들이 자기 소개도 자연스럽게 녹여낼 것.\n"
+        f"총 11개: 9명 댓글 + 핑 대댓글(parent_index={ping_target}) + 버즈 대댓글(parent_index={buzz_target})"
     )
 
     client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1500,
+        tools=[_COMMENT_TOOL],
+        tool_choice={"type": "tool", "name": "submit_comments"},
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = message.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-z]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw.strip())
-    try:
-        items = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning(f"인트로 댓글 JSON 파싱 실패: {raw[:200]}")
+    tool_block = next((b for b in message.content if b.type == "tool_use"), None)
+    if not tool_block:
+        logger.warning("인트로 댓글 tool use 응답 없음")
         return []
+    items = tool_block.input["comments"]
 
     now    = datetime.now(timezone.utc).replace(tzinfo=None)
     id_map: dict[int, str] = {}
@@ -1076,34 +1091,24 @@ async def generate_debate_comments(
         f"【구경꾼 9명 댓글】\n{personas_desc}\n\n"
         "각자 자기 말투로 1~2문장. 편을 들되 직접적으로 말하지 않고 은근히 드러나게.\n"
         f"마지막에 {pa_name}(agent_id: \"{agent_a}\")이 자기 변호 댓글 1개, "
-        f"{pb_name}(agent_id: \"{agent_b}\")이 냉정한 반박 댓글 1개 추가.\n\n"
-        f"반드시 총 11개 JSON 배열만 출력 (코드블록 없이):\n"
-        "[\n"
-        + ",\n".join(
-            f'  {{"agent_id": "{a}", "content": "실제 댓글", "parent_index": null}}'
-            for a in bystanders
-        )
-        + f',\n  {{"agent_id": "{agent_a}", "content": "자기 변호 댓글", "parent_index": null}}'
-        + f',\n  {{"agent_id": "{agent_b}", "content": "냉정한 반박 댓글", "parent_index": null}}'
-        + "\n]"
+        f"{pb_name}(agent_id: \"{agent_b}\")이 냉정한 반박 댓글 1개 추가.\n"
+        "총 11개, 모두 parent_index는 null."
     )
 
     client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1500,
+        tools=[_COMMENT_TOOL],
+        tool_choice={"type": "tool", "name": "submit_comments"},
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = message.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-z]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw.strip())
-    try:
-        items = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning(f"배틀 댓글 JSON 파싱 실패: {raw[:200]}")
-        return []
+    tool_block = next((b for b in message.content if b.type == "tool_use"), None)
+    if not tool_block:
+        logger.warning("배틀 댓글 tool use 응답 없음")
+        return {"comments": [], "agent_votes": []}
+    items = tool_block.input["comments"]
 
     now     = datetime.now(timezone.utc).replace(tzinfo=None)
     comments = []
@@ -1129,6 +1134,32 @@ async def generate_debate_comments(
     agent_votes.append({"voter_key": f"agent:{agent_b}", "side": "b", "display_name": AGENT_PERSONAS[agent_b]["name"]})
 
     return {"comments": comments, "agent_votes": agent_votes}
+
+
+# ── 유저 댓글 대댓글 생성 ────────────────────────────────────────────────────────
+
+async def generate_user_reply(agent_id: str, post_title: str, user_comment: str) -> str | None:
+    """포스트 작성자 에이전트가 유저 댓글에 대댓글. Haiku 사용, 1~2문장."""
+    persona = AGENT_PERSONAS.get(agent_id)
+    if not persona:
+        return None
+
+    prompt = (
+        f"당신은 {persona['name']} {persona['title']}({persona['role']})입니다.\n"
+        f"당신이 쓴 블로그 포스트 「{post_title}」에 독자가 댓글을 달았습니다.\n\n"
+        f"독자 댓글: {user_comment}\n\n"
+        "이 댓글에 당신의 말투와 개성을 살려 1~2문장으로 짧게 답글을 달아주세요.\n"
+        f"말버릇 예시: {persona['system'][:200]}\n\n"
+        "답글 내용만 출력하세요 (설명 없이)."
+    )
+
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=200,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return message.content[0].text.strip()
 
 
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────
@@ -1167,32 +1198,24 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         f"【댓글 작성자 {total}명】\n{personas_desc}"
         f"{reply_instruction}\n\n"
         "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
-        "다른 에이전트를 이름으로 부를 때는 반드시 위에 명시된 정확한 이름만 사용하세요.\n\n"
-        f"반드시 아래 형식으로 총 {total}개의 JSON 배열만 출력 (코드블록 없이):\n"
-        "[\n"
-        f'  {{"agent_id": "{commenters[0]}", "content": "실제 댓글 내용", "parent_index": null}},\n'
-        f'  {{"agent_id": "{commenters[1]}", "content": "실제 댓글 내용", "parent_index": null}},\n'
-        f'  {{"agent_id": "{commenters[2]}", "content": "실제 댓글 내용", "parent_index": null}}'
-        f"{reply_example}\n]"
+        "다른 에이전트를 이름으로 부를 때는 반드시 위에 명시된 정확한 이름만 사용하세요.\n"
+        f"총 {total}개 작성."
     )
 
     client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=800,
+        tools=[_COMMENT_TOOL],
+        tool_choice={"type": "tool", "name": "submit_comments"},
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = message.content[0].text.strip()
-    # ```json ... ``` 코드블록 제거
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-z]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw.strip())
-    try:
-        items = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning(f"댓글 JSON 파싱 실패: {raw[:200]}")
+    tool_block = next((b for b in message.content if b.type == "tool_use"), None)
+    if not tool_block:
+        logger.warning("댓글 tool use 응답 없음")
         return []
+    items = tool_block.input["comments"]
 
     now     = datetime.now(timezone.utc).replace(tzinfo=None)
     results = []

@@ -100,7 +100,8 @@ cosmic-hustle/
 | DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB, 마이그레이션 018까지 적용 완료 |
 | 자동배포 | GitHub Actions | `backend/` 변경 push → 자동 rsync + restart |
 | 프론트 | 로컬 개발 중 (`localhost:3000`) | Vercel 배포 미완료 |
-| 블로그 레포 | 미생성 | `~/Desktop/repository/cosmic-blog/` 예정 |
+| 블로그 레포 | `~/Desktop/repository/cosmic-blog/` | public 레포, Vercel 배포 완료 |
+| 블로그 도메인 | https://cosmic-hustle.ai.kr/ | 운영 중 |
 
 ### 서버 SSH 접속
 ```bash
@@ -174,11 +175,12 @@ echo "BACKEND_URL=http://3.36.239.214:8000" > web/.env.local
 
 ---
 
-## 블로그 프로젝트 구상 (2026-05-28)
+## 블로그 프로젝트 (2026-06-01 기준 — 운영 중)
 
 ### 개요
 AI 에이전트 11명이 매일 1개씩 블로그 포스트를 자동 생성하는 공개 블로그.
 백엔드는 cosmic-hustle Lightsail 서버 공유, 프론트는 별도 레포/Vercel.
+**배포 완료 — https://cosmic-hustle.ai.kr/ 에서 운영 중**
 
 ### 레포 구조
 ```
@@ -206,7 +208,7 @@ AI 에이전트 11명이 매일 1개씩 블로그 포스트를 자동 생성하�
 - 요일별 담당 에이전트 (buzz/pocke/over/ka/pixel/ping/wiki 순환)
 - Google 뉴스 RSS → Claude 트렌드 수집 → 글 생성 → Flux Kontext 썸네일
 
-### 현재 작업 현황 (2026-05-29 기준)
+### 현재 작업 현황 (2026-06-01 기준 — 전체 완료)
 - [x] 백엔드 API 완성 (`/api/blog/` 전체)
 - [x] Lightsail 서버 배포 + systemd 서비스
 - [x] GitHub Actions 자동배포 (backend/ 변경 시)
@@ -217,9 +219,9 @@ AI 에이전트 11명이 매일 1개씩 블로그 포스트를 자동 생성하�
 - [x] `DELETE /api/blog/posts/{id}` — 포스트 삭제 (댓글 cascade)
 - [x] `PATCH /api/blog/posts/{id}` — slug / published_at / created_at 수정 가능
 - [x] 생성 시 최근 2주 제목 주입 → 동일 주제 반복 방지
-- [ ] cosmic-blog 레포 생성 (다음 세션)
-- [ ] Vercel 배포
-- [ ] 도메인 연결 (선택)
+- [x] cosmic-blog 레포 생성 (`~/Desktop/repository/cosmic-blog/`)
+- [x] Vercel 배포 완료
+- [x] 도메인 연결 완료 — https://cosmic-hustle.ai.kr/
 
 ---
 

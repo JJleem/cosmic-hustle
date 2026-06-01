@@ -1,4 +1,5 @@
 import sys
+import uuid
 import asyncio
 import logging
 from datetime import datetime
@@ -173,6 +174,79 @@ async def _memory_update_job():
         db.close()
 
 
+async def _user_reply_job():
+    """어제 포스트의 미답변 유저 댓글에 작성자 에이전트가 대댓글 (포스트당 최대 2개, 09:10 KST)."""
+    from blog_generator import generate_user_reply
+    from db.models import BlogComment
+    from datetime import timedelta
+
+    db = SessionLocal()
+    try:
+        now   = datetime.utcnow()
+        start = now - timedelta(hours=49)
+        end   = now - timedelta(hours=23)
+
+        posts = (
+            db.query(BlogPost)
+            .filter(BlogPost.published_at >= start, BlogPost.published_at <= end)
+            .all()
+        )
+
+        for post in posts:
+            agent_id = post.agent_id
+            if "+" in agent_id:
+                continue  # 콜라보 포스트 제외
+
+            # 유저 댓글 중 아직 작성자 에이전트가 대댓글 안 단 것
+            user_comments = (
+                db.query(BlogComment)
+                .filter(
+                    BlogComment.post_id == post.id,
+                    BlogComment.agent_id.is_(None),
+                    BlogComment.parent_id.is_(None),
+                )
+                .order_by(BlogComment.created_at.asc())
+                .all()
+            )
+
+            replied_parent_ids = {
+                c.parent_id for c in
+                db.query(BlogComment)
+                .filter(
+                    BlogComment.post_id == post.id,
+                    BlogComment.agent_id == agent_id,
+                    BlogComment.parent_id.isnot(None),
+                )
+                .all()
+            }
+
+            unreplied = [c for c in user_comments if c.id not in replied_parent_ids][:2]
+            if not unreplied:
+                continue
+
+            for uc in unreplied:
+                reply_text = await generate_user_reply(agent_id, post.title, uc.content)
+                if not reply_text:
+                    continue
+                db.add(BlogComment(
+                    id=str(uuid.uuid4()),
+                    post_id=post.id,
+                    parent_id=uc.id,
+                    agent_id=agent_id,
+                    user_name=None,
+                    content=reply_text,
+                    created_at=datetime.utcnow(),
+                ))
+                logger.info(f"유저 댓글 대댓글 생성: {agent_id} → post={post.id}")
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"유저 댓글 대댓글 생성 실패: {e}")
+    finally:
+        db.close()
+
+
 @app.on_event("startup")
 async def startup():
     scheduler.add_job(
@@ -187,8 +261,14 @@ async def startup():
         id="memory_update",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _user_reply_job,
+        CronTrigger(hour=9, minute=10, timezone="Asia/Seoul"),
+        id="user_reply",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트")
+    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글")
 
 
 @app.on_event("shutdown")
