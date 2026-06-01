@@ -1029,18 +1029,18 @@ async def generate_debate_post(
         title     = re.sub(r"\*+([^*]+)\*+", r"\1", raw_title)
         content   = "\n".join(lines[1:]).strip()
     else:
-        title = f"{pa['name']} vs {pb['name']}: {topic}"
+        title = f"[AI 토론] {pa['name']} vs {pb['name']}: {topic}"
 
     return {
         "id":            str(uuid.uuid4()),
         "agent_id":      f"{agent_a}+{agent_b}",
         "title":         title,
-        "slug":          f"debate-{agent_a}-vs-{agent_b}-{today.isoformat()}",
+        "slug":          f"ai-debate-{agent_a}-vs-{agent_b}-{today.isoformat()}",
         "content":       content,
         "thumbnail_url": thumbnail_url,
         "tags":          tags,
         "published":     True,
-        "trending_topic": f"배틀: {topic}",
+        "trending_topic": f"AI 토론 시리즈: {topic}",
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
     }
 
