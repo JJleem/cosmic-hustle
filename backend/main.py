@@ -19,7 +19,7 @@ from slowapi.errors import RateLimitExceeded
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
-from db.models import BlogPost
+from db.models import BlogPost, AgentMemory
 from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog
 
 Base.metadata.create_all(bind=engine)
@@ -80,7 +80,14 @@ async def _daily_blog_job():
                 f"{title} (핵심 아이디어: {topic})" if topic else title
                 for title, topic in recent_rows
             ]
-            data = await generate_blog_post(recent_titles=recent_titles)
+
+            # 오늘 담당 에이전트 메모리 조회
+            from blog_generator import get_today_agent
+            today_agent_id, _ = get_today_agent()
+            mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == today_agent_id).first()
+            agent_memory = mem_row.memory if mem_row else None
+
+            data = await generate_blog_post(recent_titles=recent_titles, memory=agent_memory)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
@@ -106,6 +113,66 @@ async def _daily_blog_job():
     logger.error("블로그 자동 생성 3회 모두 실패")
 
 
+async def _memory_update_job():
+    """어제 발행된 포스트의 유저 반응을 읽어 에이전트 메모리를 업데이트 (매일 09:05 KST)."""
+    from blog_generator import update_agent_memory
+    from db.models import BlogComment
+    from datetime import timedelta, timezone
+
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        # 23~49시간 전에 발행된 포스트 (어제 09:00 KST = 어제 00:00 UTC)
+        start = now - timedelta(hours=49)
+        end = now - timedelta(hours=23)
+
+        posts = (
+            db.query(BlogPost)
+            .filter(BlogPost.published_at >= start, BlogPost.published_at <= end)
+            .all()
+        )
+
+        for post in posts:
+            agent_id = post.agent_id
+            if "+" in agent_id:
+                continue  # 콜라보 포스트 (buzz+ping) 제외
+
+            user_comments = (
+                db.query(BlogComment.content)
+                .filter(BlogComment.post_id == post.id, BlogComment.agent_id.is_(None))
+                .all()
+            )
+            comment_texts = [c.content for c in user_comments]
+
+            mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == agent_id).first()
+            current_memory = mem_row.memory if mem_row else None
+
+            new_memory = await update_agent_memory(
+                agent_id=agent_id,
+                post_title=post.title,
+                post_content=post.content,
+                view_count=post.view_count or 0,
+                likes=post.likes or 0,
+                user_comments=comment_texts,
+                current_memory=current_memory,
+            )
+
+            if mem_row:
+                mem_row.memory = new_memory
+                mem_row.updated_at = datetime.utcnow()
+            else:
+                db.add(AgentMemory(agent_id=agent_id, memory=new_memory))
+
+            logger.info(f"에이전트 메모리 업데이트: {agent_id} (댓글 {len(comment_texts)}개, {post.view_count}조회)")
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"에이전트 메모리 업데이트 실패: {e}")
+    finally:
+        db.close()
+
+
 @app.on_event("startup")
 async def startup():
     scheduler.add_job(
@@ -114,8 +181,14 @@ async def startup():
         id="daily_blog",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _memory_update_job,
+        CronTrigger(hour=9, minute=5, timezone="Asia/Seoul"),
+        id="memory_update",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성")
+    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트")
 
 
 @app.on_event("shutdown")

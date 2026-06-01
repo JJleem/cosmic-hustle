@@ -143,3 +143,11 @@ class WikiEntry(Base):
     embedding = Column(Vector(768), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())
+
+
+class AgentMemory(Base):
+    __tablename__ = "agent_memory"
+
+    agent_id = Column(String, primary_key=True)
+    memory = Column(Text, nullable=True)
+    updated_at = Column(DateTime, server_default=func.now())

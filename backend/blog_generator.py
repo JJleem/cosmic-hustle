@@ -530,7 +530,54 @@ async def _process_content_images(content: str, agent_id: str = "") -> str:
 
 # ── 포스트 생성 ────────────────────────────────────────────────────────────────
 
-async def generate_blog_post(agent_id: str | None = None, recent_titles: list[str] | None = None) -> dict:
+async def update_agent_memory(
+    agent_id: str,
+    post_title: str,
+    post_content: str,
+    view_count: int,
+    likes: int,
+    user_comments: list[str],
+    current_memory: str | None,
+) -> str:
+    """어제 포스트 독자 반응을 분석해 에이전트 메모리를 업데이트. Haiku 사용, 1000자 이하 유지."""
+    persona = AGENT_PERSONAS.get(agent_id, {})
+    agent_name = persona.get("name", agent_id)
+    role = persona.get("role", "")
+
+    comments_text = "\n".join(f"- {c}" for c in user_comments) if user_comments else "없음"
+    current_section = f"\n【현재 메모리】\n{current_memory}" if current_memory else "\n【현재 메모리】없음 (첫 번째 기록)"
+
+    prompt = (
+        f"당신은 {agent_name}({role})의 학습 메모리 관리자입니다.\n\n"
+        f"【어제 포스트】\n제목: {post_title}\n내용 요약: {post_content[:400]}\n"
+        f"조회수: {view_count} / 좋아요: {likes}\n\n"
+        f"【유저 댓글 ({len(user_comments)}개)】\n{comments_text}"
+        f"{current_section}\n\n"
+        "【지시사항】\n"
+        "1. 이번 포스트에서 독자가 좋아한 점, 반응이 없는 점을 파악하세요\n"
+        "2. 기존 메모리와 합쳐 업데이트하되, 중복·오래된 항목은 제거하세요\n"
+        "3. 구체적 패턴만 기록하세요 (예: '숫자 포함 제목 조회수 높음', '1500자 이하 댓글 적음')\n"
+        "4. 반드시 1000자 이하로 유지하세요\n"
+        "5. 한국어, 항목별 줄 구분\n\n"
+        "메모리 내용만 출력하세요 (설명 없이):"
+    )
+
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=600,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    memory = message.content[0].text.strip()
+    return memory[:1000]
+
+
+async def generate_blog_post(
+    agent_id: str | None = None,
+    recent_titles: list[str] | None = None,
+    memory: str | None = None,
+) -> dict:
     today = datetime.now(KST).date()
 
     _AGENT_THEMES = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}
@@ -546,7 +593,10 @@ async def generate_blog_post(agent_id: str | None = None, recent_titles: list[st
     trending_context = await _fetch_trending(agent_id)
 
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    system_text = persona["system"] + """
+    system_text = persona["system"]
+    if memory:
+        system_text += f"\n\n【나의 지난 경험과 학습】\n{memory}"
+    system_text += """
 
 【공통 작성 규칙】
 - 반드시 한국어로 작성
