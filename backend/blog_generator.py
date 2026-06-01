@@ -1051,8 +1051,10 @@ async def generate_debate_comments(
     post_summary: str,
     agent_a: str = "buzz",
     agent_b: str = "fact",
-) -> list[dict]:
-    """배틀 포스트 댓글 — 나머지 9명이 편 갈라서 응원."""
+) -> dict:
+    """배틀 포스트 댓글 + 에이전트 사전 투표 반환.
+    returns: {"comments": [...], "agent_votes": [...]}
+    """
     all_agents  = list(AGENT_PERSONAS.keys())
     bystanders  = [a for a in all_agents if a not in (agent_a, agent_b)]
     team_a = bystanders[:4]
@@ -1104,9 +1106,9 @@ async def generate_debate_comments(
         return []
 
     now     = datetime.now(timezone.utc).replace(tzinfo=None)
-    results = []
+    comments = []
     for i, item in enumerate(items):
-        results.append({
+        comments.append({
             "id":         str(uuid.uuid4()),
             "post_id":    post_id,
             "parent_id":  None,
@@ -1115,7 +1117,18 @@ async def generate_debate_comments(
             "content":    item["content"],
             "created_at": now + timedelta(seconds=30 * (i + 1) + random.randint(0, 20)),
         })
-    return results
+
+    # 에이전트 사전 투표 (9명 + 두 주인공)
+    agent_votes = []
+    for a in team_a:
+        agent_votes.append({"voter_key": f"agent:{a}", "side": "a", "display_name": AGENT_PERSONAS[a]["name"]})
+    for a in team_b:
+        agent_votes.append({"voter_key": f"agent:{a}", "side": "b", "display_name": AGENT_PERSONAS[a]["name"]})
+    # 주인공들도 자기 편 투표
+    agent_votes.append({"voter_key": f"agent:{agent_a}", "side": "a", "display_name": AGENT_PERSONAS[agent_a]["name"]})
+    agent_votes.append({"voter_key": f"agent:{agent_b}", "side": "b", "display_name": AGENT_PERSONAS[agent_b]["name"]})
+
+    return {"comments": comments, "agent_votes": agent_votes}
 
 
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────

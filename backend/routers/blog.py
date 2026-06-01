@@ -102,12 +102,28 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     }
 
 
-def _vote_counts(db: Session, post_id: str) -> tuple[int, int]:
-    rows = db.query(DebateVote.side, func.count(DebateVote.id)).filter(
-        DebateVote.post_id == post_id
-    ).group_by(DebateVote.side).all()
-    counts = {side: cnt for side, cnt in rows}
-    return counts.get("a", 0), counts.get("b", 0)
+def _vote_result(db: Session, post_id: str, my_voter_key: str | None = None) -> dict:
+    rows = db.query(DebateVote).filter(DebateVote.post_id == post_id).all()
+    vote_a, vote_b, voters_a, voters_b = 0, 0, [], []
+    my_vote = None
+    for v in rows:
+        is_agent = v.voter_key.startswith("agent:")
+        entry = {
+            "type": "agent" if is_agent else "user",
+            "agent_id": v.voter_key[6:] if is_agent else None,
+            "display_name": v.display_name,
+            "anon_avatar": v.anon_avatar,
+        }
+        if v.side == "a":
+            vote_a += 1
+            voters_a.append(entry)
+        else:
+            vote_b += 1
+            voters_b.append(entry)
+        if my_voter_key and v.voter_key == my_voter_key:
+            my_vote = v.side
+    return {"vote_a": vote_a, "vote_b": vote_b,
+            "voters_a": voters_a, "voters_b": voters_b, "my_vote": my_vote}
 
 
 @router.get("/posts/{slug}")
@@ -118,18 +134,10 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
     count = db.query(func.count(BlogComment.id)).filter(BlogComment.post_id == post.id).scalar()
     result = _with_comment_count(post, count or 0)
 
-    # 배틀 포스트면 투표 정보 추가
     if "+" in (post.agent_id or ""):
-        vote_a, vote_b = _vote_counts(db, post.id)
         ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
         ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
-        my_vote_row = db.query(DebateVote).filter(
-            DebateVote.post_id == post.id,
-            DebateVote.ip_hash == ip_hash,
-        ).first()
-        result["vote_a"] = vote_a
-        result["vote_b"] = vote_b
-        result["my_vote"] = my_vote_row.side if my_vote_row else None
+        result.update(_vote_result(db, post.id, my_voter_key=ip_hash))
 
     return result
 
@@ -151,35 +159,28 @@ def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(ge
 
     existing = db.query(DebateVote).filter(
         DebateVote.post_id == post.id,
-        DebateVote.ip_hash == ip_hash,
+        DebateVote.voter_key == ip_hash,
     ).first()
 
     if existing:
         if existing.side == side:
-            db.delete(existing)  # 같은 side → 취소
+            db.delete(existing)
         else:
-            existing.side = side  # 다른 side → 변경
+            existing.side = side
     else:
+        # 유저 우주 정체성 조회 (댓글과 동일 로직)
+        anon_name, anon_avatar = _anon_identity(ip, post.id, db)
         db.add(DebateVote(
             id=str(__import__("uuid").uuid4()),
             post_id=post.id,
-            ip_hash=ip_hash,
+            voter_key=ip_hash,
             side=side,
+            display_name=anon_name,
+            anon_avatar=anon_avatar,
         ))
 
     db.commit()
-
-    vote_a, vote_b = _vote_counts(db, post.id)
-    my_vote_row = db.query(DebateVote).filter(
-        DebateVote.post_id == post.id,
-        DebateVote.ip_hash == ip_hash,
-    ).first()
-
-    return {
-        "vote_a": vote_a,
-        "vote_b": vote_b,
-        "my_vote": my_vote_row.side if my_vote_row else None,
-    }
+    return _vote_result(db, post.id, my_voter_key=ip_hash)
 
 
 @router.post("/generate")
@@ -267,10 +268,19 @@ async def trigger_generate_debate(
     db.add(post)
     db.flush()
 
-    summary  = data["content"][:300]
-    comments = await generate_debate_comments(post.id, post.title, summary, agent_a, agent_b)
-    for c in comments:
+    summary = data["content"][:300]
+    result  = await generate_debate_comments(post.id, post.title, summary, agent_a, agent_b)
+    for c in result["comments"]:
         db.add(BlogComment(**c))
+    for v in result["agent_votes"]:
+        db.add(DebateVote(
+            id=str(__import__("uuid").uuid4()),
+            post_id=post.id,
+            voter_key=v["voter_key"],
+            side=v["side"],
+            display_name=v["display_name"],
+            anon_avatar=None,
+        ))
 
     db.commit()
     db.refresh(post)

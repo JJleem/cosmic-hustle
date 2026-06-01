@@ -18,15 +18,17 @@ def upgrade():
         'debate_votes',
         sa.Column('id', sa.String(), primary_key=True),
         sa.Column('post_id', sa.String(), sa.ForeignKey('blog_posts.id'), nullable=False),
-        sa.Column('ip_hash', sa.String(16), nullable=False),
+        sa.Column('voter_key', sa.String(), nullable=False),
         sa.Column('side', sa.String(1), nullable=False),
+        sa.Column('display_name', sa.String(), nullable=True),
+        sa.Column('anon_avatar', sa.Integer(), nullable=True),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.now()),
     )
     op.create_index('ix_debate_votes_post_id', 'debate_votes', ['post_id'])
-    op.create_index('ix_debate_votes_post_ip', 'debate_votes', ['post_id', 'ip_hash'], unique=True)
+    op.create_index('ix_debate_votes_post_voter', 'debate_votes', ['post_id', 'voter_key'], unique=True)
 
 
 def downgrade():
-    op.drop_index('ix_debate_votes_post_ip', table_name='debate_votes')
+    op.drop_index('ix_debate_votes_post_voter', table_name='debate_votes')
     op.drop_index('ix_debate_votes_post_id', table_name='debate_votes')
     op.drop_table('debate_votes')

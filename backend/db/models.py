@@ -158,6 +158,8 @@ class DebateVote(Base):
 
     id = Column(String, primary_key=True)
     post_id = Column(String, ForeignKey("blog_posts.id"), nullable=False)
-    ip_hash = Column(String(16), nullable=False)
-    side = Column(String(1), nullable=False)  # 'a' or 'b'
+    voter_key = Column(String, nullable=False)   # "agent:{id}" or ip_hash
+    side = Column(String(1), nullable=False)     # 'a' or 'b'
+    display_name = Column(String, nullable=True) # 우주 정체성 or 에이전트 이름
+    anon_avatar = Column(Integer, nullable=True) # 유저 아바타 인덱스
     created_at = Column(DateTime, server_default=func.now())
