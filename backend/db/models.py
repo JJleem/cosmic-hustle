@@ -151,3 +151,13 @@ class AgentMemory(Base):
     agent_id = Column(String, primary_key=True)
     memory = Column(Text, nullable=True)
     updated_at = Column(DateTime, server_default=func.now())
+
+
+class DebateVote(Base):
+    __tablename__ = "debate_votes"
+
+    id = Column(String, primary_key=True)
+    post_id = Column(String, ForeignKey("blog_posts.id"), nullable=False)
+    ip_hash = Column(String(16), nullable=False)
+    side = Column(String(1), nullable=False)  # 'a' or 'b'
+    created_at = Column(DateTime, server_default=func.now())

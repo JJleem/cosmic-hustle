@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from db.connection import get_db
-from db.models import BlogPost, BlogComment, BlogDailyVisit
+from db.models import BlogPost, BlogComment, BlogDailyVisit, DebateVote
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -102,13 +102,84 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     }
 
 
+def _vote_counts(db: Session, post_id: str) -> tuple[int, int]:
+    rows = db.query(DebateVote.side, func.count(DebateVote.id)).filter(
+        DebateVote.post_id == post_id
+    ).group_by(DebateVote.side).all()
+    counts = {side: cnt for side, cnt in rows}
+    return counts.get("a", 0), counts.get("b", 0)
+
+
 @router.get("/posts/{slug}")
-def get_post(slug: str, db: Session = Depends(get_db)):
+def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     count = db.query(func.count(BlogComment.id)).filter(BlogComment.post_id == post.id).scalar()
-    return _with_comment_count(post, count or 0)
+    result = _with_comment_count(post, count or 0)
+
+    # 배틀 포스트면 투표 정보 추가
+    if "+" in (post.agent_id or ""):
+        vote_a, vote_b = _vote_counts(db, post.id)
+        ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+        ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
+        my_vote_row = db.query(DebateVote).filter(
+            DebateVote.post_id == post.id,
+            DebateVote.ip_hash == ip_hash,
+        ).first()
+        result["vote_a"] = vote_a
+        result["vote_b"] = vote_b
+        result["my_vote"] = my_vote_row.side if my_vote_row else None
+
+    return result
+
+
+@router.post("/posts/{slug}/vote")
+def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(get_db)):
+    """배틀 포스트 투표. side=a or b. 같은 side 재투표 시 취소, 다른 side면 변경."""
+    if side not in ("a", "b"):
+        raise HTTPException(status_code=400, detail="side는 'a' 또는 'b'여야 합니다")
+
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if "+" not in (post.agent_id or ""):
+        raise HTTPException(status_code=400, detail="배틀 포스트가 아닙니다")
+
+    ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+    ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
+
+    existing = db.query(DebateVote).filter(
+        DebateVote.post_id == post.id,
+        DebateVote.ip_hash == ip_hash,
+    ).first()
+
+    if existing:
+        if existing.side == side:
+            db.delete(existing)  # 같은 side → 취소
+        else:
+            existing.side = side  # 다른 side → 변경
+    else:
+        db.add(DebateVote(
+            id=str(__import__("uuid").uuid4()),
+            post_id=post.id,
+            ip_hash=ip_hash,
+            side=side,
+        ))
+
+    db.commit()
+
+    vote_a, vote_b = _vote_counts(db, post.id)
+    my_vote_row = db.query(DebateVote).filter(
+        DebateVote.post_id == post.id,
+        DebateVote.ip_hash == ip_hash,
+    ).first()
+
+    return {
+        "vote_a": vote_a,
+        "vote_b": vote_b,
+        "my_vote": my_vote_row.side if my_vote_row else None,
+    }
 
 
 @router.post("/generate")
