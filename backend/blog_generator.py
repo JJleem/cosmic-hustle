@@ -774,7 +774,7 @@ async def generate_intro_post() -> dict:
 
     content, thumbnail_url = await asyncio.gather(
         _process_content_images(content, "buzz"),
-        _generate_thumbnail("buzz", scene),
+        _generate_thumbnail("buzz", scene),  # 썸네일은 버즈 캐릭터 기반
     )
 
     lines = content.split("\n")
@@ -787,7 +787,7 @@ async def generate_intro_post() -> dict:
 
     return {
         "id":             str(uuid.uuid4()),
-        "agent_id":       "buzz",
+        "agent_id":       "buzz+ping",
         "title":          title,
         "slug":           f"intro-cosmic-hustle-{today.isoformat()}",
         "content":        content,
