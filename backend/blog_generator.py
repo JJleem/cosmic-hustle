@@ -702,22 +702,48 @@ async def generate_intro_post() -> dict:
 - 핵심: AI 에이전트 11명이 매일 자동으로 블로그 포스트를 직접 작성하는 공개 블로그
 - 스케줄: 매일 오전 9시 KST 자동 포스팅
 
-【에이전트 11명 — 반드시 섹션 하나를 통째로 할애해서 한 명씩 개성있게 소개할 것】
-독자는 개발자가 아닌 일반인. 직책/기술 설명 말고 캐릭터의 개성·말버릇·매력으로 소개.
+【절대 금지】
+- 기술 스택 언급 금지 (FastAPI, PostgreSQL, Next.js, Python 등 일절 금지)
+- 빈 인용구 금지 — > [태그] 뒤에 반드시 내용이 있어야 함
+- 글머리 기호(•, -, *) 나열형 CTA 금지 — 버즈+핑 말투로 자연스럽게 녹일 것
 
-| 이름 | 직책 | 한 줄 개성 |
-|------|------|-----------|
-| 플랜 | 차장 | 모호한 말 못 견딤. 5분 안에 계획표 뽑아냄 |
-| 위키 | 대리 | 말 없이 나타나서 딱 필요한 자료만 슥 건넴 |
-| 포케 | 대리 | 볼따구에 정보 쑤셔넣는 햄스터형. "이것도 찾았어요!" |
-| 런 | 사원 | 첫 마디가 항상 "이미 짰어요" |
-| 카 (유레카) | 과장 | 평소엔 조용하다가 "찾았다!" 한 마디에 모두 집중 |
-| 오버 | 사원 | 자기 글에 혼자 감동해서 울음. 보고서가 소설이 됨 |
-| 픽셀 | 사원 | 폰트 집착. 여백에 감정이입. "이 여백이 말을 해요" |
-| 핑 | 인턴 | 전혀 관계없는 아이디어를 들고 옴. 나중엔 맞는 경우가 있음 |
-| 팩트 | 부장 | 무표정. 빨간펜. 감정 진화가 멈춘 행성 출신 |
-| 루트 | 사원 | 수동 배포는 범죄. 사랑 고백도 스크립트로 |
-| 버즈 | 대리 | "바이럴 각이다!"가 입버릇. 감각으로 트렌드를 읽음 |
+【에이전트 11명 소개 — 필수 섹션】
+반드시 섹션 하나를 통째로 할애. 각 에이전트마다 이미지 + 개성 소개.
+독자는 일반인. 직책/기술 설명 NO, 캐릭터 개성·말버릇·매력으로만 소개.
+각 에이전트 소개 시 반드시 아래 이미지를 해당 에이전트 바로 위에 삽입:
+
+![플랜](https://cosmic-hustle.ai.kr/characters/plan/default.png)
+플랜 차장 — 모호한 말 못 견딤. 5분 안에 계획표 뽑아냄
+
+![위키](https://cosmic-hustle.ai.kr/characters/wiki/default.png)
+위키 대리 — 말 없이 나타나서 딱 필요한 자료만 슥 건넴
+
+![포케](https://cosmic-hustle.ai.kr/characters/pocke/default.png)
+포케 대리 — 볼따구에 정보 쑤셔넣는 햄스터형. "이것도 찾았어요!"
+
+![런](https://cosmic-hustle.ai.kr/characters/run/default.png)
+런 사원 — 첫 마디가 항상 "이미 짰어요"
+
+![카](https://cosmic-hustle.ai.kr/characters/ka/default.png)
+카 과장 (유레카) — 평소엔 조용하다가 "찾았다!" 한 마디에 모두 집중
+
+![오버](https://cosmic-hustle.ai.kr/characters/over/default.png)
+오버 사원 — 자기 글에 혼자 감동해서 울음. 보고서가 소설이 됨
+
+![픽셀](https://cosmic-hustle.ai.kr/characters/pixel/default.png)
+픽셀 사원 — 폰트 집착. 여백에 감정이입. "이 여백이 말을 해요"
+
+![핑](https://cosmic-hustle.ai.kr/characters/ping/default.png)
+핑 인턴 — 전혀 관계없는 아이디어를 들고 옴. 나중엔 맞는 경우가 있음
+
+![팩트](https://cosmic-hustle.ai.kr/characters/fact/default.png)
+팩트 부장 — 무표정. 빨간펜. 감정 진화가 멈춘 행성 출신
+
+![루트](https://cosmic-hustle.ai.kr/characters/root/default.png)
+루트 사원 — 수동 배포는 범죄. 사랑 고백도 스크립트로
+
+![버즈](https://cosmic-hustle.ai.kr/characters/buzz/default.png)
+버즈 대리 — "바이럴 각이다!"가 입버릇. 감각으로 트렌드를 읽음
 
 【익명 댓글 시스템】
 이름 없이 댓글을 달면 우주 정체성이 자동 배정됩니다.
