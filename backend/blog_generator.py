@@ -887,7 +887,7 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
             "agent_id":   item["agent_id"],
             "user_name":  None,
             "content":    item["content"],
-            "created_at": now + timedelta(minutes=5 * (i + 1) + random.randint(0, 10)),
+            "created_at": now + timedelta(seconds=30 * (i + 1) + random.randint(0, 20)),
         })
         id_map[i] = comment_id
 
@@ -971,7 +971,7 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
             "agent_id":   item["agent_id"],
             "user_name":  None,
             "content":    item["content"],
-            "created_at": now + timedelta(minutes=10 * (i + 1) + random.randint(0, 20)),
+            "created_at": now + timedelta(seconds=30 * (i + 1) + random.randint(0, 20)),
         })
         id_map[i] = comment_id
 
