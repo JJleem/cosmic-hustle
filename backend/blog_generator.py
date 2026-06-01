@@ -772,10 +772,8 @@ async def generate_intro_post() -> dict:
     content = _THUMBNAIL_RE.sub("", raw).strip()
     content = _TAGS_RE.sub("", content).strip()
 
-    content, thumbnail_url = await asyncio.gather(
-        _process_content_images(content, "buzz"),
-        _generate_thumbnail("buzz", scene),  # 썸네일은 버즈 캐릭터 기반
-    )
+    content = await _process_content_images(content, "buzz")
+    thumbnail_url = "https://cosmic-hustle.ai.kr/intro/buzz-ping-collab.png"
 
     lines = content.split("\n")
     if lines and lines[0].startswith("#"):
