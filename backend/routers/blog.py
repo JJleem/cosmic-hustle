@@ -60,7 +60,7 @@ def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
-    generate_intro_post,
+    generate_intro_post, generate_intro_comments,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -162,8 +162,8 @@ async def trigger_generate_intro(db: Session = Depends(get_db)):
     db.add(post)
     db.flush()
 
-    summary = data["content"][:300]
-    comments = await generate_comments(post.id, post.agent_id, post.title, summary)
+    summary  = data["content"][:300]
+    comments = await generate_intro_comments(post.id, post.title, summary)
     for c in comments:
         db.add(BlogComment(**c))
 

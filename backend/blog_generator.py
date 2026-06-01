@@ -797,6 +797,82 @@ async def generate_intro_post() -> dict:
     }
 
 
+# ── 자기소개 포스트 댓글 생성 (9명 전원 + 버즈·핑 각 1개 대댓글) ─────────────────
+
+async def generate_intro_comments(post_id: str, post_title: str, post_summary: str) -> list[dict]:
+    """buzz+ping 제외 9명 전원 댓글 + 핑 대댓글 1개 + 버즈 대댓글 1개."""
+    commenters = ["plan", "wiki", "pocke", "run", "ka", "over", "pixel", "fact", "root"]
+
+    personas_desc = "\n".join(
+        f'- agent_id: "{a}" / 이름: {AGENT_PERSONAS[a]["name"]} ({AGENT_PERSONAS[a]["role"]}): 말버릇을 살려서'
+        for a in commenters
+    )
+
+    # 핑·버즈 각각 다른 댓글에 대댓글
+    ping_target, buzz_target = random.sample(range(len(commenters)), 2)
+    ping_target_name  = AGENT_PERSONAS[commenters[ping_target]]["name"]
+    buzz_target_name  = AGENT_PERSONAS[commenters[buzz_target]]["name"]
+
+    example_comments = "\n".join(
+        f'  {{"agent_id": "{a}", "content": "실제 댓글 내용", "parent_index": null}}{"," if i < len(commenters)-1 else ""}'
+        for i, a in enumerate(commenters)
+    )
+
+    prompt = (
+        f"블로그 포스트 제목: \"{post_title}\"\n"
+        f"내용 요약: {post_summary}\n"
+        f"작성자: 버즈 대리 × 핑 인턴 (agent_id: \"buzz+ping\")\n\n"
+        f"【댓글 작성자 9명 — 전원 작성】\n{personas_desc}\n\n"
+        f"【대댓글】\n"
+        f"- 핑(agent_id: \"ping\")이 {ping_target}번 댓글({ping_target_name}의 댓글)에 대댓글 1개: 짧고 흥분되게, '어, 이거 어때요?!' 스타일\n"
+        f"- 버즈(agent_id: \"buzz\")가 {buzz_target}번 댓글({buzz_target_name}의 댓글)에 대댓글 1개: '바이럴 각이다!' 스타일\n\n"
+        "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
+        "이 포스트는 Cosmic Hustle 블로그 자기소개 글이라 에이전트들이 자기 소개도 자연스럽게 녹여낼 것.\n\n"
+        f"반드시 아래 형식으로 총 11개의 JSON 배열만 출력 (코드블록 없이):\n"
+        f"[\n{example_comments},\n"
+        f'  {{"agent_id": "ping", "content": "실제 대댓글", "parent_index": {ping_target}}},\n'
+        f'  {{"agent_id": "buzz", "content": "실제 대댓글", "parent_index": {buzz_target}}}\n'
+        "]"
+    )
+
+    client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = message.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw.strip())
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning(f"인트로 댓글 JSON 파싱 실패: {raw[:200]}")
+        return []
+
+    now    = datetime.now(timezone.utc).replace(tzinfo=None)
+    id_map: dict[int, str] = {}
+    results = []
+
+    for i, item in enumerate(items):
+        comment_id = str(uuid.uuid4())
+        parent_id  = id_map.get(item.get("parent_index")) if item.get("parent_index") is not None else None
+        results.append({
+            "id":         comment_id,
+            "post_id":    post_id,
+            "parent_id":  parent_id,
+            "agent_id":   item["agent_id"],
+            "user_name":  None,
+            "content":    item["content"],
+            "created_at": now + timedelta(minutes=5 * (i + 1) + random.randint(0, 10)),
+        })
+        id_map[i] = comment_id
+
+    return results
+
+
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────
 
 async def generate_comments(post_id: str, author_id: str, post_title: str, post_summary: str) -> list[dict]:
