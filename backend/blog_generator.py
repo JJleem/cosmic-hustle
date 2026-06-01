@@ -944,6 +944,180 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
     return results
 
 
+# ── 에이전트 배틀 포스트 ────────────────────────────────────────────────────────
+
+async def generate_debate_post(
+    topic: str,
+    agent_a: str = "buzz",
+    agent_b: str = "fact",
+) -> dict:
+    """두 에이전트가 한 주제로 정면 대결하는 이벤트 포스트."""
+    today  = datetime.now(KST).date()
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    pa = AGENT_PERSONAS[agent_a]
+    pb = AGENT_PERSONAS[agent_b]
+
+    system_text = f"""당신은 Cosmic Hustle의 {pa['name']} {pa['title']}({pa['role']})과 {pb['name']} {pb['title']}({pb['role']})이 한 주제를 놓고 정면 대결하는 특별 배틀 포스트를 작성합니다.
+
+【출력 형식 — 반드시 지킬 것】
+두 에이전트가 번갈아가며 블록 단위로 주장합니다. 각 블록은 아래 마커로 감쌉니다:
+
+::{agent_a}::
+{pa['name']}의 주장 (마크다운 자유롭게)
+::end::
+
+::{agent_b}::
+{pb['name']}의 반박 (마크다운 자유롭게)
+::end::
+
+- 블록 최소 12개 이상 번갈아 ({agent_a}→{agent_b}→{agent_a}→{agent_b}...)
+- 첫 블록은 반드시 ::{agent_a}:: 로 시작, 제목(# ...)은 맨 첫 줄에
+- 각 블록 3~6문장, 상대방 직전 주장에 직접 반박할 것
+- 마지막 블록 다음에 독자 투표 CTA 섹션 추가 (## 여러분의 판단은?)
+
+【{pa['name']} 말투·논거】
+{pa['system'][:300]}
+
+【{pb['name']} 말투·논거】
+{pb['system'][:300]}
+
+【공통 규칙】
+- 반드시 한국어
+- 전체 2500자 이상
+- 인용구 태그 사용 가능: > [happy] / [err] / [working] / [done] / [talk_2]
+- 본문 중간 이미지 1~2개 (한쪽 블록 안에 삽입):
+  {{{{IMAGE: 구체적 씬 (반드시 영어, 캐릭터 없는 오브젝트/풍경, 위트 포함)}}}}
+- 글 맨 끝 썸네일 태그 (반드시 영어):
+  {{{{THUMBNAIL: 두 캐릭터가 대결하는 역동적인 씬. 동작·감정·의상·배경 상세하게.}}}}
+- 마지막 줄 태그:
+  {{{{TAGS: 태그1, 태그2, 태그3, 태그4}}}}"""
+
+    user_content = (
+        f"오늘({today.strftime('%Y년 %m월 %d일')}) 배틀 주제: **{topic}**\n\n"
+        f"{pa['name']}은 찬성 측, {pb['name']}은 반대 측으로 배정합니다.\n"
+        "팽팽하게 맞서되, 각자 자기 말투와 논거 스타일을 끝까지 유지하세요.\n"
+        "마지막 투표 CTA에서 독자가 댓글로 승자를 선택하도록 강력하게 유도하세요.\n\n"
+        "포스트 전체를 다 작성한 뒤 맨 끝에 {{THUMBNAIL: ...}} 태그를 붙이세요."
+    )
+
+    message = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=7000,
+        system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+    raw     = message.content[0].text.strip()
+    thumb_m = _THUMBNAIL_RE.search(raw)
+    scene   = thumb_m.group(1).strip() if thumb_m else (
+        f"{pa['name']} and {pb['name']} facing off in a dramatic debate arena"
+    )
+    tags_m  = _TAGS_RE.search(raw)
+    tags    = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
+    content = _THUMBNAIL_RE.sub("", raw).strip()
+    content = _TAGS_RE.sub("", content).strip()
+
+    content, thumbnail_url = await asyncio.gather(
+        _process_content_images(content, agent_a),
+        _generate_thumbnail(agent_a, scene),
+    )
+
+    lines = content.split("\n")
+    if lines and lines[0].startswith("#"):
+        raw_title = lines[0].lstrip("#").strip()
+        title     = re.sub(r"\*+([^*]+)\*+", r"\1", raw_title)
+        content   = "\n".join(lines[1:]).strip()
+    else:
+        title = f"{pa['name']} vs {pb['name']}: {topic}"
+
+    return {
+        "id":            str(uuid.uuid4()),
+        "agent_id":      f"{agent_a}+{agent_b}",
+        "title":         title,
+        "slug":          f"debate-{agent_a}-vs-{agent_b}-{today.isoformat()}",
+        "content":       content,
+        "thumbnail_url": thumbnail_url,
+        "tags":          tags,
+        "published":     True,
+        "trending_topic": f"배틀: {topic}",
+        "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
+    }
+
+
+async def generate_debate_comments(
+    post_id: str,
+    post_title: str,
+    post_summary: str,
+    agent_a: str = "buzz",
+    agent_b: str = "fact",
+) -> list[dict]:
+    """배틀 포스트 댓글 — 나머지 9명이 편 갈라서 응원."""
+    all_agents  = list(AGENT_PERSONAS.keys())
+    bystanders  = [a for a in all_agents if a not in (agent_a, agent_b)]
+    team_a = bystanders[:4]
+    team_b = bystanders[4:]
+
+    pa_name = AGENT_PERSONAS[agent_a]["name"]
+    pb_name = AGENT_PERSONAS[agent_b]["name"]
+
+    personas_desc = "\n".join(
+        f'- agent_id: "{a}" / {AGENT_PERSONAS[a]["name"]} ({AGENT_PERSONAS[a]["role"]}): '
+        f'{""+pa_name+" 팀 — 은근히 응원" if a in team_a else pb_name+" 팀 — 은근히 응원"}'
+        for a in bystanders
+    )
+
+    prompt = (
+        f"배틀 포스트 제목: \"{post_title}\"\n"
+        f"내용 요약: {post_summary}\n"
+        f"대결: {pa_name}(agent_id: \"{agent_a}\") vs {pb_name}(agent_id: \"{agent_b}\")\n\n"
+        f"【구경꾼 9명 댓글】\n{personas_desc}\n\n"
+        "각자 자기 말투로 1~2문장. 편을 들되 직접적으로 말하지 않고 은근히 드러나게.\n"
+        f"마지막에 {pa_name}(agent_id: \"{agent_a}\")이 자기 변호 댓글 1개, "
+        f"{pb_name}(agent_id: \"{agent_b}\")이 냉정한 반박 댓글 1개 추가.\n\n"
+        f"반드시 총 11개 JSON 배열만 출력 (코드블록 없이):\n"
+        "[\n"
+        + ",\n".join(
+            f'  {{"agent_id": "{a}", "content": "실제 댓글", "parent_index": null}}'
+            for a in bystanders
+        )
+        + f',\n  {{"agent_id": "{agent_a}", "content": "자기 변호 댓글", "parent_index": null}}'
+        + f',\n  {{"agent_id": "{agent_b}", "content": "냉정한 반박 댓글", "parent_index": null}}'
+        + "\n]"
+    )
+
+    client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = message.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw.strip())
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning(f"배틀 댓글 JSON 파싱 실패: {raw[:200]}")
+        return []
+
+    now     = datetime.now(timezone.utc).replace(tzinfo=None)
+    results = []
+    for i, item in enumerate(items):
+        results.append({
+            "id":         str(uuid.uuid4()),
+            "post_id":    post_id,
+            "parent_id":  None,
+            "agent_id":   item["agent_id"],
+            "user_name":  None,
+            "content":    item["content"],
+            "created_at": now + timedelta(seconds=30 * (i + 1) + random.randint(0, 20)),
+        })
+    return results
+
+
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────
 
 async def generate_comments(post_id: str, author_id: str, post_title: str, post_summary: str) -> list[dict]:

@@ -61,6 +61,7 @@ from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
     generate_intro_post, generate_intro_comments,
+    generate_debate_post, generate_debate_comments,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -164,6 +165,39 @@ async def trigger_generate_intro(db: Session = Depends(get_db)):
 
     summary  = data["content"][:300]
     comments = await generate_intro_comments(post.id, post.title, summary)
+    for c in comments:
+        db.add(BlogComment(**c))
+
+    db.commit()
+    db.refresh(post)
+    return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url}
+
+
+@router.post("/generate-debate")
+async def trigger_generate_debate(
+    topic: str,
+    agent_a: str = "buzz",
+    agent_b: str = "fact",
+    db: Session = Depends(get_db),
+):
+    """두 에이전트 배틀 이벤트 포스트 생성. topic 필수, agent_a/b 선택(기본: buzz vs fact)."""
+    if agent_a not in AGENT_PERSONAS or agent_b not in AGENT_PERSONAS:
+        raise HTTPException(status_code=400, detail="유효하지 않은 agent_id")
+    if agent_a == agent_b:
+        raise HTTPException(status_code=400, detail="두 에이전트가 달라야 합니다")
+
+    data = await generate_debate_post(topic, agent_a, agent_b)
+
+    existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}")
+
+    post = BlogPost(**data)
+    db.add(post)
+    db.flush()
+
+    summary  = data["content"][:300]
+    comments = await generate_debate_comments(post.id, post.title, summary, agent_a, agent_b)
     for c in comments:
         db.add(BlogComment(**c))
 
