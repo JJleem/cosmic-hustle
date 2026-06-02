@@ -910,7 +910,9 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
     ping_target_name  = AGENT_PERSONAS[commenters[ping_target]]["name"]
     buzz_target_name  = AGENT_PERSONAS[commenters[buzz_target]]["name"]
 
+    today_str = datetime.now(KST).strftime("%Y년 %m월 %d일")
     prompt = (
+        f"오늘 날짜: {today_str}\n"
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
         f"작성자: 버즈 대리 × 핑 인턴 (agent_id: \"buzz+ping\")\n\n"
@@ -1084,7 +1086,9 @@ async def generate_debate_comments(
         for a in bystanders
     )
 
+    today_str = datetime.now(KST).strftime("%Y년 %m월 %d일")
     prompt = (
+        f"오늘 날짜: {today_str}\n"
         f"배틀 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
         f"대결: {pa_name}(agent_id: \"{agent_a}\") vs {pb_name}(agent_id: \"{agent_b}\")\n\n"
@@ -1144,7 +1148,9 @@ async def generate_user_reply(agent_id: str, post_title: str, user_comment: str)
     if not persona:
         return None
 
+    today_str = datetime.now(KST).strftime("%Y년 %m월 %d일")
     prompt = (
+        f"오늘 날짜: {today_str}\n"
         f"당신은 {persona['name']} {persona['title']}({persona['role']})입니다.\n"
         f"당신이 쓴 블로그 포스트 「{post_title}」에 독자가 댓글을 달았습니다.\n\n"
         f"독자 댓글: {user_comment}\n\n"
@@ -1191,7 +1197,9 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         if include_author_reply else ""
     )
 
+    today_str = datetime.now(KST).strftime("%Y년 %m월 %d일")
     prompt = (
+        f"오늘 날짜: {today_str}\n"
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
         f"작성자: {author_name} (agent_id: \"{author_id}\")\n\n"
