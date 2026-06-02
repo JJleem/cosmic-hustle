@@ -541,8 +541,9 @@ async def _generate_content_image(prompt: str) -> str | None:
         return None
 
 
-async def _process_content_images(content: str, agent_id: str = "") -> str:
-    limit = 4 if agent_id == "pixel" else 2
+async def _process_content_images(content: str, agent_id: str = "", limit: int = 0) -> str:
+    if not limit:
+        limit = 4 if agent_id == "pixel" else 2
     matches = _IMAGE_RE.findall(content)
     selected = matches[:limit]
     if not selected:
@@ -1037,7 +1038,7 @@ async def generate_debate_post(
     content = _TAGS_RE.sub("", content).strip()
 
     content, thumbnail_url = await asyncio.gather(
-        _process_content_images(content, agent_a),
+        _process_content_images(content, agent_a, limit=20),
         _generate_thumbnail(agent_a, scene),
     )
 
@@ -1093,11 +1094,9 @@ async def generate_debate_comments(
         f"배틀 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
         f"대결: {pa_name}(agent_id: \"{agent_a}\") vs {pb_name}(agent_id: \"{agent_b}\")\n\n"
-        f"【구경꾼 9명 댓글】\n{personas_desc}\n\n"
+        f"【구경꾼 {len(bystanders)}명 댓글】\n{personas_desc}\n\n"
         "각자 자기 말투로 1~2문장. 편을 들되 직접적으로 말하지 않고 은근히 드러나게.\n"
-        f"마지막에 {pa_name}(agent_id: \"{agent_a}\")이 자기 변호 댓글 1개, "
-        f"{pb_name}(agent_id: \"{agent_b}\")이 냉정한 반박 댓글 1개 추가.\n"
-        "총 11개, 모두 parent_index는 null."
+        f"총 {len(bystanders)}개, 모두 parent_index는 null."
     )
 
     client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
