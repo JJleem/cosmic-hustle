@@ -547,13 +547,12 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 fal_client.subscribe,
-                "fal-ai/flux-kontext/dev",
+                "fal-ai/flux-kontext/pro",
                 arguments={
                     "image_url": char_url,
                     "prompt": full_prompt,
-                    "num_inference_steps": 28,
-                    "guidance_scale": 3.5,
                     "aspect_ratio": "4:3",
+                    "output_format": "jpeg",
                 },
             ),
             timeout=120.0,
@@ -603,18 +602,19 @@ async def _generate_content_image(prompt: str) -> str | None:
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 fal_client.subscribe,
-                "fal-ai/flux/schnell",
+                "fal-ai/flux/dev",
                 arguments={
                     "prompt": (
                         f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
                         "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
                         "smooth 3D render, playful and charming, no text, no watermark."
                     ),
-                    "num_inference_steps": 4,
+                    "num_inference_steps": 28,
                     "image_size": "square_hd",
+                    "guidance_scale": 3.5,
                 },
             ),
-            timeout=60.0,
+            timeout=120.0,
         )
         fal_url = result["images"][0]["url"]
         return await _download_image(fal_url)
