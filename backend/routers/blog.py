@@ -271,7 +271,7 @@ async def trigger_generate_intro(db: Session = Depends(get_db)):
 @router.post("/generate-debate")
 async def trigger_generate_debate(
     topic: str,
-    agent_a: str = "buzz",
+    agent_a: str = "over",
     agent_b: str = "fact",
     db: Session = Depends(get_db),
 ):

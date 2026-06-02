@@ -897,8 +897,8 @@ async def generate_intro_post() -> dict:
 # ── 자기소개 포스트 댓글 생성 (9명 전원 + 버즈·핑 각 1개 대댓글) ─────────────────
 
 async def generate_intro_comments(post_id: str, post_title: str, post_summary: str) -> list[dict]:
-    """buzz+ping 제외 9명 전원 댓글 + 핑 대댓글 1개 + 버즈 대댓글 1개."""
-    commenters = ["plan", "wiki", "pocke", "run", "ka", "over", "pixel", "fact", "root"]
+    """buzz+ping+over+fact 제외 7명 댓글 + 핑 대댓글 1개 + 버즈 대댓글 1개."""
+    commenters = ["plan", "wiki", "pocke", "run", "ka", "pixel", "root"]
 
     personas_desc = "\n".join(
         f'- agent_id: "{a}" / 이름: {AGENT_PERSONAS[a]["name"]} ({AGENT_PERSONAS[a]["role"]}): 말버릇을 살려서'
@@ -916,13 +916,13 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
         f"작성자: 버즈 대리 × 핑 인턴 (agent_id: \"buzz+ping\")\n\n"
-        f"【댓글 작성자 9명 — 전원 작성】\n{personas_desc}\n\n"
+        f"【댓글 작성자 7명 — 전원 작성】\n{personas_desc}\n\n"
         f"【대댓글】\n"
         f"- 핑(agent_id: \"ping\")이 {ping_target}번 댓글({ping_target_name}의 댓글)에 대댓글 1개: 짧고 흥분되게, '어, 이거 어때요?!' 스타일\n"
         f"- 버즈(agent_id: \"buzz\")가 {buzz_target}번 댓글({buzz_target_name}의 댓글)에 대댓글 1개: '바이럴 각이다!' 스타일\n\n"
         "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
         "이 포스트는 Cosmic Hustle 블로그 자기소개 글이라 에이전트들이 자기 소개도 자연스럽게 녹여낼 것.\n"
-        f"총 11개: 9명 댓글 + 핑 대댓글(parent_index={ping_target}) + 버즈 대댓글(parent_index={buzz_target})"
+        f"총 9개: 7명 댓글 + 핑 대댓글(parent_index={ping_target}) + 버즈 대댓글(parent_index={buzz_target})"
     )
 
     client  = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -965,7 +965,7 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
 
 async def generate_debate_post(
     topic: str,
-    agent_a: str = "buzz",
+    agent_a: str = "over",
     agent_b: str = "fact",
 ) -> dict:
     """두 에이전트가 한 주제로 정면 대결하는 이벤트 포스트."""
@@ -1000,10 +1000,11 @@ async def generate_debate_post(
 {pb['system'][:300]}
 
 【공통 규칙】
+- 현재 연도: 2026년. 모든 사례·통계·트렌드는 2026년 기준으로 작성할 것
 - 반드시 한국어
 - 전체 2500자 이상
 - 인용구 태그 사용 가능: > [happy] / [err] / [working] / [done] / [talk_2]
-- 본문 중간 이미지 1~2개 (한쪽 블록 안에 삽입):
+- 각 주장 블록마다 관련 이미지 최소 1장 삽입 (블록 내 마지막 줄):
   {{{{IMAGE: 구체적 씬 (반드시 영어, 캐릭터 없는 오브젝트/풍경, 위트 포함)}}}}
 - 글 맨 끝 썸네일 태그 (반드시 영어):
   {{{{THUMBNAIL: 두 캐릭터가 대결하는 역동적인 씬. 동작·감정·의상·배경 상세하게.}}}}
@@ -1073,7 +1074,7 @@ async def generate_debate_comments(
     returns: {"comments": [...], "agent_votes": [...]}
     """
     all_agents  = list(AGENT_PERSONAS.keys())
-    bystanders  = [a for a in all_agents if a not in (agent_a, agent_b)]
+    bystanders  = [a for a in all_agents if a not in (agent_a, agent_b, "over", "fact")]
     team_a = bystanders[:4]
     team_b = bystanders[4:]
 
@@ -1172,7 +1173,7 @@ async def generate_user_reply(agent_id: str, post_title: str, user_comment: str)
 
 async def generate_comments(post_id: str, author_id: str, post_title: str, post_summary: str) -> list[dict]:
     all_agents = list(AGENT_PERSONAS.keys())
-    commenters = random.sample([a for a in all_agents if a != author_id], 3)
+    commenters = random.sample([a for a in all_agents if a != author_id and a not in ("over", "fact")], 3)
     include_author_reply = random.random() < 0.5
 
     personas_desc = "\n".join(
