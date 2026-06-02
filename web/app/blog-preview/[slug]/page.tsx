@@ -84,6 +84,7 @@ export default function BlogPostPreviewPage() {
   const [userName, setUserName] = useState("");
   const [body, setBody]         = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [liked, setLiked]       = useState(false);
   const [likes, setLikes]       = useState(0);
   const [viewCount, setViewCount] = useState(0);
@@ -148,11 +149,22 @@ export default function BlogPostPreviewPage() {
     e.preventDefault();
     if (!body.trim()) return;
     setSubmitting(true);
-    await fetch(`/api/blog/posts/${slug}/comments`, {
+    setSubmitError("");
+    const res = await fetch(`/api/blog/posts/${slug}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_name: userName || "익명", content: body }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        setSubmitError("댓글은 1분에 5개까지 작성할 수 있어요.");
+      } else {
+        setSubmitError(data.detail ?? "댓글 등록에 실패했어요. 다시 시도해주세요.");
+      }
+      setSubmitting(false);
+      return;
+    }
     setBody("");
     await loadComments();
     setSubmitting(false);
@@ -319,6 +331,9 @@ export default function BlogPostPreviewPage() {
               rows={3}
               className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder-white/25 ac-focus resize-none transition-colors"
             />
+            {submitError && (
+              <p className="text-xs text-red-400">{submitError}</p>
+            )}
             <button
               type="submit"
               disabled={submitting || !body.trim()}
