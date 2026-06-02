@@ -165,6 +165,17 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
     return result
 
 
+@router.get("/posts/{slug}/vote")
+def get_vote_status(slug: str, request: Request, db: Session = Depends(get_db)):
+    """현재 유저의 투표 상태 조회."""
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+    ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
+    return _vote_result(db, post.id, my_voter_key=ip_hash)
+
+
 @router.post("/posts/{slug}/vote")
 def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(get_db)):
     """배틀 포스트 투표. side=a or b. 같은 side 재투표 시 취소, 다른 side면 변경."""
