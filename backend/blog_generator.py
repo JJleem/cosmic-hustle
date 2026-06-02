@@ -968,6 +968,7 @@ async def generate_debate_post(
     topic: str,
     agent_a: str = "over",
     agent_b: str = "fact",
+    preset_thumbnail: str | None = None,
 ) -> dict:
     """두 에이전트가 한 주제로 정면 대결하는 이벤트 포스트."""
     today  = datetime.now(KST).date()
@@ -1037,10 +1038,14 @@ async def generate_debate_post(
     content = _THUMBNAIL_RE.sub("", raw).strip()
     content = _TAGS_RE.sub("", content).strip()
 
-    content, thumbnail_url = await asyncio.gather(
-        _process_content_images(content, agent_a, limit=20),
-        _generate_thumbnail(agent_a, scene),
-    )
+    if preset_thumbnail:
+        content = await _process_content_images(content, agent_a, limit=6)
+        thumbnail_url = preset_thumbnail
+    else:
+        content, thumbnail_url = await asyncio.gather(
+            _process_content_images(content, agent_a, limit=6),
+            _generate_thumbnail(agent_a, scene),
+        )
 
     lines = content.split("\n")
     if lines and lines[0].startswith("#"):

@@ -273,6 +273,7 @@ async def trigger_generate_debate(
     topic: str,
     agent_a: str = "over",
     agent_b: str = "fact",
+    thumbnail_url: str | None = None,
     db: Session = Depends(get_db),
 ):
     """두 에이전트 배틀 이벤트 포스트 생성. topic 필수, agent_a/b 선택(기본: buzz vs fact)."""
@@ -281,7 +282,7 @@ async def trigger_generate_debate(
     if agent_a == agent_b:
         raise HTTPException(status_code=400, detail="두 에이전트가 달라야 합니다")
 
-    data = await generate_debate_post(topic, agent_a, agent_b)
+    data = await generate_debate_post(topic, agent_a, agent_b, preset_thumbnail=thumbnail_url)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:
