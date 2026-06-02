@@ -70,17 +70,29 @@ async def _daily_blog_job():
         db = SessionLocal()
         try:
             from datetime import timedelta
-            cutoff = datetime.now() - timedelta(days=14)
+            cutoff = datetime.now() - timedelta(days=90)
             recent_rows = (
-                db.query(BlogPost.title, BlogPost.trending_topic)
+                db.query(BlogPost.title, BlogPost.trending_topic, BlogPost.tags)
                 .filter(BlogPost.published_at >= cutoff)
                 .order_by(BlogPost.published_at.desc())
-                .limit(30).all()
+                .limit(60).all()
             )
             recent_titles = [
                 f"{title} (핵심 아이디어: {topic})" if topic else title
-                for title, topic in recent_rows
+                for title, topic, _ in recent_rows
             ]
+            # 태그 빈도 집계 → 자주 쓴 태그 목록
+            from collections import Counter
+            import json as _json
+            tag_counter: Counter = Counter()
+            for _, _, tags_raw in recent_rows:
+                if tags_raw:
+                    try:
+                        for t in _json.loads(tags_raw):
+                            tag_counter[t] += 1
+                    except Exception:
+                        pass
+            frequent_tags = [tag for tag, _ in tag_counter.most_common(10)]
 
             # 오늘 담당 에이전트 메모리 조회
             from blog_generator import get_today_agent
@@ -88,7 +100,7 @@ async def _daily_blog_job():
             mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == today_agent_id).first()
             agent_memory = mem_row.memory if mem_row else None
 
-            data = await generate_blog_post(recent_titles=recent_titles, memory=agent_memory)
+            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")

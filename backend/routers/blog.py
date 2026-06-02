@@ -221,15 +221,30 @@ def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(ge
 async def trigger_generate(agent_id: str | None = None, force: bool = False, db: Session = Depends(get_db)):
     """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
     from datetime import datetime, timedelta
+    from collections import Counter
+    import json as _json
     from sqlalchemy import desc
-    cutoff = datetime.now() - timedelta(days=14)
-    recent_titles = [
-        r[0] for r in db.query(BlogPost.title)
+    cutoff = datetime.now() - timedelta(days=90)
+    recent_rows = (
+        db.query(BlogPost.title, BlogPost.trending_topic, BlogPost.tags)
         .filter(BlogPost.published_at >= cutoff)
         .order_by(desc(BlogPost.published_at))
-        .limit(30).all()
+        .limit(60).all()
+    )
+    recent_titles = [
+        f"{title} (핵심 아이디어: {topic})" if topic else title
+        for title, topic, _ in recent_rows
     ]
-    data = await generate_blog_post(agent_id, recent_titles=recent_titles)
+    tag_counter: Counter = Counter()
+    for _, _, tags_raw in recent_rows:
+        if tags_raw:
+            try:
+                for t in _json.loads(tags_raw):
+                    tag_counter[t] += 1
+            except Exception:
+                pass
+    frequent_tags = [tag for tag, _ in tag_counter.most_common(10)]
+    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:
