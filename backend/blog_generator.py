@@ -547,7 +547,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 fal_client.subscribe,
-                "fal-ai/flux-kontext/pro",
+                "fal-ai/flux-pro/kontext",
                 arguments={
                     "image_url": char_url,
                     "prompt": full_prompt,
