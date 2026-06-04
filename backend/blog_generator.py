@@ -882,24 +882,33 @@ async def generate_blog_post(
 
 
 async def _search_wikimedia(keyword: str) -> dict | None:
-    """Wikimedia Commons 이미지 검색. 반환: {url, title, author, license, page_url}"""
+    """Wikimedia Commons 이미지 검색. 키워드 단축 fallback 포함. 반환: {url, title, author, license, page_url}"""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            search_resp = await client.get(
-                "https://commons.wikimedia.org/w/api.php",
-                params={
-                    "action": "query",
-                    "list": "search",
-                    "srsearch": keyword,
-                    "srnamespace": "6",
-                    "srlimit": "5",
-                    "format": "json",
-                },
-                headers={"User-Agent": "CosmicHustle/1.0 (leemjaejun@gmail.com)"},
-            )
-            hits = search_resp.json().get("query", {}).get("search", [])
-            # PDF/SVG 제외 — 실제 사진 파일만
-            image_hits = [h for h in hits if re.search(r"\.(jpe?g|png|webp|gif)$", h["title"], re.I)]
+            # 키워드 점진적 단축 — 결과 없으면 마지막 단어 제거 후 재시도
+            words = keyword.split()
+            image_hits: list = []
+            used_keyword = keyword
+            while words:
+                used_keyword = " ".join(words)
+                search_resp = await client.get(
+                    "https://commons.wikimedia.org/w/api.php",
+                    params={
+                        "action": "query",
+                        "list": "search",
+                        "srsearch": used_keyword,
+                        "srnamespace": "6",
+                        "srlimit": "8",
+                        "format": "json",
+                    },
+                    headers={"User-Agent": "CosmicHustle/1.0 (leemjaejun@gmail.com)"},
+                )
+                hits = search_resp.json().get("query", {}).get("search", [])
+                image_hits = [h for h in hits if re.search(r"\.(jpe?g|png|webp|gif)$", h["title"], re.I)]
+                if image_hits:
+                    break
+                words = words[:-1]  # 마지막 단어 제거 후 재시도
+
             if not image_hits:
                 return None
 
@@ -997,25 +1006,27 @@ async def generate_discovery_post(topic: str | None = None) -> dict:
     discovery_rules = """
 
 【디스커버리 채널 규칙 — 반드시 준수】
-이 포스트에는 Wikimedia Commons 실제 사진이 삽입됩니다.
+이 포스트에는 실제 사진(Wikimedia Commons)이 삽입됩니다.
 
 이미지 마커 규칙:
-- {{IMAGE: ...}}, {{THUMBNAIL: ...}} 는 절대 쓰지 마세요
-- 썸네일: {{WIKIMEDIA_THUMB: 영어 키워드}} — 반드시 1개, 글 제목 바로 아래 첫 줄
+- {{IMAGE: ...}}, {{WIKIMEDIA_THUMB: ...}} 는 쓰지 마세요
+- 썸네일: {{THUMBNAIL: 씬 묘사}} — 반드시 1개. 기존 규칙대로 위트있고 동작이 있는 씬 묘사 (영어)
 - 본문 인라인: {{WIKIMEDIA: 영어 키워드}} — **글에서 다루는 생물·장소·사물 하나당 1개씩** 반드시 삽입
   - 해당 대상을 설명하는 단락 바로 아래에 위치할 것
   - 키워드는 그 대상의 정확한 영어 이름/명칭 사용
-  - 예: 타디그레이드 단락 → {{WIKIMEDIA: tardigrade water bear microscope}}
-  - 예: 폼페이 벌레 단락 → {{WIKIMEDIA: Alvinella pompejana worm}}
-  - 예: 데이노코쿠스 단락 → {{WIKIMEDIA: Deinococcus radiodurans bacteria}}
-  - 나쁜 예: {{WIKIMEDIA: extreme life}} (너무 추상적, 관련 사진 안 나옴)
+  - 좋은 예: {{WIKIMEDIA: tardigrade water bear SEM microscope}}
+  - 좋은 예: {{WIKIMEDIA: Deinococcus radiodurans bacteria colony}}
+  - 좋은 예: {{WIKIMEDIA: Antarctic icefish Chionodraco}}
+  - 나쁜 예: {{WIKIMEDIA: extreme life}} (너무 추상적)
 
 글 규칙:
 - 3,000자 내외, 마크다운 형식, 첫 줄은 # 제목
 - 다루는 대상(생물·장소 등)마다 ## 섹션으로 나눌 것
 - 각 섹션: 특징 설명 (3~5문장) + 놀라운 사실 + {{WIKIMEDIA: ...}} 마커
 - 독자가 내 일상과 연결할 수 있는 비유 포함
-- 글 맨 끝에 {{TAGS: discovery, 태그2, 태그3}} 삽입"""
+- 글 맨 끝 형식:
+  {{THUMBNAIL: ...}}
+  {{TAGS: discovery, 태그2, 태그3}}"""
 
     system_text = persona["system"] + discovery_rules
     user_content = f"주제: **{topic}**\n\n위 주제로 디스커버리 채널 포스트를 작성하세요."
@@ -1038,37 +1049,31 @@ async def generate_discovery_post(topic: str | None = None) -> dict:
     tags = json.dumps(tags_list, ensure_ascii=False)
     content = _TAGS_RE.sub("", raw).strip()
 
-    # 6. Wikimedia 키워드 추출
-    thumb_m = _WIKIMEDIA_THUMB_RE.search(content)
-    thumb_keyword = thumb_m.group(1).strip() if thumb_m else topic
-    content = _WIKIMEDIA_THUMB_RE.sub("", content).strip()
+    # 6. 썸네일 AI 생성 (기존 방식)
+    thumb_m = _THUMBNAIL_RE.search(content)
+    scene = thumb_m.group(1).strip() if thumb_m else f"{persona['role']} discovering {topic}"
+    content = _THUMBNAIL_RE.sub("", content).strip()
+    content = _WIKIMEDIA_THUMB_RE.sub("", content).strip()  # 혹시 남아있으면 제거
+
+    # 7. Wikimedia 인라인 키워드 추출 + 병렬 검색
     inline_keywords = _WIKIMEDIA_RE.findall(content)
 
-    # 7. Wikimedia API 병렬 호출
-    all_keywords = [thumb_keyword] + inline_keywords
-    photos = await asyncio.gather(*[_search_wikimedia(kw) for kw in all_keywords])
+    thumbnail_url, photos = await asyncio.gather(
+        _generate_thumbnail(agent_id, scene),
+        asyncio.gather(*[_search_wikimedia(kw) for kw in inline_keywords]),
+    )
 
-    # 8. 썸네일 (Wikimedia 우선 → FAL fallback)
-    thumb_photo = photos[0] if photos else None
-    if thumb_photo:
-        thumbnail_url = await _download_image(thumb_photo["url"])
-    else:
-        thumbnail_url = await _generate_thumbnail(agent_id, f"documentary nature photograph, {topic}")
-
-    # 9. 인라인 이미지 교체
+    # 8. 인라인 이미지 교체 (실패 시 마커 제거만, AI fallback 없음)
     attribution_items: list[dict] = []
-    if thumb_photo:
-        attribution_items.append(thumb_photo)
 
-    for i, kw in enumerate(inline_keywords):
-        photo = photos[i + 1] if (i + 1) < len(photos) else None
+    for kw, photo in zip(inline_keywords, photos):
         marker = f"{{{{WIKIMEDIA: {kw}}}}}"
         if photo:
             content = content.replace(marker, f"\n![{photo['title']}]({photo['url']})\n", 1)
             attribution_items.append(photo)
         else:
-            ai_url = await _generate_content_image(f"nature documentary photograph, {kw}, high quality")
-            content = content.replace(marker, f"\n![이미지]({ai_url})\n" if ai_url else "", 1)
+            logger.warning(f"Wikimedia 사진 없음, 마커 제거: {kw}")
+            content = content.replace(marker, "", 1)
 
     # 10. Attribution 섹션
     if attribution_items:
