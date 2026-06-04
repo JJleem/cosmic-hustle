@@ -445,9 +445,29 @@ async def _fetch_trending(agent_id: str) -> str:
 
 # ── 이미지 생성 ────────────────────────────────────────────────────────────────
 
-_IMAGE_RE     = re.compile(r"\{\{IMAGE:\s*([^}]+?)\s*\}\}")
-_THUMBNAIL_RE = re.compile(r"\{\{THUMBNAIL:\s*([^}]+?)\s*\}\}")
-_TAGS_RE      = re.compile(r"\{\{TAGS:\s*([^}]+?)\s*\}\}")
+_IMAGE_RE           = re.compile(r"\{\{IMAGE:\s*([^}]+?)\s*\}\}")
+_THUMBNAIL_RE       = re.compile(r"\{\{THUMBNAIL:\s*([^}]+?)\s*\}\}")
+_TAGS_RE            = re.compile(r"\{\{TAGS:\s*([^}]+?)\s*\}\}")
+_WIKIMEDIA_THUMB_RE = re.compile(r"\{\{WIKIMEDIA_THUMB:\s*([^}]+?)\s*\}\}")
+_WIKIMEDIA_RE       = re.compile(r"\{\{WIKIMEDIA:\s*([^}]+?)\s*\}\}")
+
+# ── 디스커버리 채널 설정 ──────────────────────────────────────────────────────────
+
+DISCOVERY_AGENT_MAP: dict[str, str] = {
+    "animal":  "pocke",
+    "place":   "over",
+    "science": "ka",
+    "trend":   "ping",
+    "history": "wiki",
+}
+
+DISCOVERY_RSS_QUERIES: dict[str, str] = {
+    "animal":  "희귀 동물 발견 야생동물 생태 멸종위기",
+    "place":   "신비 장소 자연경관 지형 세계 여행",
+    "science": "과학 발견 우주 신종 연구 자연현상",
+    "trend":   "자연 신기한 발견 환경 생태",
+    "history": "역사 발견 고대 유물 인물 탐험",
+}
 
 
 _STATIC_DIR = Path(__file__).parent / "static" / "blog"
@@ -855,6 +875,228 @@ async def generate_blog_post(
         "published":     True,
         "trending_topic": theme,
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
+    }
+
+
+# ── 디스커버리 채널 ────────────────────────────────────────────────────────────────
+
+
+async def _search_wikimedia(keyword: str) -> dict | None:
+    """Wikimedia Commons 이미지 검색. 반환: {url, title, author, license, page_url}"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            search_resp = await client.get(
+                "https://commons.wikimedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": keyword,
+                    "srnamespace": "6",
+                    "srlimit": "5",
+                    "format": "json",
+                },
+                headers={"User-Agent": "CosmicHustle/1.0 (leemjaejun@gmail.com)"},
+            )
+            hits = search_resp.json().get("query", {}).get("search", [])
+            if not hits:
+                return None
+
+            filename = hits[0]["title"]
+            info_resp = await client.get(
+                "https://commons.wikimedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "titles": filename,
+                    "prop": "imageinfo",
+                    "iiprop": "url|extmetadata",
+                    "iiurlwidth": "1200",
+                    "format": "json",
+                },
+                headers={"User-Agent": "CosmicHustle/1.0 (leemjaejun@gmail.com)"},
+            )
+            pages = info_resp.json().get("query", {}).get("pages", {})
+            imageinfo = next(iter(pages.values()), {}).get("imageinfo", [{}])[0]
+
+            url = imageinfo.get("thumburl") or imageinfo.get("url")
+            if not url:
+                return None
+
+            meta = imageinfo.get("extmetadata", {})
+            author = re.sub(r"<[^>]+>", "", meta.get("Artist", {}).get("value", "Unknown")).strip() or "Unknown"
+            license_name = meta.get("LicenseShortName", {}).get("value", "Unknown")
+            page_url = f"https://commons.wikimedia.org/wiki/{filename.replace(' ', '_')}"
+
+            return {"url": url, "title": filename.replace("File:", ""), "author": author, "license": license_name, "page_url": page_url}
+    except Exception as e:
+        logger.warning(f"Wikimedia 검색 실패 ({keyword}): {e}")
+        return None
+
+
+async def _classify_discovery_topic(topic: str) -> tuple[str, str]:
+    """토픽 → (category, agent_id). 카테고리: animal/place/science/trend/history"""
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    msg = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=20,
+        messages=[{"role": "user", "content": (
+            f"주제: {topic}\n\n"
+            "animal / place / science / trend / history 중 하나만 출력 (영어 단어만):\n"
+            "- animal: 동물, 생물, 생태, 종\n"
+            "- place: 지역, 장소, 지형, 섬, 국가\n"
+            "- science: 과학, 우주, 물리, 화학, 기술\n"
+            "- trend: 현상, 트렌드, 문화, 유행\n"
+            "- history: 역사, 인물, 유적, 고대"
+        )}],
+    )
+    category = msg.content[0].text.strip().lower()
+    if category not in DISCOVERY_AGENT_MAP:
+        category = "animal"
+    return category, DISCOVERY_AGENT_MAP[category]
+
+
+async def generate_discovery_post(topic: str | None = None) -> dict:
+    """디스커버리 채널 포스트 생성. topic 없으면 RSS에서 자동 선정."""
+    today = datetime.now(KST).date()
+
+    # 1. 토픽 없으면 RSS에서 자동 선정
+    if not topic:
+        import feedparser
+        from urllib.parse import quote as _quote
+        query = "희귀 동물 발견 자연 과학 신기한"
+        url = f"https://news.google.com/rss/search?q={_quote(query)}&hl=ko&gl=KR&ceid=KR:ko"
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as c:
+                resp = await c.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            feed = feedparser.parse(resp.text)
+            headlines = "\n".join(f"- {e.get('title', '')}" for e in feed.entries[:6])
+        except Exception:
+            headlines = ""
+
+        tmp_client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        pick = await tmp_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=60,
+            messages=[{"role": "user", "content": (
+                f"뉴스 헤드라인:\n{headlines}\n\n"
+                "자연/동물/과학/장소/역사 중 블로그 포스트로 흥미로운 주제 하나를 한국어로 짧게 출력 (예: '바다거북의 귀소 본능'). 주제만."
+            )}],
+        )
+        topic = pick.content[0].text.strip()
+
+    # 2. 토픽 분류 → 에이전트
+    category, agent_id = await _classify_discovery_topic(topic)
+    persona = AGENT_PERSONAS[agent_id]
+
+    # 3. 카테고리별 뉴스 컨텍스트 (선택적)
+    trending_context = await _fetch_trending(agent_id) if agent_id in AGENT_SEARCH_QUERIES else ""
+
+    # 4. 글 생성
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    discovery_rules = """
+
+【디스커버리 채널 규칙 — 반드시 준수】
+이 포스트에는 Wikimedia Commons 실제 사진이 삽입됩니다.
+
+이미지 마커 규칙:
+- {{IMAGE: ...}}, {{THUMBNAIL: ...}} 는 절대 쓰지 마세요
+- 썸네일: {{WIKIMEDIA_THUMB: 영어 키워드}} — 반드시 1개, 글 제목 바로 아래에 위치
+- 본문 인라인: {{WIKIMEDIA: 영어 키워드}} — 최소 2개, 섹션 흐름에 맞는 위치에 삽입
+- 키워드는 Wikimedia Commons에서 검색 가능한 구체적 영어 표현
+  좋은 예: "green sea turtle swimming coral reef"  "Jeju Island Hallasan volcano"
+  나쁜 예: "nature" "turtle" (너무 추상적)
+
+글 규칙:
+- 2,000자 내외, 마크다운 형식, 첫 줄은 # 제목
+- ## 소제목으로 3~5개 섹션
+- 독자가 몰랐던 놀라운 사실 최소 1개 포함
+- 글 맨 끝에 {{TAGS: discovery, 태그2, 태그3}} 삽입"""
+
+    system_text = persona["system"] + discovery_rules
+    user_content = f"주제: **{topic}**\n\n위 주제로 디스커버리 채널 포스트를 작성하세요."
+    if trending_context:
+        user_content += f"\n\n【참고 뉴스】\n{trending_context}"
+
+    message = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=6000,
+        system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user_content}],
+    )
+    raw = message.content[0].text.strip()
+
+    # 5. 태그 추출
+    tags_m = _TAGS_RE.search(raw)
+    tags_list = [t.strip() for t in tags_m.group(1).split(",") if t.strip()] if tags_m else []
+    if "discovery" not in tags_list:
+        tags_list.insert(0, "discovery")
+    tags = json.dumps(tags_list, ensure_ascii=False)
+    content = _TAGS_RE.sub("", raw).strip()
+
+    # 6. Wikimedia 키워드 추출
+    thumb_m = _WIKIMEDIA_THUMB_RE.search(content)
+    thumb_keyword = thumb_m.group(1).strip() if thumb_m else topic
+    content = _WIKIMEDIA_THUMB_RE.sub("", content).strip()
+    inline_keywords = _WIKIMEDIA_RE.findall(content)
+
+    # 7. Wikimedia API 병렬 호출
+    all_keywords = [thumb_keyword] + inline_keywords
+    photos = await asyncio.gather(*[_search_wikimedia(kw) for kw in all_keywords])
+
+    # 8. 썸네일 (Wikimedia 우선 → FAL fallback)
+    thumb_photo = photos[0] if photos else None
+    if thumb_photo:
+        thumbnail_url = await _download_image(thumb_photo["url"])
+    else:
+        thumbnail_url = await _generate_thumbnail(agent_id, f"documentary nature photograph, {topic}")
+
+    # 9. 인라인 이미지 교체
+    attribution_items: list[dict] = []
+    if thumb_photo:
+        attribution_items.append(thumb_photo)
+
+    for i, kw in enumerate(inline_keywords):
+        photo = photos[i + 1] if (i + 1) < len(photos) else None
+        marker = f"{{{{WIKIMEDIA: {kw}}}}}"
+        if photo:
+            content = content.replace(marker, f"\n![{photo['title']}]({photo['url']})\n", 1)
+            attribution_items.append(photo)
+        else:
+            ai_url = await _generate_content_image(f"nature documentary photograph, {kw}, high quality")
+            content = content.replace(marker, f"\n![이미지]({ai_url})\n" if ai_url else "", 1)
+
+    # 10. Attribution 섹션
+    if attribution_items:
+        seen: set[str] = set()
+        lines = ["---", "**📷 이미지 출처**"]
+        for p in attribution_items:
+            if p["page_url"] not in seen:
+                seen.add(p["page_url"])
+                lines.append(f"- [{p['title']}]({p['page_url']}) — {p['author']} ({p['license']}) / Wikimedia Commons")
+        content = content.rstrip() + "\n\n" + "\n".join(lines)
+
+    # 11. 제목 추출
+    content_lines = content.split("\n")
+    if content_lines and content_lines[0].startswith("#"):
+        raw_title = content_lines[0].lstrip("#").strip()
+        title = re.sub(r"\*+([^*]+)\*+", r"\1", raw_title)
+        content = "\n".join(content_lines[1:]).strip()
+    else:
+        title = topic
+
+    # slug 중복 방지용 suffix는 라우터에서 처리
+    slug_base = f"discovery-{today.isoformat()}"
+
+    return {
+        "id":             str(uuid.uuid4()),
+        "agent_id":       agent_id,
+        "title":          title,
+        "slug":           slug_base,
+        "content":        content,
+        "thumbnail_url":  thumbnail_url,
+        "tags":           tags,
+        "published":      True,
+        "trending_topic": f"Discovery: {topic}",
+        "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
     }
 
 

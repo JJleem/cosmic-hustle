@@ -62,6 +62,7 @@ from blog_generator import (
     generate_scene_prompt_from_content,
     generate_intro_post, generate_intro_comments,
     generate_debate_post, generate_debate_comments,
+    generate_discovery_post,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -335,6 +336,32 @@ async def trigger_generate_debate(
     db.commit()
     db.refresh(post)
     return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url}
+
+
+@router.post("/generate-discovery")
+async def trigger_generate_discovery(topic: str | None = None, db: Session = Depends(get_db)):
+    """디스커버리 채널 포스트 생성. topic 없으면 자연/과학 RSS에서 자동 선정."""
+    data = await generate_discovery_post(topic)
+
+    slug_base = data["slug"]
+    if db.query(BlogPost).filter(BlogPost.slug == slug_base).first():
+        n = 2
+        while db.query(BlogPost).filter(BlogPost.slug == f"{slug_base}-{n}").first():
+            n += 1
+        data["slug"] = f"{slug_base}-{n}"
+
+    post = BlogPost(**data)
+    db.add(post)
+    db.flush()
+
+    summary = data["content"][:300]
+    comments = await generate_comments(post.id, post.agent_id, post.title, summary)
+    for c in comments:
+        db.add(BlogComment(**c))
+
+    db.commit()
+    db.refresh(post)
+    return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url, "agent_id": post.agent_id}
 
 
 @router.patch("/posts/{post_id}")
