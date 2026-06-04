@@ -1,5 +1,6 @@
 """월간 GA 분석 파이프라인 — 카 분석 → 버즈 개선안 → 메모리 업데이트 → 이메일."""
 import html
+import json
 import os
 import smtplib
 import logging
@@ -104,43 +105,132 @@ async def _suggest_with_buzz(ka_analysis: str, overview: dict, period: str) -> s
     return msg.content[0].text.strip()
 
 
-async def _update_agent_memories(ka_analysis: str, buzz_suggestions: str, period: str):
-    """글 쓰는 에이전트 4명의 메모리에 GA 인사이트 섹션 추가."""
+def _delta_str(curr: dict, prev: dict) -> str:
+    """이번 달 vs 이전 달 수치 변화 요약 문자열 생성."""
+    if not prev:
+        return "  (이전 달 데이터 없음 — 첫 번째 기록)"
+    lines = []
+    for key, label, unit in [
+        ("sessions",       "세션",       "%"),
+        ("total_users",    "사용자",     "%"),
+        ("page_views",     "페이지뷰",   "%"),
+        ("bounce_rate",    "이탈률",     "pp"),
+        ("avg_session_sec","체류시간",   "초"),
+    ]:
+        c, p = curr.get(key), prev.get(key)
+        if c is None or p is None or p == 0:
+            continue
+        if unit == "%":
+            diff = (c - p) / p * 100
+            lines.append(f"  {label}: {p} → {c} ({diff:+.1f}%)")
+        elif unit == "pp":
+            diff = c - p
+            lines.append(f"  {label}: {p}% → {c}% ({diff:+.1f}pp)")
+        else:
+            diff = c - p
+            lines.append(f"  {label}: {p}{unit} → {c}{unit} ({diff:+.1f}{unit})")
+    return "\n".join(lines) if lines else "  변화 수치 없음"
+
+
+async def _update_agent_memories(
+    ka_analysis: str,
+    buzz_suggestions: str,
+    period: str,
+    current_overview: dict,
+):
+    """글 쓰는 에이전트 4명의 메모리 업데이트 + 히스토리/스냅샷 저장."""
     from db.connection import SessionLocal
-    from db.models import AgentMemory
+    from db.models import AgentMemory, AgentMemoryHistory, GaMonthlySnapshot
     from datetime import datetime
 
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     db = SessionLocal()
     try:
+        # 이전 달 GA 스냅샷 조회 (가장 최근 period)
+        prev_snapshot = (
+            db.query(GaMonthlySnapshot)
+            .filter(GaMonthlySnapshot.period != period)
+            .order_by(GaMonthlySnapshot.created_at.desc())
+            .first()
+        )
+        prev_overview = json.loads(prev_snapshot.overview_json) if prev_snapshot else {}
+        prev_period = prev_snapshot.period if prev_snapshot else None
+        delta = _delta_str(current_overview, prev_overview)
+
+        # 이번 달 GA 스냅샷 저장 (upsert)
+        snap = db.query(GaMonthlySnapshot).filter(GaMonthlySnapshot.period == period).first()
+        if snap:
+            snap.overview_json = json.dumps(current_overview, ensure_ascii=False)
+            snap.ka_analysis = ka_analysis
+            snap.buzz_suggestions = buzz_suggestions
+        else:
+            db.add(GaMonthlySnapshot(
+                period=period,
+                overview_json=json.dumps(current_overview, ensure_ascii=False),
+                ka_analysis=ka_analysis,
+                buzz_suggestions=buzz_suggestions,
+            ))
+        db.flush()
+
         for agent_id in _WRITING_AGENTS:
             mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == agent_id).first()
-            current = mem_row.memory if mem_row else None
+            current_memory = mem_row.memory if mem_row else None
+
+            # 현재 메모리를 히스토리에 스냅샷으로 저장
+            db.add(AgentMemoryHistory(
+                agent_id=agent_id,
+                period=period,
+                memory_snapshot=current_memory,
+            ))
+
+            # 이전 달 메모리 히스토리 조회
+            prev_memory_row = (
+                db.query(AgentMemoryHistory)
+                .filter(
+                    AgentMemoryHistory.agent_id == agent_id,
+                    AgentMemoryHistory.period != period,
+                )
+                .order_by(AgentMemoryHistory.created_at.desc())
+                .first()
+            )
+            prev_memory = prev_memory_row.memory_snapshot if prev_memory_row else None
+
+            prev_context = ""
+            if prev_period:
+                prev_context = f"""
+【이전 달({prev_period}) 내 메모리】
+{prev_memory or "기록 없음"}
+"""
 
             prompt = f"""당신은 {agent_id} 에이전트의 학습 메모리 관리자입니다.
 
-【GA 월간 분석 — {period}】
+【수치 변화 — {prev_period or "기준 없음"} → {period}】
+{delta}
+
+【이번 달 GA 분석 — {period}】
 {ka_analysis}
 
 【버즈의 개선 제안】
 {buzz_suggestions}
-
-【현재 메모리】
-{current or "없음 (첫 번째 기록)"}
+{prev_context}
+【현재 메모리 (업데이트 대상)】
+{current_memory or "없음 (첫 번째 기록)"}
 
 지시사항:
-1. 위 GA 인사이트에서 {agent_id} 에이전트의 글쓰기에 직접 적용 가능한 패턴만 추출하세요
-2. 기존 메모리와 합치되, "[GA {period}]" 섹션으로 구분해 추가하세요
-3. 전체 1000자 이하 유지
-4. 한국어, 항목별 줄 구분
-5. 메모리 내용만 출력 (설명 없이)"""
+1. {agent_id} 에이전트 글쓰기에 직접 적용 가능한 패턴만 추출
+2. "[성장 분석 {period}]" 섹션: 수치 변화 기반으로 "지난달 대비 무엇이 나아졌고 무엇이 나빠졌는지" 2~3줄로 작성
+3. "[GA {period}]" 섹션: 이번 달 인사이트 및 다음 달 적용 전략
+4. 기존 메모리 내용은 유지하되, 오래된 GA 섹션(2달 이상)은 핵심만 1줄로 압축
+5. 전체 1200자 이하 유지
+6. 한국어, 항목별 줄 구분
+7. 메모리 내용만 출력 (설명 없이)"""
 
             msg = await client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=600,
+                max_tokens=700,
                 messages=[{"role": "user", "content": prompt}],
             )
-            new_memory = msg.content[0].text.strip()[:1000]
+            new_memory = msg.content[0].text.strip()[:1200]
 
             if mem_row:
                 mem_row.memory = new_memory
@@ -263,7 +353,7 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
     ka_analysis = await _analyze_with_ka(overview, problem_pages, channels, devices, period)
     buzz_suggestions = await _suggest_with_buzz(ka_analysis, overview, period)
 
-    await _update_agent_memories(ka_analysis, buzz_suggestions, period)
+    await _update_agent_memories(ka_analysis, buzz_suggestions, period, overview)
 
     try:
         _send_email(period, overview, problem_pages, ka_analysis, buzz_suggestions)

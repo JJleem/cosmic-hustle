@@ -169,6 +169,26 @@ class AgentMemory(Base):
     updated_at = Column(DateTime, server_default=func.now())
 
 
+class GaMonthlySnapshot(Base):
+    __tablename__ = "ga_monthly_snapshot"
+
+    period = Column(String(30), primary_key=True)
+    overview_json = Column(Text, nullable=False)
+    ka_analysis = Column(Text, nullable=True)
+    buzz_suggestions = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class AgentMemoryHistory(Base):
+    __tablename__ = "agent_memory_history"
+
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    agent_id = Column(String, nullable=False)
+    period = Column(String(30), nullable=False)
+    memory_snapshot = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class DebateVote(Base):
     __tablename__ = "debate_votes"
 
