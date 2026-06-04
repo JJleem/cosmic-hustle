@@ -76,12 +76,12 @@ DAY_SCHEDULE = {
 # 에이전트별 Tavily 검색 쿼리 (최신 트렌드 수집용)
 AGENT_SEARCH_QUERIES: dict[str, str] = {
     "buzz":  "마케팅 바이럴 캠페인 소셜미디어 트렌드",
-    "pocke": "AI 인공지능 테크 스타트업 최신 뉴스",
+    "pocke": "AI 앱 서비스 새기능 업데이트",
     "over":  "요즘 사람들 관심사 일상",
-    "ka":    "데이터 분석 비즈니스 인사이트 트렌드",
+    "ka":    "소비자 조사 통계 결과 트렌드",
     "pixel": "디자인 UX 브랜딩 비주얼 트렌드",
-    "ping":  "신박한 아이디어 혁신 스타트업 새로운 서비스",
-    "wiki":  "요즘 뜨는 이슈 키워드",
+    "ping":  "신기한 과학 발견 연구 결과",  # WebSearch 폴백용 (미사용)
+    "wiki":  "요즘 뜨는 이슈 키워드",       # WebSearch 폴백용 (미사용)
     # 게스트 에이전트
     "plan":  "프로젝트 관리 생산성 팁 워크플로우",
     "run":   "개발 오픈소스 프로그래밍 트렌드",
@@ -418,13 +418,51 @@ _COMMENT_TOOL = {
 
 # ── 트렌드 수집 ────────────────────────────────────────────────────────────────
 
+_WEBSEARCH_AGENTS = {"ping"}
+
+_WEBSEARCH_PROMPTS: dict[str, str] = {
+    "ping": (
+        "최근 한 달 내 발표된 신기하고 놀라운 과학 발견이나 연구 결과를 찾아줘. "
+        "'어, 이게 사실이야?' 하고 놀랄 만한 것들 위주로. 정치·연예인 제외. "
+        "반드시 아래 형식으로 5개만 출력:\n"
+        "- [내용 한 줄 요약] (출처: 매체명, 날짜)"
+    ),
+    "wiki": (
+        "최근 한 달 내 한국 뉴스·SNS에서 사람들이 '이게 뭔 뜻이야?' 하고 검색하게 만든 "
+        "단어나 용어를 찾아줘. 경제·사회·기술·문화 분야 신조어, 새로운 개념어, "
+        "갑자기 화제된 외래어 등. 정치인·연예인 이름 제외. "
+        "반드시 아래 형식으로 5개만 출력:\n"
+        "- [키워드]: [왜 지금 화제인지 한 줄] (출처: 매체명)"
+    ),
+}
+
+
 async def _fetch_trending(agent_id: str, query: str | None = None) -> str:
-    """Google 뉴스 RSS로 에이전트 주제에 맞는 최신 뉴스 검색 (API 키 불필요)."""
+    """에이전트별 트렌드 수집. ping·wiki는 WebSearch, 나머지는 Google 뉴스 RSS."""
+
+    # WebSearch 에이전트
+    if agent_id in _WEBSEARCH_AGENTS:
+        try:
+            import anthropic as _anthropic
+            client = _anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+            resp = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=600,
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}],
+                messages=[{"role": "user", "content": _WEBSEARCH_PROMPTS[agent_id]}],
+            )
+            texts = [b.text for b in resp.content if hasattr(b, "text")]
+            return "\n".join(texts).strip()
+        except Exception as e:
+            logger.warning(f"WebSearch 트렌드 수집 실패 ({agent_id}): {e} — RSS 폴백")
+            # 실패 시 RSS로 폴백
+
+    # RSS 에이전트 (+ WebSearch 폴백)
     import feedparser
     from urllib.parse import quote
 
-    query = query or AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
-    url   = f"https://news.google.com/rss/search?q={quote(query)}&hl=ko&gl=KR&ceid=KR:ko"
+    q   = query or AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
+    url = f"https://news.google.com/rss/search?q={quote(q)}&hl=ko&gl=KR&ceid=KR:ko"
 
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
@@ -764,6 +802,7 @@ async def generate_blog_post(
 - 【비개발자 원칙】 독자는 해당 분야를 전혀 모른다고 가정할 것. 전문용어가 나오면 반드시 바로 그 자리에서 한 문장으로 풀어 설명할 것. 설명 없는 전문용어는 독자를 잃는 것과 같음. 글의 마지막 착지점은 항상 "그래서 내 일상에서 이게 뭔 의미야?"여야 함
 - 【말버릇 규칙】 각 에이전트의 시그니처 문장은 본문 대화 중 자연스럽게 사용할 것. 소제목(##)으로 사용하는 것은 절대 금지
 - 【수치 규칙】 구체적인 수치를 쓸 때는 트렌드 참고자료에 있는 것만 인용할 것. 참고자료에 없는 수치는 발명하지 말 것 — "대략", "~정도" 표현으로 대체 가능. 수치를 쓸 때는 출처 맥락(기관명·보고서명)을 함께 명시할 것
+- 【출처 규칙】 트렌드 참고자료에 "(출처: 매체명)" 형식으로 출처가 명시된 내용만 사실로 사용할 것. 출처가 없는 내용은 "~라고 알려져 있다", "~는 주장이 있다" 수준으로만 언급할 것
 - 【제목 규칙】 독자가 "어? 이거 뭔데?" 또는 "나 이거 해당되는데?" 하고 클릭하고 싶은 제목. 숫자·반전·질문을 활용할 것. 단, 낚시성·과장은 금지 — 본문이 제목을 배신하지 않을 것
 - ## 소제목으로 글을 3~5개 섹션으로 나눌 것
 - 필요하면 표(markdown table), 강조(**굵게**)도 활용
