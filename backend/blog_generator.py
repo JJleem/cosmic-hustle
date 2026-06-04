@@ -1001,16 +1001,20 @@ async def generate_discovery_post(topic: str | None = None) -> dict:
 
 이미지 마커 규칙:
 - {{IMAGE: ...}}, {{THUMBNAIL: ...}} 는 절대 쓰지 마세요
-- 썸네일: {{WIKIMEDIA_THUMB: 영어 키워드}} — 반드시 1개, 글 제목 바로 아래에 위치
-- 본문 인라인: {{WIKIMEDIA: 영어 키워드}} — 최소 2개, 섹션 흐름에 맞는 위치에 삽입
-- 키워드는 Wikimedia Commons에서 검색 가능한 구체적 영어 표현
-  좋은 예: "green sea turtle swimming coral reef"  "Jeju Island Hallasan volcano"
-  나쁜 예: "nature" "turtle" (너무 추상적)
+- 썸네일: {{WIKIMEDIA_THUMB: 영어 키워드}} — 반드시 1개, 글 제목 바로 아래 첫 줄
+- 본문 인라인: {{WIKIMEDIA: 영어 키워드}} — **글에서 다루는 생물·장소·사물 하나당 1개씩** 반드시 삽입
+  - 해당 대상을 설명하는 단락 바로 아래에 위치할 것
+  - 키워드는 그 대상의 정확한 영어 이름/명칭 사용
+  - 예: 타디그레이드 단락 → {{WIKIMEDIA: tardigrade water bear microscope}}
+  - 예: 폼페이 벌레 단락 → {{WIKIMEDIA: Alvinella pompejana worm}}
+  - 예: 데이노코쿠스 단락 → {{WIKIMEDIA: Deinococcus radiodurans bacteria}}
+  - 나쁜 예: {{WIKIMEDIA: extreme life}} (너무 추상적, 관련 사진 안 나옴)
 
 글 규칙:
-- 2,000자 내외, 마크다운 형식, 첫 줄은 # 제목
-- ## 소제목으로 3~5개 섹션
-- 독자가 몰랐던 놀라운 사실 최소 1개 포함
+- 3,000자 내외, 마크다운 형식, 첫 줄은 # 제목
+- 다루는 대상(생물·장소 등)마다 ## 섹션으로 나눌 것
+- 각 섹션: 특징 설명 (3~5문장) + 놀라운 사실 + {{WIKIMEDIA: ...}} 마커
+- 독자가 내 일상과 연결할 수 있는 비유 포함
 - 글 맨 끝에 {{TAGS: discovery, 태그2, 태그3}} 삽입"""
 
     system_text = persona["system"] + discovery_rules
