@@ -259,6 +259,24 @@ async def _user_reply_job():
         db.close()
 
 
+async def _ga_monthly_job():
+    """매월 1일 06:00 KST — GA 데이터 분석 + 메모리 업데이트 + 이메일."""
+    from ga_monthly import run_monthly_ga_report
+    result = await run_monthly_ga_report()
+    if result.get("ok"):
+        logger.info("GA 월간 분석 완료")
+    else:
+        logger.error(f"GA 월간 분석 실패: {result.get('error')}")
+
+
+@app.post("/api/ga/run-monthly")
+async def run_ga_monthly_now(start_date: str | None = None, end_date: str | None = None):
+    """수동 테스트용 — start_date/end_date 미지정 시 전달 기준."""
+    from ga_monthly import run_monthly_ga_report
+    result = await run_monthly_ga_report(start_date=start_date, end_date=end_date)
+    return result
+
+
 @app.on_event("startup")
 async def startup():
     scheduler.add_job(
@@ -279,8 +297,14 @@ async def startup():
         id="user_reply",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _ga_monthly_job,
+        CronTrigger(day=1, hour=6, minute=0, timezone="Asia/Seoul"),
+        id="ga_monthly",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글")
+    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 매월 1일 06:00 GA 분석")
 
 
 @app.on_event("shutdown")

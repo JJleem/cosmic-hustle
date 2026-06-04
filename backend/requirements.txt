@@ -21,3 +21,6 @@ fal-client
 apscheduler
 feedparser
 slowapi
+google-analytics-data
+google-auth
+google-auth-oauthlib
