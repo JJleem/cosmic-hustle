@@ -69,30 +69,8 @@ async def _daily_blog_job():
     for attempt in range(1, 4):
         db = SessionLocal()
         try:
-            from datetime import timedelta
-            cutoff = datetime.now() - timedelta(days=90)
-            recent_rows = (
-                db.query(BlogPost.title, BlogPost.trending_topic, BlogPost.tags)
-                .filter(BlogPost.published_at >= cutoff)
-                .order_by(BlogPost.published_at.desc())
-                .limit(60).all()
-            )
-            recent_titles = [
-                f"{title} (핵심 아이디어: {topic})" if topic else title
-                for title, topic, _ in recent_rows
-            ]
-            # 태그 빈도 집계 → 자주 쓴 태그 목록
-            from collections import Counter
-            import json as _json
-            tag_counter: Counter = Counter()
-            for _, _, tags_raw in recent_rows:
-                if tags_raw:
-                    try:
-                        for t in _json.loads(tags_raw):
-                            tag_counter[t] += 1
-                    except Exception:
-                        pass
-            frequent_tags = [tag for tag, _ in tag_counter.most_common(10)]
+            from routers.blog import _recent_post_context
+            recent_titles, frequent_tags = _recent_post_context(db)
 
             # 오늘 담당 에이전트 메모리 조회
             from blog_generator import get_today_agent

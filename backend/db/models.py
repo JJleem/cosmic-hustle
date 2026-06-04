@@ -126,6 +126,14 @@ class BlogComment(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class BlogPostLike(Base):
+    __tablename__ = "blog_post_likes"
+
+    post_id = Column(String, ForeignKey("blog_posts.id"), primary_key=True, nullable=False)
+    ip_hash = Column(String(16), primary_key=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class BlogDailyVisit(Base):
     __tablename__ = "blog_daily_visits"
 

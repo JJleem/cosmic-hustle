@@ -1,13 +1,24 @@
 import hashlib
+import json
 import os
-from datetime import date
+import uuid
+from collections import Counter
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from db.connection import get_db
-from db.models import BlogPost, BlogComment, BlogDailyVisit, DebateVote
+from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote
+from blog_generator import (
+    generate_blog_post, generate_comments,
+    generate_scene_prompt_from_content,
+    generate_intro_post, generate_intro_comments,
+    generate_debate_post, generate_debate_comments,
+    generate_discovery_post,
+    AGENT_PERSONAS, DAY_SCHEDULE,
+)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -57,16 +68,15 @@ def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
             return name, idx % 50
 
     return "우주 방랑자", seed % 50
-from blog_generator import (
-    generate_blog_post, generate_comments,
-    generate_scene_prompt_from_content,
-    generate_intro_post, generate_intro_comments,
-    generate_debate_post, generate_debate_comments,
-    generate_discovery_post,
-    AGENT_PERSONAS, DAY_SCHEDULE,
-)
+
 
 router = APIRouter(prefix="/api/blog", tags=["blog"])
+
+
+def _get_ip_hash(request: Request, post_id: str) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    ip = forwarded.split(",")[0].strip() if forwarded else request.client.host
+    return hashlib.sha256(f"{ip}{post_id}{_ANON_SALT}".encode()).hexdigest()[:16]
 
 
 def _comment_counts(db: Session, post_ids: list) -> dict:
@@ -158,9 +168,13 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
     ).first() is not None
     result = _with_comment_count(post, count or 0, has_agent_reply)
 
+    ip_hash = _get_ip_hash(request, post.id)
+    result["liked"] = db.query(BlogPostLike).filter(
+        BlogPostLike.post_id == post.id,
+        BlogPostLike.ip_hash == ip_hash,
+    ).first() is not None
+
     if "+" in (post.agent_id or ""):
-        ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
-        ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
         result.update(_vote_result(db, post.id, my_voter_key=ip_hash))
 
     return result
@@ -206,7 +220,7 @@ def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(ge
         # 유저 우주 정체성 조회 (댓글과 동일 로직)
         anon_name, anon_avatar = _anon_identity(ip, post.id, db)
         db.add(DebateVote(
-            id=str(__import__("uuid").uuid4()),
+            id=str(uuid.uuid4()),
             post_id=post.id,
             voter_key=ip_hash,
             side=side,
@@ -218,13 +232,8 @@ def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(ge
     return _vote_result(db, post.id, my_voter_key=ip_hash)
 
 
-@router.post("/generate")
-async def trigger_generate(agent_id: str | None = None, force: bool = False, db: Session = Depends(get_db)):
-    """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
-    from datetime import datetime, timedelta
-    from collections import Counter
-    import json as _json
-    from sqlalchemy import desc
+def _recent_post_context(db: Session) -> tuple[list[str], list[str]]:
+    """최근 90일 포스트 제목 목록 + 자주 쓴 태그 top10 반환. main.py _daily_blog_job과 공유."""
     cutoff = datetime.now() - timedelta(days=90)
     recent_rows = (
         db.query(BlogPost.title, BlogPost.trending_topic, BlogPost.tags)
@@ -240,11 +249,17 @@ async def trigger_generate(agent_id: str | None = None, force: bool = False, db:
     for _, _, tags_raw in recent_rows:
         if tags_raw:
             try:
-                for t in _json.loads(tags_raw):
+                for t in json.loads(tags_raw):
                     tag_counter[t] += 1
             except Exception:
                 pass
-    frequent_tags = [tag for tag, _ in tag_counter.most_common(10)]
+    return recent_titles, [tag for tag, _ in tag_counter.most_common(10)]
+
+
+@router.post("/generate")
+async def trigger_generate(agent_id: str | None = None, force: bool = False, db: Session = Depends(get_db)):
+    """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
+    recent_titles, frequent_tags = _recent_post_context(db)
     data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
@@ -325,7 +340,7 @@ async def trigger_generate_debate(
         db.add(BlogComment(**c))
     for v in result["agent_votes"]:
         db.add(DebateVote(
-            id=str(__import__("uuid").uuid4()),
+            id=str(uuid.uuid4()),
             post_id=post.id,
             voter_key=v["voter_key"],
             side=v["side"],
@@ -373,7 +388,6 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
         if field in body:
             val = body[field]
             if field in ("published_at", "created_at") and isinstance(val, str):
-                from datetime import datetime
                 try:
                     val = datetime.fromisoformat(val)
                 except ValueError:
@@ -425,16 +439,20 @@ def increment_view(slug: str, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    post.view_count = (post.view_count or 0) + 1
+
+    db.query(BlogPost).filter(BlogPost.id == post.id).update(
+        {BlogPost.view_count: BlogPost.view_count + 1}
+    )
 
     today = str(date.today())
-    visit = db.query(BlogDailyVisit).filter(BlogDailyVisit.date == today).first()
-    if visit:
-        visit.count += 1
-    else:
+    updated = db.query(BlogDailyVisit).filter(BlogDailyVisit.date == today).update(
+        {BlogDailyVisit.count: BlogDailyVisit.count + 1}
+    )
+    if not updated:
         db.add(BlogDailyVisit(date=today, count=1))
 
     db.commit()
+    db.refresh(post)
     return {"view_count": post.view_count}
 
 
@@ -450,23 +468,51 @@ def get_stats(db: Session = Depends(get_db)):
 
 
 @router.post("/posts/{slug}/like")
-def like_post(slug: str, db: Session = Depends(get_db)):
+def like_post(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    post.likes = (post.likes or 0) + 1
+
+    ip_hash = _get_ip_hash(request, post.id)
+    already = db.query(BlogPostLike).filter(
+        BlogPostLike.post_id == post.id,
+        BlogPostLike.ip_hash == ip_hash,
+    ).first()
+    if already:
+        db.refresh(post)
+        return {"likes": post.likes, "liked": True}
+
+    db.add(BlogPostLike(post_id=post.id, ip_hash=ip_hash))
+    db.query(BlogPost).filter(BlogPost.id == post.id).update(
+        {BlogPost.likes: BlogPost.likes + 1}
+    )
     db.commit()
-    return {"likes": post.likes}
+    db.refresh(post)
+    return {"likes": post.likes, "liked": True}
 
 
 @router.post("/posts/{slug}/unlike")
-def unlike_post(slug: str, db: Session = Depends(get_db)):
+def unlike_post(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    post.likes = max(0, (post.likes or 0) - 1)
+
+    ip_hash = _get_ip_hash(request, post.id)
+    existing = db.query(BlogPostLike).filter(
+        BlogPostLike.post_id == post.id,
+        BlogPostLike.ip_hash == ip_hash,
+    ).first()
+    if not existing:
+        db.refresh(post)
+        return {"likes": post.likes, "liked": False}
+
+    db.delete(existing)
+    db.query(BlogPost).filter(BlogPost.id == post.id).update(
+        {BlogPost.likes: BlogPost.likes - 1}
+    )
     db.commit()
-    return {"likes": post.likes}
+    db.refresh(post)
+    return {"likes": post.likes, "liked": False}
 
 
 def _serialize_comment(c) -> dict:
@@ -533,7 +579,6 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
         user_name, anon_avatar = _anon_identity(ip, post.id, db)
         ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
 
-    import uuid
     comment = BlogComment(
         id=str(uuid.uuid4()),
         post_id=post.id,
