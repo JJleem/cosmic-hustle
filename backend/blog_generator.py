@@ -898,10 +898,12 @@ async def _search_wikimedia(keyword: str) -> dict | None:
                 headers={"User-Agent": "CosmicHustle/1.0 (leemjaejun@gmail.com)"},
             )
             hits = search_resp.json().get("query", {}).get("search", [])
-            if not hits:
+            # PDF/SVG 제외 — 실제 사진 파일만
+            image_hits = [h for h in hits if re.search(r"\.(jpe?g|png|webp|gif)$", h["title"], re.I)]
+            if not image_hits:
                 return None
 
-            filename = hits[0]["title"]
+            filename = image_hits[0]["title"]
             info_resp = await client.get(
                 "https://commons.wikimedia.org/w/api.php",
                 params={
