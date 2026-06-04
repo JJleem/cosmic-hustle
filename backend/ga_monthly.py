@@ -172,7 +172,7 @@ def _send_email(period: str, overview: dict, problem_pages: list, ka_analysis: s
         for p in problem_pages
     )
 
-    html = f"""
+    html_body = f"""
 <html><body style="font-family:sans-serif;max-width:680px;margin:0 auto;color:#1a1a1a">
 <h2 style="color:#6d28d9">🚀 Cosmic Hustle — GA 월간 리포트</h2>
 <p style="color:#666">{period}</p>
@@ -224,7 +224,7 @@ Cosmic Hustle 자동 발송</p>
     msg["Subject"] = f"[Cosmic Hustle] GA 월간 리포트 — {period}"
     msg["From"] = smtp_user
     msg["To"] = to_email
-    msg.attach(MIMEText(html, "html"))
+    msg.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
         server.starttls()
