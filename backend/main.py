@@ -78,7 +78,17 @@ async def _daily_blog_job():
             mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == today_agent_id).first()
             agent_memory = mem_row.memory if mem_row else None
 
-            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory)
+            last_agent_title = None
+            if today_agent_id == "pixel":
+                last_pixel = (
+                    db.query(BlogPost.title)
+                    .filter(BlogPost.agent_id == "pixel")
+                    .order_by(BlogPost.published_at.desc())
+                    .first()
+                )
+                last_agent_title = last_pixel[0] if last_pixel else None
+
+            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")

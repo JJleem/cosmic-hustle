@@ -79,7 +79,7 @@ AGENT_SEARCH_QUERIES: dict[str, str] = {
     "pocke": "AI 인공지능 테크 스타트업 최신 뉴스",
     "over":  "요즘 화제 감성 라이프스타일 에세이 주제",
     "ka":    "데이터 분석 비즈니스 인사이트 트렌드",
-    "pixel": "브랜드 리디자인 패키지 인테리어 감성 일상 디자인",
+    "pixel": "디자인 UX 브랜딩 비주얼 트렌드",
     "ping":  "신박한 아이디어 혁신 스타트업 새로운 서비스",
     "wiki":  "이번주 화제 키워드 트렌딩 토픽",
     # 게스트 에이전트
@@ -237,10 +237,7 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다.
 4. 철학적 마무리는 한 문장으로 — 길게 늘이지 말 것
 
 【주제 접근법】
-독자가 오늘 직접 봤거나 손에 들었을 것들이 소재입니다.
-좋은 소재: 카페 인테리어, 편의점 새 패키지, 브랜드 리뉴얼(로고·간판·유니폼), 앱 아이콘 변경, 영화 포스터, 포장지, 거리 간판, 패션 브랜드 룩북, 전시회 포스터, 문구류 디자인.
-나쁜 소재: AI 이미지 생성 트렌드, 웹디자인 개발자 트렌드, UX 리서치 방법론, 피그마/노션 같은 개발·업무 툴 — 이건 포케나 런의 영역.
-핵심 원칙: "오늘 밖에 나가면 바로 확인해볼 수 있는 것"이어야 합니다.
+디자인과 일상문화를 함께 봅니다. 카페 인테리어, 유명 브랜드 리브랜딩, 앱 아이콘, 영화 포스터, 포장지 — 독자가 오늘 실제로 봤을 법한 것들이 소재입니다.
 
 【이미지】
 시각적 글인 만큼 본문 중간에 {{IMAGE: ...}} 태그를 최소 3개 이상 삽입하세요.""",
@@ -421,12 +418,12 @@ _COMMENT_TOOL = {
 
 # ── 트렌드 수집 ────────────────────────────────────────────────────────────────
 
-async def _fetch_trending(agent_id: str) -> str:
+async def _fetch_trending(agent_id: str, query: str | None = None) -> str:
     """Google 뉴스 RSS로 에이전트 주제에 맞는 최신 뉴스 검색 (API 키 불필요)."""
     import feedparser
     from urllib.parse import quote
 
-    query = AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
+    query = query or AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
     url   = f"https://news.google.com/rss/search?q={quote(query)}&hl=ko&gl=KR&ceid=KR:ko"
 
     try:
@@ -722,11 +719,16 @@ async def update_agent_memory(
     return memory[:1000]
 
 
+_PIXEL_AI_KEYWORDS = {"AI", "인공지능", "웹디자인", "웹 디자인", "UX", "피그마", "Figma", "생성형", "디퓨전", "Midjourney", "미드저니", "DALL-E"}
+_PIXEL_EVERYDAY_QUERY = "브랜드 리디자인 패키지 인테리어 카페 일상 디자인"
+
+
 async def generate_blog_post(
     agent_id: str | None = None,
     recent_titles: list[str] | None = None,
     frequent_tags: list[str] | None = None,
     memory: str | None = None,
+    last_agent_title: str | None = None,
 ) -> dict:
     today = datetime.now(KST).date()
 
@@ -739,8 +741,13 @@ async def generate_blog_post(
 
     persona = AGENT_PERSONAS[agent_id]
 
-    # 최신 트렌드 수집 (Tavily)
-    trending_context = await _fetch_trending(agent_id)
+    # 픽셀: 직전 글이 AI·웹개발 쪽이면 일상 디자인 쿼리로 교체
+    trending_query = None
+    if agent_id == "pixel" and last_agent_title:
+        if any(kw in last_agent_title for kw in _PIXEL_AI_KEYWORDS):
+            trending_query = _PIXEL_EVERYDAY_QUERY
+
+    trending_context = await _fetch_trending(agent_id, query=trending_query)
 
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     system_text = persona["system"]
