@@ -1,4 +1,5 @@
 """월간 GA 분석 파이프라인 — 카 분석 → 버즈 개선안 → 메모리 업데이트 → 이메일."""
+import html
 import os
 import smtplib
 import logging
@@ -72,7 +73,7 @@ async def _analyze_with_ka(overview: dict, pages: list, channels: list, devices:
 
     msg = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1000,
+        max_tokens=2000,
         system=KA_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -96,7 +97,7 @@ async def _suggest_with_buzz(ka_analysis: str, overview: dict, period: str) -> s
 
     msg = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=800,
+        max_tokens=1500,
         system=BUZZ_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -210,10 +211,10 @@ def _send_email(period: str, overview: dict, problem_pages: list, ka_analysis: s
 </table>
 
 <h3>🔍 카의 분석</h3>
-<div style="background:#faf5ff;padding:16px;border-radius:8px;white-space:pre-wrap">{ka_analysis}</div>
+<div style="background:#faf5ff;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(ka_analysis)}</div>
 
 <h3>💡 버즈의 개선안</h3>
-<div style="background:#fff7ed;padding:16px;border-radius:8px;white-space:pre-wrap">{buzz_suggestions}</div>
+<div style="background:#fff7ed;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(buzz_suggestions)}</div>
 
 <p style="color:#999;font-size:12px;margin-top:32px">🧠 에이전트 메모리 업데이트 완료 (buzz / over / pixel / ka)<br>
 Cosmic Hustle 자동 발송</p>
