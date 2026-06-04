@@ -523,38 +523,36 @@ async def _upload_character(agent_id: str) -> str | None:
 
 
 _THUMBNAIL_STYLES = [
-    # 기본 Pixar 3D — 색감 보정 버전
-    (
-        "Pixar 3D animation style, charming cartoon comedy, "
-        "warm golden hour lighting, slightly desaturated natural palette, "
-        "smooth 3D render, wide shot"
-    ),
+    # Pixar 3D
+    {
+        "prefix": "Pixar 3D animation style, charming expressive cartoon, warm golden hour lighting, smooth 3D render —",
+        "suffix": "NOT flat, NOT painterly, NOT sketch",
+    },
     # 2D 플랫 카툰
-    (
-        "2D flat cartoon illustration style, bold clean outlines, "
-        "graphic novel panel composition, limited flat color palette, "
-        "playful and witty, wide shot"
-    ),
+    {
+        "prefix": "2D flat vector illustration, bold black outlines, solid limited color palette, graphic novel panel —",
+        "suffix": "NOT 3D render, NOT CGI, NOT Pixar, flat colors only",
+    },
     # 레트로 팝아트
-    (
-        "retro pop art style, bold limited colors, halftone dot texture, "
-        "vintage 60s poster aesthetic, high contrast, graphic and punchy, wide shot"
-    ),
-    # 수채화 + 잉크 스케치
-    (
-        "loose watercolor and ink illustration, hand-painted feel, "
-        "warm muted tones, slightly rough paper texture, expressive brushstrokes, wide shot"
-    ),
-    # 실사 위트 (사진 합성 느낌)
-    (
-        "hyper-detailed editorial illustration, semi-realistic painterly style, "
-        "sharp witty composition, rich natural colors, magazine cover aesthetic, wide shot"
-    ),
-    # 네온 사이버펑크 (테크/데이터 주제용으로도 잘 맞음)
-    (
-        "neon cyberpunk illustration style, dark background with glowing accents, "
-        "vivid electric colors, futuristic and stylized, wide shot"
-    ),
+    {
+        "prefix": "retro pop art poster, Roy Lichtenstein style, halftone dot texture, bold primary colors, vintage 60s print —",
+        "suffix": "NOT 3D, NOT CGI, NOT smooth render, halftone dots visible",
+    },
+    # 수채화
+    {
+        "prefix": "traditional watercolor painting, visible wet brushstrokes, soft color bleeds, hand-painted paper texture —",
+        "suffix": "NOT digital, NOT 3D, NOT CGI, NOT Pixar, traditional media only",
+    },
+    # 매거진 일러스트
+    {
+        "prefix": "editorial magazine illustration, semi-realistic painterly style, ink outlines with flat color fills, sharp composition —",
+        "suffix": "NOT 3D render, NOT CGI, NOT Pixar animation",
+    },
+    # 네온 사이버펑크
+    {
+        "prefix": "neon cyberpunk illustration, dark background with glowing neon accents, vivid electric colors, futuristic stylized art —",
+        "suffix": "NOT 3D CGI render, NOT Pixar, dark moody lighting",
+    },
 ]
 
 
@@ -572,13 +570,13 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
         logger.warning(f"캐릭터 이미지 업로드 실패 ({agent_id}), 썸네일 생성 건너뜀")
         return None
 
-    # 포스트마다 랜덤 스타일 선택 (공통 base: 색감 보정 + 안전 가이드)
+    # 포스트마다 랜덤 스타일 선택 — 스타일을 앞에, 부정어를 뒤에 배치
     style = random.choice(_THUMBNAIL_STYLES)
     full_prompt = (
+        f"{style['prefix']} "
         f"{scene_prompt}, "
-        f"{style}, "
-        "exaggerated expressive poses, cute and playful NOT grotesque, "
-        "high quality, no text, no watermark"
+        "exaggerated expressive poses, cute and playful, high quality, no text, no watermark, "
+        f"{style['suffix']}"
     )
 
     try:
