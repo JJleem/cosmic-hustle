@@ -1,16 +1,19 @@
 import hashlib
 import json
+import logging
 import os
+import smtplib
 import uuid
 from collections import Counter
 from datetime import date, datetime, timedelta
+from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from db.connection import get_db
-from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote
+from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
@@ -435,23 +438,41 @@ async def regenerate_thumbnail(slug: str, body: dict = None, db: Session = Depen
 # ── 댓글 ──────────────────────────────────────────────────────────────────────
 
 @router.post("/posts/{slug}/view")
-def increment_view(slug: str, db: Session = Depends(get_db)):
+def increment_view(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    db.query(BlogPost).filter(BlogPost.id == post.id).update(
-        {BlogPost.view_count: BlogPost.view_count + 1}
-    )
-
+    ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+    ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
     today = str(date.today())
-    updated = db.query(BlogDailyVisit).filter(BlogDailyVisit.date == today).update(
-        {BlogDailyVisit.count: BlogDailyVisit.count + 1}
-    )
-    if not updated:
-        db.add(BlogDailyVisit(date=today, count=1))
 
-    db.commit()
+    already_viewed = db.query(BlogViewLog).filter(
+        BlogViewLog.post_id == post.id,
+        BlogViewLog.ip_hash == ip_hash,
+        BlogViewLog.date == today,
+    ).first()
+
+    if not already_viewed:
+        first_visit_today = not db.query(BlogViewLog).filter(
+            BlogViewLog.ip_hash == ip_hash,
+            BlogViewLog.date == today,
+        ).first()
+
+        db.add(BlogViewLog(post_id=post.id, ip_hash=ip_hash, date=today))
+        db.query(BlogPost).filter(BlogPost.id == post.id).update(
+            {BlogPost.view_count: BlogPost.view_count + 1}
+        )
+
+        if first_visit_today:
+            updated = db.query(BlogDailyVisit).filter(BlogDailyVisit.date == today).update(
+                {BlogDailyVisit.count: BlogDailyVisit.count + 1}
+            )
+            if not updated:
+                db.add(BlogDailyVisit(date=today, count=1))
+
+        db.commit()
+
     db.refresh(post)
     return {"view_count": post.view_count}
 
@@ -546,6 +567,29 @@ def list_comments(slug: str, page: int = 1, limit: int = 50, db: Session = Depen
     }
 
 
+def _notify_comment(post_title: str, post_slug: str, user_name: str, content: str):
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
+    to_email = os.environ.get("REPORT_EMAIL", smtp_user)
+    if not smtp_user or not smtp_password:
+        return
+    try:
+        post_url = f"https://cosmic-hustle.ai.kr/{post_slug}"
+        body_text = f"포스트: {post_title}\n작성자: {user_name}\n\n{content}\n\n→ {post_url}"
+        msg = MIMEText(body_text, "plain", "utf-8")
+        msg["Subject"] = f"[코스믹허슬] 새 댓글 — {post_title}"
+        msg["From"] = smtp_user
+        msg["To"] = to_email
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, to_email, msg.as_string())
+    except Exception:
+        logging.getLogger(__name__).warning("댓글 알림 이메일 발송 실패", exc_info=True)
+
+
 @router.post("/posts/{slug}/comments")
 @limiter.limit("5/minute")
 def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depends(get_db)):
@@ -592,6 +636,7 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
     db.add(comment)
     db.commit()
     db.refresh(comment)
+    _notify_comment(post.title, post.slug, user_name, content)
     return _serialize_comment(comment)
 
 

@@ -141,6 +141,14 @@ class BlogDailyVisit(Base):
     count = Column(Integer, default=0, server_default="0")
 
 
+class BlogViewLog(Base):
+    __tablename__ = "blog_view_log"
+
+    post_id = Column(String, ForeignKey("blog_posts.id", ondelete="CASCADE"), primary_key=True)
+    ip_hash = Column(String(16), primary_key=True)
+    date = Column(String(10), primary_key=True)  # YYYY-MM-DD
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 
