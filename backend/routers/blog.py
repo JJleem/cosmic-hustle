@@ -260,10 +260,10 @@ def _recent_post_context(db: Session) -> tuple[list[str], list[str]]:
 
 
 @router.post("/generate")
-async def trigger_generate(agent_id: str | None = None, force: bool = False, db: Session = Depends(get_db)):
+async def trigger_generate(agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, db: Session = Depends(get_db)):
     """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
     recent_titles, frequent_tags = _recent_post_context(db)
-    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags)
+    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:

@@ -591,10 +591,19 @@ _THUMBNAIL_STYLES = [
         "prefix": "neon cyberpunk illustration, dark background with glowing neon accents, vivid electric colors, futuristic stylized art —",
         "suffix": "NOT 3D CGI render, NOT Pixar, dark moody lighting",
     },
+    # 포켓몬 TCG 카드
+    {
+        "prefix": "Pokemon Trading Card Game TCG holographic rare card illustration, ornate golden card frame border, vivid fantasy character portrait art, shiny foil texture, centered hero composition —",
+        "suffix": "NOT plain background, NOT photo, card frame must be visible, holographic sheen",
+    },
 ]
 
 
-async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
+_THUMBNAIL_STYLE_MAP = {s["prefix"].split(",")[0].lower().split()[0]: s for s in _THUMBNAIL_STYLES}
+_THUMBNAIL_STYLE_MAP["tcg"] = next(s for s in _THUMBNAIL_STYLES if "Pokemon" in s["prefix"])
+
+
+async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str | None = None) -> str | None:
     """Flux Kontext로 씬 생성.
     - 레퍼런스 이미지에서 캐릭터 외형(정체성)만 추출
     - 구도·씬은 텍스트 프롬프트가 완전히 담당
@@ -609,7 +618,9 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str) -> str | None:
         return None
 
     # 포스트마다 랜덤 스타일 선택 — 스타일을 앞에, 부정어를 뒤에 배치
-    style = random.choice(_THUMBNAIL_STYLES)
+    style = _THUMBNAIL_STYLE_MAP.get(force_style, None) if force_style else None
+    if style is None:
+        style = random.choice(_THUMBNAIL_STYLES)
     full_prompt = (
         f"{style['prefix']} "
         f"{scene_prompt}, "
@@ -767,15 +778,21 @@ async def generate_blog_post(
     frequent_tags: list[str] | None = None,
     memory: str | None = None,
     last_agent_title: str | None = None,
+    theme: str | None = None,
+    thumbnail_style: str | None = None,
+    published: bool = True,
 ) -> dict:
     today = datetime.now(KST).date()
 
     _AGENT_THEMES = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}
 
     if agent_id is None:
-        agent_id, theme = get_today_agent()
+        agent_id, default_theme = get_today_agent()
     else:
-        theme = _AGENT_THEMES.get(agent_id, "자유 주제 (게스트 칼럼)")
+        default_theme = _AGENT_THEMES.get(agent_id, "자유 주제 (게스트 칼럼)")
+
+    if theme is None:
+        theme = default_theme
 
     persona = AGENT_PERSONAS[agent_id]
 
@@ -839,8 +856,8 @@ async def generate_blog_post(
   ---
   **📎 참고한 자료**
   참고한 뉴스·자료 제목들을 항목별로 나열 (URL 없이 제목만)
-- 출처 섹션 다음 마지막 줄에 반드시 태그 태그 삽입 (한국어, 3~5개, 쉼표 구분):
-  {{TAGS: 태그1, 태그2, 태그3}}"""
+- 출처 섹션 다음 마지막 줄에 반드시 태그 삽입 (5~8개, 쉼표 구분). 사람들이 실제 검색창에 입력할 법한 키워드 위주로 — 주제어, 관련 인물·브랜드·현상, 영어 키워드 1~2개 포함:
+  {{TAGS: 태그1, 태그2, 태그3, 태그4, 태그5}}"""
 
     user_content = (
         f"오늘({today.strftime('%Y년 %m월 %d일')}, {_weekday_kr(today.weekday())}) 주제: **{theme}**\n"
@@ -901,7 +918,7 @@ async def generate_blog_post(
 
     content, thumbnail_url = await asyncio.gather(
         _process_content_images(content, agent_id),
-        _generate_thumbnail(agent_id, scene),
+        _generate_thumbnail(agent_id, scene, force_style=thumbnail_style),
     )
 
     lines = content.split("\n")
@@ -920,7 +937,7 @@ async def generate_blog_post(
         "content":       content,
         "thumbnail_url": thumbnail_url,
         "tags":          tags,
-        "published":     True,
+        "published":     published,
         "trending_topic": theme,
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
     }
@@ -1074,7 +1091,7 @@ async def generate_discovery_post(topic: str | None = None) -> dict:
 - 독자가 내 일상과 연결할 수 있는 비유 포함
 - 글 맨 끝 형식:
   {{THUMBNAIL: ...}}
-  {{TAGS: discovery, 태그2, 태그3}}"""
+  {{TAGS: discovery, 태그2, 태그3, 태그4, 태그5}} (5~8개, 사람들이 실제 검색할 법한 키워드 위주, 영어 1~2개 포함)"""
 
     system_text = persona["system"] + discovery_rules
     user_content = f"주제: **{topic}**\n\n위 주제로 디스커버리 채널 포스트를 작성하세요."
