@@ -591,16 +591,13 @@ _THUMBNAIL_STYLES = [
         "prefix": "neon cyberpunk illustration, dark background with glowing neon accents, vivid electric colors, futuristic stylized art —",
         "suffix": "NOT 3D CGI render, NOT Pixar, dark moody lighting",
     },
-    # 포켓몬 TCG 카드
-    {
-        "prefix": "Pokemon Trading Card Game TCG holographic rare card illustration, ornate golden card frame border, vivid fantasy character portrait art, shiny foil texture, centered hero composition —",
-        "suffix": "NOT plain background, NOT photo, card frame must be visible, holographic sheen",
-    },
 ]
 
-
 _THUMBNAIL_STYLE_MAP = {s["prefix"].split(",")[0].lower().split()[0]: s for s in _THUMBNAIL_STYLES}
-_THUMBNAIL_STYLE_MAP["tcg"] = next(s for s in _THUMBNAIL_STYLES if "Pokemon" in s["prefix"])
+_THUMBNAIL_STYLE_MAP["tcg"] = {
+    "prefix": "Pokemon Trading Card Game TCG holographic rare card illustration, ornate golden card frame border, vivid fantasy character portrait art, shiny foil texture, centered hero composition —",
+    "suffix": "NOT plain background, NOT photo, card frame must be visible, holographic sheen",
+}
 
 
 async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str | None = None) -> str | None:
