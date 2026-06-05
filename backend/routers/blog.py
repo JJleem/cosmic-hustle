@@ -401,7 +401,7 @@ async def trigger_generate_discovery(request: Request, topic: str | None = None,
 
 
 @router.patch("/posts/{post_id}")
-def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
+def update_post(request: Request, post_id: str, body: dict, db: Session = Depends(get_db), _=Depends(_require_admin)):
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -420,7 +420,7 @@ def update_post(post_id: str, body: dict, db: Session = Depends(get_db)):
 
 
 @router.delete("/posts/{post_id}")
-def delete_post(post_id: str, db: Session = Depends(get_db)):
+def delete_post(request: Request, post_id: str, db: Session = Depends(get_db), _=Depends(_require_admin)):
     post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -431,7 +431,7 @@ def delete_post(post_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/posts/{slug}/regenerate-thumbnail")
-async def regenerate_thumbnail(slug: str, body: dict = None, db: Session = Depends(get_db)):
+async def regenerate_thumbnail(request: Request, slug: str, body: dict = None, db: Session = Depends(get_db), _=Depends(_require_admin)):
     """썸네일만 재생성. scene_prompt 없으면 본문 기반으로 자동 생성."""
     from blog_generator import _generate_thumbnail
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
@@ -659,7 +659,7 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
 
 
 @router.patch("/comments/{comment_id}")
-def update_comment(comment_id: str, body: dict, db: Session = Depends(get_db)):
+def update_comment(request: Request, comment_id: str, body: dict, db: Session = Depends(get_db), _=Depends(_require_admin)):
     comment = db.query(BlogComment).filter(BlogComment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -671,7 +671,7 @@ def update_comment(comment_id: str, body: dict, db: Session = Depends(get_db)):
 
 
 @router.delete("/comments/{comment_id}")
-def delete_comment(comment_id: str, db: Session = Depends(get_db)):
+def delete_comment(request: Request, comment_id: str, db: Session = Depends(get_db), _=Depends(_require_admin)):
     comment = db.query(BlogComment).filter(BlogComment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
