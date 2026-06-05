@@ -12,39 +12,30 @@ KST = timezone(timedelta(hours=9))
 
 import anthropic
 import httpx
-from google.oauth2 import service_account
-from google.auth.transport.requests import Request as GoogleAuthRequest
-
 logger = logging.getLogger(__name__)
 
-_GSC_SITE_URL = "https://cosmic-hustle.ai.kr"
-_INDEXING_API = "https://indexing.googleapis.com/v3/urlNotifications:publish"
+_SITE_HOST = "cosmic-hustle.ai.kr"
+_GSC_SITE_URL = f"https://{_SITE_HOST}"
 
 
 async def request_gsc_indexing(url: str) -> None:
-    """Google Indexing API로 색인 요청. 실패해도 조용히 넘어감."""
-    sa_path = os.getenv("GA4_SERVICE_ACCOUNT_JSON")
-    if not sa_path or not os.path.exists(sa_path):
+    """IndexNow로 색인 요청 (Google·Bing·Naver 동시). 실패해도 조용히 넘어감."""
+    key = os.getenv("INDEXNOW_KEY")
+    if not key:
         return
     try:
-        creds = service_account.Credentials.from_service_account_file(
-            sa_path, scopes=["https://www.googleapis.com/auth/indexing"]
-        )
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, creds.refresh, GoogleAuthRequest())
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                _INDEXING_API,
-                headers={"Authorization": f"Bearer {creds.token}"},
-                json={"url": url, "type": "URL_UPDATED"},
+                "https://api.indexnow.org/indexnow",
+                json={"host": _SITE_HOST, "key": key, "urlList": [url]},
                 timeout=10.0,
             )
-            if resp.status_code != 200:
-                logger.warning(f"GSC 색인 요청 실패 {url}: {resp.status_code}")
+            if resp.status_code in (200, 202):
+                logger.info(f"IndexNow 색인 요청 완료: {url}")
             else:
-                logger.info(f"GSC 색인 요청 완료: {url}")
+                logger.warning(f"IndexNow 색인 요청 실패 {url}: {resp.status_code}")
     except Exception as e:
-        logger.warning(f"GSC 색인 요청 오류: {e}")
+        logger.warning(f"IndexNow 색인 요청 오류: {e}")
 
 _CHAR_DIR = Path(__file__).parent / "characters"
 
