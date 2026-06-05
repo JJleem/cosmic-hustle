@@ -1056,7 +1056,7 @@ async def _classify_discovery_topic(topic: str) -> tuple[str, str]:
     return category, DISCOVERY_AGENT_MAP[category]
 
 
-async def generate_discovery_post(topic: str | None = None) -> dict:
+async def generate_discovery_post(topic: str | None = None, recent_titles: list[str] | None = None) -> dict:
     """디스커버리 채널 포스트 생성. topic 없으면 RSS에서 자동 선정."""
     today = datetime.now(KST).date()
 
@@ -1074,12 +1074,16 @@ async def generate_discovery_post(topic: str | None = None) -> dict:
         except Exception:
             headlines = ""
 
+        recent_block = ""
+        if recent_titles:
+            recent_block = "\n\n【최근 발행된 포스트 (이와 유사한 주제는 피할 것)】\n" + "\n".join(f"- {t}" for t in recent_titles[:10])
+
         tmp_client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
         pick = await tmp_client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=60,
             messages=[{"role": "user", "content": (
-                f"뉴스 헤드라인:\n{headlines}\n\n"
+                f"뉴스 헤드라인:\n{headlines}{recent_block}\n\n"
                 "자연/동물/과학/장소/역사 중 블로그 포스트로 흥미로운 주제 하나를 한국어로 짧게 출력 (예: '바다거북의 귀소 본능'). 주제만."
             )}],
         )

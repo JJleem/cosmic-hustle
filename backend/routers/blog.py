@@ -367,7 +367,8 @@ async def trigger_generate_debate(
 @router.post("/generate-discovery")
 async def trigger_generate_discovery(topic: str | None = None, db: Session = Depends(get_db)):
     """디스커버리 채널 포스트 생성. topic 없으면 자연/과학 RSS에서 자동 선정."""
-    data = await generate_discovery_post(topic)
+    recent_titles, _, _ = _recent_post_context(db)
+    data = await generate_discovery_post(topic, recent_titles=recent_titles)
 
     slug_base = data["slug"]
     if db.query(BlogPost).filter(BlogPost.slug == slug_base).first():
