@@ -12,8 +12,39 @@ KST = timezone(timedelta(hours=9))
 
 import anthropic
 import httpx
+from google.oauth2 import service_account
+from google.auth.transport.requests import Request as GoogleAuthRequest
 
 logger = logging.getLogger(__name__)
+
+_GSC_SITE_URL = "https://cosmic-hustle.ai.kr"
+_INDEXING_API = "https://indexing.googleapis.com/v3/urlNotifications:publish"
+
+
+async def request_gsc_indexing(url: str) -> None:
+    """Google Indexing API로 색인 요청. 실패해도 조용히 넘어감."""
+    sa_path = os.getenv("GA4_SERVICE_ACCOUNT_JSON")
+    if not sa_path or not os.path.exists(sa_path):
+        return
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            sa_path, scopes=["https://www.googleapis.com/auth/indexing"]
+        )
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, creds.refresh, GoogleAuthRequest())
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                _INDEXING_API,
+                headers={"Authorization": f"Bearer {creds.token}"},
+                json={"url": url, "type": "URL_UPDATED"},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                logger.warning(f"GSC 색인 요청 실패 {url}: {resp.status_code}")
+            else:
+                logger.info(f"GSC 색인 요청 완료: {url}")
+    except Exception as e:
+        logger.warning(f"GSC 색인 요청 오류: {e}")
 
 _CHAR_DIR = Path(__file__).parent / "characters"
 
@@ -778,6 +809,7 @@ async def generate_blog_post(
     theme: str | None = None,
     thumbnail_style: str | None = None,
     published: bool = True,
+    recent_posts: list[dict] | None = None,
 ) -> dict:
     today = datetime.now(KST).date()
 
@@ -891,6 +923,12 @@ async def generate_blog_post(
             "- 자주 다룬 태그가 보이면 그 주제를 다른 시각으로 접근하거나, 오래 안 다룬 영역을 우선 탐색할 것\n"
             "- 2주 이내에 거의 동일한 제목·결론으로 쓴 글은 피할 것\n"
         )
+    if recent_posts:
+        links = "\n".join(
+            f'- [{p["title"]}]({_GSC_SITE_URL}/{p["slug"]})' for p in recent_posts[:12]
+        )
+        user_content += f"\n【내부 링크】 아래 글과 주제가 연결되면 본문에 자연스럽게 1~2개만 링크 포함 (억지로 넣지 말 것):\n{links}\n"
+
     if agent_id != "over":
         if trending_context:
             user_content += f"\n【오늘의 최신 트렌드 참고자료】\n{trending_context}\n\n위 자료를 참고하되, 당신만의 시각과 말투로 블로그 포스트를 작성하세요."

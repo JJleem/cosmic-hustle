@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -20,6 +21,7 @@ from blog_generator import (
     generate_intro_post, generate_intro_comments,
     generate_debate_post, generate_debate_comments,
     generate_discovery_post,
+    request_gsc_indexing,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -235,35 +237,36 @@ def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(ge
     return _vote_result(db, post.id, my_voter_key=ip_hash)
 
 
-def _recent_post_context(db: Session) -> tuple[list[str], list[str]]:
-    """최근 90일 포스트 제목 목록 + 자주 쓴 태그 top10 반환. main.py _daily_blog_job과 공유."""
+def _recent_post_context(db: Session) -> tuple[list[str], list[str], list[dict]]:
+    """최근 90일 포스트 제목 목록 + 자주 쓴 태그 top10 + 슬러그 목록 반환."""
     cutoff = datetime.now() - timedelta(days=90)
     recent_rows = (
-        db.query(BlogPost.title, BlogPost.trending_topic, BlogPost.tags)
+        db.query(BlogPost.title, BlogPost.trending_topic, BlogPost.tags, BlogPost.slug)
         .filter(BlogPost.published_at >= cutoff)
         .order_by(desc(BlogPost.published_at))
         .limit(60).all()
     )
     recent_titles = [
         f"{title} (핵심 아이디어: {topic})" if topic else title
-        for title, topic, _ in recent_rows
+        for title, topic, _, _ in recent_rows
     ]
     tag_counter: Counter = Counter()
-    for _, _, tags_raw in recent_rows:
+    for _, _, tags_raw, _ in recent_rows:
         if tags_raw:
             try:
                 for t in json.loads(tags_raw):
                     tag_counter[t] += 1
             except Exception:
                 pass
-    return recent_titles, [tag for tag, _ in tag_counter.most_common(10)]
+    recent_posts = [{"title": title, "slug": slug} for title, _, _, slug in recent_rows[:15]]
+    return recent_titles, [tag for tag, _ in tag_counter.most_common(10)], recent_posts
 
 
 @router.post("/generate")
 async def trigger_generate(agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, db: Session = Depends(get_db)):
     """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
-    recent_titles, frequent_tags = _recent_post_context(db)
-    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published)
+    recent_titles, frequent_tags, recent_posts = _recent_post_context(db)
+    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published, recent_posts=recent_posts)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:
@@ -287,6 +290,11 @@ async def trigger_generate(agent_id: str | None = None, theme: str | None = None
 
     db.commit()
     db.refresh(post)
+
+    if post.published:
+        post_url = f"https://cosmic-hustle.ai.kr/{post.slug}"
+        asyncio.create_task(request_gsc_indexing(post_url))
+
     return post
 
 

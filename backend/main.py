@@ -70,7 +70,7 @@ async def _daily_blog_job():
         db = SessionLocal()
         try:
             from routers.blog import _recent_post_context
-            recent_titles, frequent_tags = _recent_post_context(db)
+            recent_titles, frequent_tags, recent_posts = _recent_post_context(db)
 
             # 오늘 담당 에이전트 메모리 조회
             from blog_generator import get_today_agent
@@ -88,7 +88,7 @@ async def _daily_blog_job():
                 )
                 last_agent_title = last_pixel[0] if last_pixel else None
 
-            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title)
+            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title, recent_posts=recent_posts)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
@@ -102,6 +102,8 @@ async def _daily_blog_job():
                 db.add(BlogComment(**c))
             db.commit()
             logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
+            from blog_generator import request_gsc_indexing
+            asyncio.create_task(request_gsc_indexing(f"https://cosmic-hustle.ai.kr/{data['slug']}"))
             return
         except Exception as e:
             db.rollback()
