@@ -27,6 +27,13 @@ from blog_generator import (
 
 limiter = Limiter(key_func=get_remote_address)
 
+_ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
+
+def _require_admin(request: Request):
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    if not _ADMIN_KEY or key != _ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
 # ── 익명 정체성 ────────────────────────────────────────────────────────────────
 
 _PLANETS = [
@@ -263,7 +270,7 @@ def _recent_post_context(db: Session) -> tuple[list[str], list[str], list[dict]]
 
 
 @router.post("/generate")
-async def trigger_generate(agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, db: Session = Depends(get_db)):
+async def trigger_generate(request: Request, agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, db: Session = Depends(get_db), _=Depends(_require_admin)):
     """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
     recent_titles, frequent_tags, recent_posts = _recent_post_context(db)
     data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published, recent_posts=recent_posts)
@@ -299,7 +306,7 @@ async def trigger_generate(agent_id: str | None = None, theme: str | None = None
 
 
 @router.post("/generate-intro")
-async def trigger_generate_intro(db: Session = Depends(get_db)):
+async def trigger_generate_intro(request: Request, db: Session = Depends(get_db), _=Depends(_require_admin)):
     """버즈+핑 콜라보 Cosmic Hustle 자기소개 포스트 생성."""
     data = await generate_intro_post()
 
@@ -323,11 +330,13 @@ async def trigger_generate_intro(db: Session = Depends(get_db)):
 
 @router.post("/generate-debate")
 async def trigger_generate_debate(
+    request: Request,
     topic: str,
     agent_a: str = "over",
     agent_b: str = "fact",
     thumbnail_url: str | None = None,
     db: Session = Depends(get_db),
+    _=Depends(_require_admin),
 ):
     """두 에이전트 배틀 이벤트 포스트 생성. topic 필수, agent_a/b 선택(기본: buzz vs fact)."""
     if agent_a not in AGENT_PERSONAS or agent_b not in AGENT_PERSONAS:
@@ -365,7 +374,7 @@ async def trigger_generate_debate(
 
 
 @router.post("/generate-discovery")
-async def trigger_generate_discovery(topic: str | None = None, db: Session = Depends(get_db)):
+async def trigger_generate_discovery(request: Request, topic: str | None = None, db: Session = Depends(get_db), _=Depends(_require_admin)):
     """디스커버리 채널 포스트 생성. topic 없으면 자연/과학 RSS에서 자동 선정."""
     recent_titles, _, _ = _recent_post_context(db)
     data = await generate_discovery_post(topic, recent_titles=recent_titles)
