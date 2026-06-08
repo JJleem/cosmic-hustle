@@ -1034,7 +1034,7 @@ async def generate_blog_post(
         "thumbnail_url": thumbnail_url,
         "tags":          tags,
         "published":     published,
-        "trending_topic": theme,
+        "trending_topic": default_theme,
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
     }
 
