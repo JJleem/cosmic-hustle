@@ -95,9 +95,34 @@ DAY_SCHEDULE = {
     6: {"agent_id": "wiki",  "theme": "이번 주 키워드 심층 해설"},
 }
 
+# 버즈 RSS 쿼리 풀 — 매 생성마다 다른 마케팅 서브토픽 탐색
+BUZZ_RSS_QUERY_POOL: list[str] = [
+    "팝업스토어 브랜드 마케팅 체험",
+    "콜라보레이션 협업 브랜드 한정판",
+    "인플루언서 광고 협찬 마케팅",
+    "소비자 리뷰 후기 구전 마케팅",
+    "MZ세대 소비 트렌드 브랜드",
+    "구독 서비스 멤버십 마케팅",
+    "가성비 가심비 소비 트렌드",
+    "스토리텔링 브랜드 마케팅",
+    "마케팅 바이럴 캠페인 소셜미디어 트렌드",  # 기존 쿼리는 풀 마지막에
+]
+
+
+def _buzz_rss_query(agent_recent_tags: list[str] | None = None) -> str:
+    """recent_tags에서 이미 다룬 주제를 피해 RSS 쿼리 선택."""
+    for query in BUZZ_RSS_QUERY_POOL:
+        if not agent_recent_tags:
+            return query
+        # 쿼리 키워드와 최근 태그가 겹치지 않는 첫 번째 쿼리 선택
+        if not any(tag in query for tag in agent_recent_tags):
+            return query
+    return BUZZ_RSS_QUERY_POOL[0]  # 전부 겹치면 첫 번째로 폴백
+
+
 # 에이전트별 Tavily 검색 쿼리 (최신 트렌드 수집용)
 AGENT_SEARCH_QUERIES: dict[str, str] = {
-    "buzz":  "마케팅 바이럴 캠페인 소셜미디어 트렌드",
+    "buzz":  "마케팅 바이럴 캠페인 소셜미디어 트렌드",  # _buzz_rss_query()로 동적 대체됨
     "pocke": "AI 앱 서비스 새기능 업데이트",
     "over":  "요즘 사람들 관심사 일상",
     "ka":    "소비자 조사 통계 결과 트렌드",
@@ -487,10 +512,11 @@ async def _fetch_websearch(agent_id: str) -> str:
         return ""
 
 
-async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None) -> str:
+async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None, agent_recent_tags: list[str] | None = None) -> str:
     """에이전트별 트렌드 수집.
     - ping·wiki: WebSearch (RSS 폴백)
     - 나머지: RSS → frequent_tags 겹치면 WebSearch → 그래도 겹치면 빈 문자열(자유 작성)
+    buzz는 agent_recent_tags를 반영한 동적 쿼리 사용.
     """
 
     # WebSearch 전용 에이전트
@@ -504,7 +530,11 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
     import feedparser
     from urllib.parse import quote
 
-    q   = query or AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
+    if agent_id == "buzz" and query is None:
+        q = _buzz_rss_query(agent_recent_tags)
+        logger.info(f"buzz RSS 쿼리: {q}")
+    else:
+        q = query or AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
     url = f"https://news.google.com/rss/search?q={quote(q)}&hl=ko&gl=KR&ceid=KR:ko"
 
     try:
@@ -856,7 +886,7 @@ async def generate_blog_post(
         if any(kw in last_agent_title for kw in _PIXEL_AI_KEYWORDS):
             trending_query = _PIXEL_EVERYDAY_QUERY
 
-    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags)
+    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags)
 
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     system_text = persona["system"]
