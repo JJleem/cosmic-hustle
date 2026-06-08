@@ -456,30 +456,51 @@ _WEBSEARCH_PROMPTS: dict[str, str] = {
         "반드시 아래 형식으로 5개만 출력:\n"
         "- [키워드]: [왜 지금 화제인지 한 줄] (출처: 매체명)"
     ),
+    "buzz": (
+        "한국에서 최근 화제가 된 마케팅 캠페인, 브랜드 전략, 소비자 반응 사례를 찾아줘. "
+        "SNS 바이럴, 팝업스토어, 콜라보, 이색 광고 등 형태는 무관. 정치·연예인 제외. "
+        "반드시 아래 형식으로 5개만 출력:\n"
+        "- [브랜드/캠페인명]: [어떤 반응이 있었는지 한 줄] (출처: 매체명)"
+    ),
 }
 
 
-async def _fetch_trending(agent_id: str, query: str | None = None) -> str:
-    """에이전트별 트렌드 수집. ping·wiki는 WebSearch, 나머지는 Google 뉴스 RSS."""
+def _has_overlap(context: str, tags: list[str], threshold: int = 2) -> bool:
+    """trending_context에 frequent_tags 항목이 threshold개 이상 등장하면 True."""
+    return sum(1 for t in tags if t in context) >= threshold
 
-    # WebSearch 에이전트
+
+async def _fetch_websearch(agent_id: str) -> str:
+    """WebSearch로 트렌드 수집. 실패 시 빈 문자열."""
+    try:
+        import anthropic as _anthropic
+        client = _anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        resp = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}],
+            messages=[{"role": "user", "content": _WEBSEARCH_PROMPTS[agent_id]}],
+        )
+        return "\n".join(b.text for b in resp.content if hasattr(b, "text")).strip()
+    except Exception as e:
+        logger.warning(f"WebSearch 트렌드 수집 실패 ({agent_id}): {e}")
+        return ""
+
+
+async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None) -> str:
+    """에이전트별 트렌드 수집.
+    - ping·wiki: WebSearch (RSS 폴백)
+    - 나머지: RSS → frequent_tags 겹치면 WebSearch → 그래도 겹치면 빈 문자열(자유 작성)
+    """
+
+    # WebSearch 전용 에이전트
     if agent_id in _WEBSEARCH_AGENTS:
-        try:
-            import anthropic as _anthropic
-            client = _anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-            resp = await client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=600,
-                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}],
-                messages=[{"role": "user", "content": _WEBSEARCH_PROMPTS[agent_id]}],
-            )
-            texts = [b.text for b in resp.content if hasattr(b, "text")]
-            return "\n".join(texts).strip()
-        except Exception as e:
-            logger.warning(f"WebSearch 트렌드 수집 실패 ({agent_id}): {e} — RSS 폴백")
-            # 실패 시 RSS로 폴백
+        result = await _fetch_websearch(agent_id)
+        if result:
+            return result
+        # 실패 시 RSS 폴백
 
-    # RSS 에이전트 (+ WebSearch 폴백)
+    # RSS
     import feedparser
     from urllib.parse import quote
 
@@ -497,10 +518,22 @@ async def _fetch_trending(agent_id: str, query: str | None = None) -> str:
             summary = re.sub(r"<[^>]+>", "", entry.get("summary", ""))[:150]
             lines.append(f"- {title}: {summary}")
 
-        return "\n".join(lines)
+        rss_result = "\n".join(lines)
     except Exception as e:
         logger.warning(f"Google 뉴스 RSS 검색 실패 ({agent_id}): {e}")
+        rss_result = ""
+
+    # RSS 결과가 frequent_tags와 많이 겹치면 WebSearch로 대체 시도
+    if frequent_tags and _has_overlap(rss_result, frequent_tags) and agent_id in _WEBSEARCH_PROMPTS:
+        logger.info(f"RSS가 frequent_tags와 겹침 ({agent_id}) → WebSearch 시도")
+        ws_result = await _fetch_websearch(agent_id)
+        if ws_result and not _has_overlap(ws_result, frequent_tags):
+            logger.info(f"WebSearch 폴백 성공 ({agent_id})")
+            return ws_result
+        logger.info(f"WebSearch도 겹치거나 비어있음 ({agent_id}) → 자유 작성")
         return ""
+
+    return rss_result
 
 
 # ── 이미지 생성 ────────────────────────────────────────────────────────────────
@@ -822,7 +855,7 @@ async def generate_blog_post(
         if any(kw in last_agent_title for kw in _PIXEL_AI_KEYWORDS):
             trending_query = _PIXEL_EVERYDAY_QUERY
 
-    trending_context = await _fetch_trending(agent_id, query=trending_query)
+    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags)
 
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     system_text = persona["system"]
