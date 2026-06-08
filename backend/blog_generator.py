@@ -834,6 +834,7 @@ async def generate_blog_post(
     thumbnail_style: str | None = None,
     published: bool = True,
     recent_posts: list[dict] | None = None,
+    agent_recent_tags: list[str] | None = None,
 ) -> dict:
     today = datetime.now(KST).date()
 
@@ -946,6 +947,12 @@ async def generate_blog_post(
             "- 자주 다룬 태그 목록에서 2회 이상 등장한 세부 주제·브랜드·캠페인은 이번엔 다루지 말 것 — 트렌드 참고자료에 나와도 다른 소재로 교체할 것\n"
             "- 자주 다룬 태그 목록을 보고 덜 다룬 영역을 우선 탐색할 것\n"
             "- 2주 이내에 거의 동일한 제목·결론으로 쓴 글은 피할 것\n"
+        )
+    if agent_recent_tags:
+        user_content += (
+            f"\n【사례·예시 사용 금지 목록】 최근 내가 쓴 글에서 이미 다룬 항목들이다. "
+            f"트렌드 자료에 나오거나 Claude가 알고 있더라도 이번 글에서 구체적 사례·예시로 언급하지 말 것:\n"
+            + ", ".join(agent_recent_tags) + "\n"
         )
     if recent_posts:
         links = "\n".join(

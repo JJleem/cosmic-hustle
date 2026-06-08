@@ -70,11 +70,11 @@ async def _daily_blog_job():
         db = SessionLocal()
         try:
             from routers.blog import _recent_post_context
-            recent_titles, frequent_tags, recent_posts = _recent_post_context(db)
-
             # 오늘 담당 에이전트 메모리 조회
             from blog_generator import get_today_agent
             today_agent_id, _ = get_today_agent()
+
+            recent_titles, frequent_tags, recent_posts, agent_recent_tags = _recent_post_context(db, agent_id=today_agent_id)
             mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == today_agent_id).first()
             agent_memory = mem_row.memory if mem_row else None
 
@@ -88,7 +88,7 @@ async def _daily_blog_job():
                 )
                 last_agent_title = last_pixel[0] if last_pixel else None
 
-            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title, recent_posts=recent_posts)
+            data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
