@@ -549,6 +549,19 @@ def _has_overlap(context: str, tags: list[str], threshold: int = 2) -> bool:
     return sum(1 for t in tags if t in context) >= threshold
 
 
+def _has_title_overlap(rss_result: str, recent_titles: list[str], threshold: int = 1) -> bool:
+    """RSS 결과가 최근 포스트 제목의 핵심 키워드와 겹치면 True.
+    3자 이상 단어만 추출해 너무 일반적인 단어(AI, 앱 등)가 오탐하지 않게 함.
+    """
+    keywords: set[str] = set()
+    for title in recent_titles:
+        for word in re.split(r"[\s\?!,.\-·×/]", title):
+            if len(word) >= 3:
+                keywords.add(word)
+    matched = sum(1 for kw in keywords if kw in rss_result)
+    return matched >= threshold
+
+
 def _is_rss_stale(feed, max_age_days: int = 30) -> bool:
     """최상위 3개 항목 중 max_age_days 이내 항목이 하나도 없으면 True."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
@@ -580,10 +593,10 @@ async def _fetch_websearch(agent_id: str) -> str:
         return ""
 
 
-async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None, agent_recent_tags: list[str] | None = None) -> str:
+async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None, agent_recent_tags: list[str] | None = None, recent_titles: list[str] | None = None) -> str:
     """에이전트별 트렌드 수집 폭포수 로직.
     1. WebSearch 전용 에이전트(ping·pocke): WebSearch → 실패 시 RSS
-    2. 나머지: RSS → (stale·비어있음·frequent_tags 겹침) 중 하나라도 해당하면 WebSearch → WebSearch도 없으면 자유 작성("")
+    2. 나머지: RSS → (stale·비어있음·frequent_tags 겹침·recent_titles 겹침) 중 하나라도 해당하면 WebSearch → WebSearch도 없으면 자유 작성("")
     """
 
     # 1. WebSearch 전용 에이전트
@@ -621,12 +634,13 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
     except Exception as e:
         logger.warning(f"Google 뉴스 RSS 검색 실패 ({agent_id}): {e}")
 
-    # 3. WebSearch 폴백 조건: stale·비어있음·frequent_tags 겹침
+    # 3. WebSearch 폴백 조건: stale·비어있음·frequent_tags 겹침·recent_titles 겹침
     stale = _is_rss_stale(feed) if feed else True
     overlap = bool(frequent_tags and _has_overlap(rss_result, frequent_tags))
+    title_overlap = bool(recent_titles and _has_title_overlap(rss_result, recent_titles))
 
-    if (stale or not rss_result or overlap) and agent_id in _WEBSEARCH_PROMPTS:
-        reason = "stale" if stale else ("empty" if not rss_result else "overlap")
+    if (stale or not rss_result or overlap or title_overlap) and agent_id in _WEBSEARCH_PROMPTS:
+        reason = "stale" if stale else ("empty" if not rss_result else ("tag_overlap" if overlap else "title_overlap"))
         logger.info(f"RSS {reason} ({agent_id}) → WebSearch 시도")
         ws_result = await _fetch_websearch(agent_id)
         if ws_result:
@@ -963,7 +977,7 @@ async def generate_blog_post(
         if any(kw in last_agent_title for kw in _PIXEL_AI_KEYWORDS):
             trending_query = _PIXEL_EVERYDAY_QUERY
 
-    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags)
+    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags, recent_titles=recent_titles)
 
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     system_text = persona["system"]
