@@ -126,7 +126,6 @@ async function sendSlackNotification(workflow: HermesWorkflowResult): Promise<vo
     `단계: ${stepSummary}`,
     `소요: ${durationSec}초`,
     workflow.nextAction ? `다음: ${workflow.nextAction}` : null,
-    workflow.vaultNotePath ? `handoff: ${workflow.vaultNotePath}` : null,
   ].filter(Boolean) as string[];
 
   await sendSlackMessage(lines.join("\n"));
