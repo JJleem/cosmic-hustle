@@ -113,3 +113,9 @@ CEO 입력 (채팅 pre-flight: 플랜 확인 → writer 스타일 질문 → 모
 
 ## 4. 목표 중심 실행
 - 성공 기준을 정의하고 검증까지 완료할 것.
+
+## 5. 토큰 예산
+- polling/API 응답은 필요한 필드만 요약해서 확인할 것. 예: `jq '{id,status,currentAgentId}'`.
+- Vault 복구는 필수 문서와 최신 handoff 위주로 읽고, 긴 자동 로그 전문은 필요할 때만 열 것.
+- `git diff`, `git status`, 로그 출력은 파일/라인/토큰 제한을 걸어 확인할 것.
+- Smoke test는 짧은 payload로 1회 먼저 돌리고, 실패 원인이 불명확할 때만 추가 검증할 것.
