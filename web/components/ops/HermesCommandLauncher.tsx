@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Send, TerminalSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Loader2, Send, TerminalSquare } from "lucide-react";
 import {
   HERMES_AGENT_IDS,
   type HermesAgentId,
+  type HermesRunHistory,
   type HermesRunResult,
 } from "@/lib/ops/hermesAgents";
 
@@ -15,8 +16,23 @@ export default function HermesCommandLauncher() {
   const [agentId, setAgentId] = useState<HermesAgentId>("plan");
   const [command, setCommand] = useState(defaultCommand);
   const [run, setRun] = useState<HermesRunResult | null>(null);
+  const [history, setHistory] = useState<HermesRunHistory | null>(null);
   const [error, setError] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, []);
+
+  async function refreshHistory() {
+    try {
+      const response = await fetch("/api/ops/hermes/run");
+      if (!response.ok) return;
+      setHistory((await response.json()) as HermesRunHistory);
+    } catch {
+      setHistory(null);
+    }
+  }
 
   async function submitRun() {
     if (!command.trim() || isRunning) return;
@@ -36,6 +52,7 @@ export default function HermesCommandLauncher() {
         throw new Error(data.message ?? data.error ?? `HTTP ${response.status}`);
       }
       setRun(data as HermesRunResult);
+      await refreshHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hermes run failed");
     } finally {
@@ -102,7 +119,13 @@ export default function HermesCommandLauncher() {
                 <span>{run.agentId}</span>
                 <span>{run.durationMs}ms</span>
                 {run.sessionId ? <span>{run.sessionId}</span> : null}
+                {run.vaultNotePath ? <span>{run.vaultNotePath}</span> : null}
               </div>
+              {run.vaultNoteError ? (
+                <div className="mb-3 rounded border border-amber-300/20 bg-amber-300/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
+                  Vault note failed: {run.vaultNoteError}
+                </div>
+              ) : null}
               <div className="flex gap-3">
                 <TerminalSquare className="mt-1 h-4 w-4 shrink-0 text-emerald-300" />
                 <pre className="max-h-[280px] flex-1 overflow-auto whitespace-pre-wrap text-sm leading-6 text-zinc-200">
@@ -111,6 +134,58 @@ export default function HermesCommandLauncher() {
               </div>
             </div>
           ) : null}
+
+          <div className="grid gap-3 xl:grid-cols-[1fr_240px]">
+            <div className="rounded-md border border-white/10 bg-[#0f1216]">
+              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Recent Hermes Runs
+                </p>
+                <TerminalSquare className="h-4 w-4 text-zinc-500" />
+              </div>
+              <div className="divide-y divide-white/10">
+                {history?.runs.length ? (
+                  history.runs.slice(0, 4).map((item) => (
+                    <div key={item.id} className="grid gap-1 px-3 py-2">
+                      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+                        <span className="font-semibold text-zinc-200">{item.agentId}</span>
+                        <span className="shrink-0 text-zinc-500">
+                          {new Date(item.createdAt).toLocaleTimeString("ko-KR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <p className="truncate text-sm text-zinc-400">{item.command}</p>
+                      {item.vaultNotePath ? (
+                        <p className="truncate text-xs text-emerald-300">{item.vaultNotePath}</p>
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <p className="px-3 py-4 text-sm text-zinc-500">No local Hermes runs yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-white/10 bg-[#0f1216] p-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-amber-300" />
+                <p className="text-sm font-semibold text-zinc-100">Vault</p>
+              </div>
+              <p className="mt-3 text-sm text-zinc-400">
+                {history?.vault.available ? "Connected" : "Unavailable"}
+              </p>
+              <p className="mt-1 break-all text-xs leading-5 text-zinc-500">
+                {history?.vault.path ?? "Checking local vault..."}
+              </p>
+              {history?.vault.latestHandoffPath ? (
+                <p className="mt-3 break-all text-xs leading-5 text-emerald-300">
+                  {history.vault.latestHandoffPath}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
     </div>

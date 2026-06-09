@@ -1,4 +1,5 @@
 import {
+  getHermesRunHistory,
   isHermesAgentId,
   isLocalRequest,
   runHermesAgent,
@@ -7,6 +8,18 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+export async function GET(request: Request) {
+  if (!isLocalRequest(request)) {
+    return Response.json(
+      { error: "local_only", message: "Hermes runs are only available from localhost." },
+      { status: 403 },
+    );
+  }
+
+  const history = await getHermesRunHistory();
+  return Response.json(history);
+}
 
 export async function POST(request: Request) {
   if (!isLocalRequest(request)) {

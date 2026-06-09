@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import HermesCommandLauncher from "@/components/ops/HermesCommandLauncher";
+import HermesWorkflowLauncher from "@/components/ops/HermesWorkflowLauncher";
 
 const employees = [
   { id: "plan", name: "플랜", role: "PM", status: "Ready", color: "#FCD34D", image: "/characters/plan/default.png" },
@@ -29,7 +30,7 @@ const employees = [
 
 const statusTiles = [
   { label: "Hermes", value: "Detected", detail: "~/.local/bin/hermes", icon: RadioTower, tone: "text-emerald-300" },
-  { label: "Obsidian", value: "Vault pending", detail: "project note not created", icon: Archive, tone: "text-amber-300" },
+  { label: "Obsidian", value: "Vault linked", detail: "logs/* handoff notes", icon: Archive, tone: "text-amber-300" },
   { label: "Blog", value: "Protected", detail: "/api/blog/* unchanged", icon: ShieldCheck, tone: "text-sky-300" },
   { label: "Backend", value: "Existing", detail: "FastAPI remains source", icon: HeartPulse, tone: "text-rose-300" },
 ];
@@ -44,7 +45,7 @@ const logs = [
   "docs/hermes-dashboard-transition.md added",
   "web/app/api/blog/* marked as protected",
   "Phase 1 agents limited to plan, run, wiki",
-  "Existing research UI kept in place",
+  "Hermes runs write dashboard logs and vault handoffs",
 ];
 
 export default function DashboardPage() {
@@ -124,6 +125,8 @@ export default function DashboardPage() {
 
           <HermesCommandLauncher />
 
+          <HermesWorkflowLauncher />
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-md border border-white/10 bg-[#14181d]">
               <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
@@ -187,7 +190,7 @@ export default function DashboardPage() {
               {["projects/cosmic-hustle.md", "agents/plan.md", "agents/run.md", "agents/wiki.md"].map((note) => (
                 <div key={note} className="rounded-md border border-white/10 bg-[#0f1216] px-3 py-2">
                   <p className="truncate text-sm text-zinc-200">{note}</p>
-                  <p className="mt-1 text-xs text-zinc-500">planned</p>
+                  <p className="mt-1 text-xs text-zinc-500">tracked</p>
                 </div>
               ))}
             </div>

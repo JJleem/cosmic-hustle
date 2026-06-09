@@ -7,9 +7,11 @@ import { promisify } from "util";
 import {
   HERMES_AGENT_IDS,
   type HermesAgentId,
+  type HermesRunHistory,
   type HermesRunRequest,
   type HermesRunResult,
 } from "@/lib/ops/hermesAgents";
+import { getObsidianStatus, writeHermesRunHandoff } from "@/lib/ops/obsidian";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,6 +27,7 @@ type ExecError = Error & {
 const repoRoot = path.resolve(process.cwd(), "..");
 const logDir = path.join(process.cwd(), ".ops");
 const runLogPath = path.join(logDir, "hermes-runs.jsonl");
+const defaultRunLogLimit = 100;
 
 export function isHermesAgentId(value: unknown): value is HermesAgentId {
   return typeof value === "string" && HERMES_AGENT_IDS.includes(value as HermesAgentId);
@@ -84,10 +87,23 @@ export async function runHermesAgent(input: HermesRunRequest): Promise<HermesRun
     sessionId: parsed.sessionId,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
+    vaultNotePath: null,
   };
+
+  try {
+    run.vaultNotePath = await writeHermesRunHandoff(run);
+  } catch (error) {
+    run.vaultNoteError =
+      error instanceof Error ? error.message : "Failed to write Obsidian handoff note";
+  }
 
   await appendRunLog(run);
   return run;
+}
+
+export async function getHermesRunHistory(limit = 8): Promise<HermesRunHistory> {
+  const [runs, vault] = await Promise.all([readRunLog(limit), getObsidianStatus()]);
+  return { runs, vault };
 }
 
 async function readAgentPrompt(agentId: HermesAgentId): Promise<string> {
@@ -133,11 +149,45 @@ function parseHermesOutput(stdout: string): { sessionId: string | null; response
 
 async function appendRunLog(run: HermesRunResult): Promise<void> {
   await mkdir(logDir, { recursive: true });
-  let existing = "";
+  let existingRuns: HermesRunResult[] = [];
   try {
-    existing = await readFile(runLogPath, "utf8");
+    existingRuns = parseRunLog(await readFile(runLogPath, "utf8"));
   } catch {
-    existing = "";
+    existingRuns = [];
   }
-  await writeFile(runLogPath, `${existing}${JSON.stringify(run)}\n`, "utf8");
+
+  const limit = getRunLogLimit();
+  const nextRuns = [...existingRuns, run].slice(-limit);
+  await writeFile(runLogPath, `${nextRuns.map((item) => JSON.stringify(item)).join("\n")}\n`, "utf8");
+}
+
+async function readRunLog(limit: number): Promise<HermesRunResult[]> {
+  try {
+    const content = await readFile(runLogPath, "utf8");
+    return parseRunLog(content).reverse().slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+function parseRunLog(content: string): HermesRunResult[] {
+  return content
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const run = JSON.parse(line) as Partial<HermesRunResult>;
+      return {
+        ...run,
+        vaultNotePath: run.vaultNotePath ?? null,
+      } as HermesRunResult;
+    });
+}
+
+function getRunLogLimit(): number {
+  const rawLimit = Number(process.env.HERMES_RUN_LOG_LIMIT ?? defaultRunLogLimit);
+  if (!Number.isFinite(rawLimit) || rawLimit < 1) {
+    return defaultRunLogLimit;
+  }
+  return Math.floor(rawLimit);
 }
