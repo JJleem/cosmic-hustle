@@ -1,6 +1,9 @@
+import { execFile } from "child_process";
 import { randomUUID } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
+import { homedir } from "os";
 import path from "path";
+import { promisify } from "util";
 import type {
   HermesWorkflowHistory,
   HermesWorkflowRequest,
@@ -9,6 +12,9 @@ import type {
 } from "@/lib/ops/hermesAgents";
 import { runHermesAgent } from "@/lib/ops/hermes";
 import { getObsidianStatus, writeHermesWorkflowHandoff } from "@/lib/ops/obsidian";
+
+const execFileAsync = promisify(execFile);
+const hermesBin = process.env.HERMES_BIN ?? path.join(homedir(), ".local/bin/hermes");
 
 const logDir = path.join(process.cwd(), ".ops");
 const workflowLogPath = path.join(logDir, "hermes-workflows.jsonl");
@@ -32,29 +38,44 @@ export async function runHermesWorkflow(
     vaultNotePath: null,
   };
 
-  const plan = await runStep("plan", buildPlanCommand(input));
-  workflow.steps.push(plan);
+  try {
+    const plan = await runStep("plan", buildPlanCommand(input));
+    workflow.steps.push(plan);
 
-  let run: HermesWorkflowStep;
-  if (plan.status === "done" && plan.run) {
-    run = await runStep("run", buildRunCommand(input, plan.run.response));
-  } else {
-    run = {
-      agentId: "run",
-      status: "skipped",
+    let run: HermesWorkflowStep;
+    if (plan.status === "done" && plan.run) {
+      run = await runStep("run", buildRunCommand(input, plan.run.response));
+    } else {
+      run = {
+        agentId: "run",
+        status: "skipped",
+        run: null,
+        error: "plan step failed, so run step was skipped",
+      };
+    }
+    workflow.steps.push(run);
+
+    const wiki = await runStep("wiki", buildWikiCommand(input, workflow.steps));
+    workflow.steps.push(wiki);
+
+    workflow.status = getWorkflowStatus(workflow.steps);
+  } catch (error) {
+    // Codex 토큰 소진, 네트워크 오류 등 예상치 못한 에러
+    workflow.status = "failed";
+    workflow.steps.push({
+      agentId: "plan",
+      status: "failed",
       run: null,
-      error: "plan step failed, so run step was skipped",
-    };
+      error: error instanceof Error ? error.message : "Unexpected workflow error",
+    });
   }
-  workflow.steps.push(run);
 
-  const wiki = await runStep("wiki", buildWikiCommand(input, workflow.steps));
-  workflow.steps.push(wiki);
-
-  workflow.status = getWorkflowStatus(workflow.steps);
   workflow.completedAt = new Date().toISOString();
   workflow.durationMs = Date.now() - startedAt;
-  workflow.nextAction = extractNextAction(wiki.run?.response) || fallbackNextAction(workflow);
+
+  const lastWikiStep = workflow.steps.findLast((s) => s.agentId === "wiki");
+  workflow.nextAction =
+    extractNextAction(lastWikiStep?.run?.response) || fallbackNextAction(workflow);
 
   try {
     workflow.vaultNotePath = await writeHermesWorkflowHandoff(workflow);
@@ -64,7 +85,44 @@ export async function runHermesWorkflow(
   }
 
   await appendWorkflowLog(workflow);
+
+  // 항상 Slack 알림 전송 (완료/중단/실패 모두)
+  void sendSlackNotification(workflow).catch(() => {
+    // Slack 실패해도 workflow 결과에 영향 없음
+  });
+
   return workflow;
+}
+
+async function sendSlackNotification(workflow: HermesWorkflowResult): Promise<void> {
+  const statusLabel =
+    workflow.status === "done"
+      ? "✅ 완료"
+      : workflow.status === "blocked"
+        ? "⏸ 중단"
+        : "❌ 실패";
+
+  const stepSummary = workflow.steps
+    .map((s) => {
+      const icon = s.status === "done" ? "✓" : s.status === "failed" ? "✗" : "−";
+      return `${icon} ${s.agentId}`;
+    })
+    .join("  ");
+
+  const durationSec = Math.round(workflow.durationMs / 1000);
+
+  const lines = [
+    `*Cosmic Hustle* ${statusLabel}`,
+    `목표: ${workflow.goal}`,
+    `단계: ${stepSummary}`,
+    `소요: ${durationSec}초`,
+    workflow.nextAction ? `다음: ${workflow.nextAction}` : null,
+    workflow.vaultNotePath ? `handoff: ${workflow.vaultNotePath}` : null,
+  ].filter(Boolean) as string[];
+
+  await execFileAsync(hermesBin, ["send", "--to", "slack:ai-report", lines.join("\n")], {
+    timeout: 15_000,
+  });
 }
 
 export async function getHermesWorkflowHistory(limit = 5): Promise<HermesWorkflowHistory> {

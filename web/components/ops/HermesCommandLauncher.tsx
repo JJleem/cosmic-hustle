@@ -64,8 +64,8 @@ export default function HermesCommandLauncher() {
     <div className="rounded-md border border-white/10 bg-[#14181d]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Hermes Command Launcher</h2>
-          <p className="text-xs text-zinc-500">V1: dashboard to Hermes to local run log</p>
+          <h2 className="text-sm font-semibold text-white">헤르메스 명령 실행</h2>
+          <p className="text-xs text-zinc-500">V1: 대시보드 → 헤르메스 → 로컬 런 로그</p>
         </div>
         <button
           type="button"
@@ -74,7 +74,7 @@ export default function HermesCommandLauncher() {
           className="inline-flex h-9 items-center gap-2 rounded-md bg-amber-300 px-3 text-sm font-semibold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Run
+          실행
         </button>
       </div>
 
@@ -92,7 +92,7 @@ export default function HermesCommandLauncher() {
               }`}
             >
               <span>{id}</span>
-              <span className="text-xs text-zinc-500">Hermes</span>
+              <span className="text-xs text-zinc-500">에이전트</span>
             </button>
           ))}
         </div>
@@ -123,7 +123,7 @@ export default function HermesCommandLauncher() {
               </div>
               {run.vaultNoteError ? (
                 <div className="mb-3 rounded border border-amber-300/20 bg-amber-300/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
-                  Vault note failed: {run.vaultNoteError}
+                  볼트 노트 오류: {run.vaultNoteError}
                 </div>
               ) : null}
               <div className="flex gap-3">
@@ -139,7 +139,7 @@ export default function HermesCommandLauncher() {
             <div className="rounded-md border border-white/10 bg-[#0f1216]">
               <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                  Recent Hermes Runs
+                  최근 헤르메스 실행
                 </p>
                 <TerminalSquare className="h-4 w-4 text-zinc-500" />
               </div>
@@ -163,7 +163,7 @@ export default function HermesCommandLauncher() {
                     </div>
                   ))
                 ) : (
-                  <p className="px-3 py-4 text-sm text-zinc-500">No local Hermes runs yet.</p>
+                  <p className="px-3 py-4 text-sm text-zinc-500">아직 헤르메스 실행 기록이 없습니다.</p>
                 )}
               </div>
             </div>
@@ -171,13 +171,13 @@ export default function HermesCommandLauncher() {
             <div className="rounded-md border border-white/10 bg-[#0f1216] p-3">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-amber-300" />
-                <p className="text-sm font-semibold text-zinc-100">Vault</p>
+                <p className="text-sm font-semibold text-zinc-100">볼트</p>
               </div>
               <p className="mt-3 text-sm text-zinc-400">
-                {history?.vault.available ? "Connected" : "Unavailable"}
+                {history?.vault.available ? "연결됨" : "연결 불가"}
               </p>
               <p className="mt-1 break-all text-xs leading-5 text-zinc-500">
-                {history?.vault.path ?? "Checking local vault..."}
+                {history?.vault.path ?? "로컬 볼트 확인 중..."}
               </p>
               {history?.vault.latestHandoffPath ? (
                 <p className="mt-3 break-all text-xs leading-5 text-emerald-300">

@@ -63,8 +63,8 @@ export default function HermesWorkflowLauncher() {
     <div className="rounded-md border border-white/10 bg-[#14181d]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Hermes Team Workflow</h2>
-          <p className="text-xs text-zinc-500">V1: plan → run → wiki, with wiki cleanup</p>
+          <h2 className="text-sm font-semibold text-white">헤르메스 팀 워크플로우</h2>
+          <p className="text-xs text-zinc-500">V1: plan → run → wiki 순서 실행</p>
         </div>
         <button
           type="button"
@@ -73,7 +73,7 @@ export default function HermesWorkflowLauncher() {
           className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-300 px-3 text-sm font-semibold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          Team Run
+          팀 실행
         </button>
       </div>
 
@@ -117,14 +117,14 @@ export default function HermesWorkflowLauncher() {
                       </span>
                     </div>
                     <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">
-                      {step.run?.response ?? step.error ?? "Waiting"}
+                      {step.run?.response ?? step.error ?? "대기 중"}
                     </p>
                   </div>
                 ))}
               </div>
               <div className="mt-3 rounded-md border border-white/10 bg-[#0f1216] p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                  Next Action
+                  다음 액션
                 </p>
                 <p className="mt-2 text-sm leading-6 text-zinc-300">{activeWorkflow.nextAction}</p>
               </div>
@@ -135,7 +135,7 @@ export default function HermesWorkflowLauncher() {
         <div className="rounded-md border border-white/10 bg-[#0f1216]">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Workflow History
+              워크플로우 기록
             </p>
             <Workflow className="h-4 w-4 text-zinc-500" />
           </div>
@@ -161,7 +161,7 @@ export default function HermesWorkflowLauncher() {
             ) : (
               <div className="flex gap-3 px-3 py-4">
                 <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
-                <p className="text-sm leading-5 text-zinc-500">No team workflow yet.</p>
+                <p className="text-sm leading-5 text-zinc-500">아직 팀 워크플로우 실행 기록이 없습니다.</p>
               </div>
             )}
           </div>
