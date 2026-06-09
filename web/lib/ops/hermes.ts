@@ -50,7 +50,7 @@ export function isLocalRequest(request: Request): boolean {
 export async function runHermesAgent(input: HermesRunRequest): Promise<HermesRunResult> {
   const startedAt = Date.now();
   const agentPrompt = await readAgentPrompt(input.agentId);
-  const prompt = buildPrompt(agentPrompt, input);
+  const prompt = await buildPrompt(agentPrompt, input);
   const hermesBin = process.env.HERMES_BIN ?? path.join(homedir(), ".local/bin/hermes");
 
   let stdout = "";
@@ -111,7 +111,8 @@ async function readAgentPrompt(agentId: HermesAgentId): Promise<string> {
   return readFile(promptPath, "utf8");
 }
 
-function buildPrompt(agentPrompt: string, input: HermesRunRequest): string {
+async function buildPrompt(agentPrompt: string, input: HermesRunRequest): Promise<string> {
+  const vaultContext = await loadVaultContext(input.agentId);
   return [
     "You are being invoked by the Cosmic Hustle local operations dashboard.",
     "Use the following employee role instructions for this run.",
@@ -120,11 +121,39 @@ function buildPrompt(agentPrompt: string, input: HermesRunRequest): string {
     agentPrompt.trim(),
     "```",
     "",
+    vaultContext
+      ? `Project context from Obsidian vault:\n\`\`\`markdown\n${vaultContext}\n\`\`\`\n`
+      : null,
     "Dashboard command:",
     input.command.trim(),
     "",
     "Return the best useful result for this command. Do not modify files unless the command explicitly asks you to.",
-  ].join("\n");
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
+async function loadVaultContext(agentId: HermesAgentId): Promise<string> {
+  const vaultPath =
+    process.env.COSMIC_HUSTLE_VAULT_PATH ??
+    path.join(homedir(), "Desktop/repository/cosmic-hustle-vault");
+
+  const targets = [
+    path.join(vaultPath, "projects", "cosmic-hustle.md"),
+    path.join(vaultPath, "agents", `${agentId}.md`),
+  ];
+
+  const parts = await Promise.all(
+    targets.map(async (f) => {
+      try {
+        return (await readFile(f, "utf8")).trim();
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return parts.filter(Boolean).join("\n\n---\n\n");
 }
 
 function parseHermesOutput(stdout: string): { sessionId: string | null; response: string } {
