@@ -1182,15 +1182,9 @@ async def generate_blog_post(
             user_content += "\n당신의 관점에서 가장 흥미로운 내용을 골라 블로그 포스트를 작성해주세요."
         user_content += "\n\n포스트 전체를 다 작성한 뒤, 맨 끝에 {{THUMBNAIL: ...}} 태그를 붙이세요. 글 내용을 충분히 읽고 그 내용을 직접 반영한 씬을 묘사해야 합니다."
 
-    user_content += (
-        "\n\n【WebSearch 사용 지침】 수치·날짜·출처가 불확실하면 WebSearch로 직접 확인할 것. "
-        "글을 쓰다가 팩트가 필요하면 검색 후 반영하세요. 검색 없이 추정 수치를 쓰는 것은 금지."
-    )
-
     message = await client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=8000,
-        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 4}],
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
     )
