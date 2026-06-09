@@ -111,22 +111,22 @@ async function sendSlackNotification(workflow: HermesWorkflowResult): Promise<vo
         ? "⏸ 중단"
         : "❌ 실패";
 
-  const stepSummary = workflow.steps
-    .map((s) => {
-      const icon = s.status === "done" ? "✓" : s.status === "failed" ? "✗" : "−";
-      return `${icon} ${s.agentId}`;
-    })
-    .join("  ");
-
   const durationSec = Math.round(workflow.durationMs / 1000);
+
+  const stepLines = workflow.steps.map((s) => {
+    const icon = s.status === "done" ? "✓" : s.status === "failed" ? "✗" : "−";
+    const content = s.run?.response ?? s.error ?? "출력 없음";
+    const preview = content.replace(/\s+/g, " ").trim().slice(0, 150);
+    return `*${icon} ${s.agentId}*\n${preview}${content.length > 150 ? "..." : ""}`;
+  });
 
   const lines = [
     `*Cosmic Hustle* ${statusLabel}`,
-    `목표: ${workflow.goal}`,
-    `단계: ${stepSummary}`,
-    `소요: ${durationSec}초`,
-    workflow.nextAction ? `다음: ${workflow.nextAction}` : null,
-  ].filter(Boolean) as string[];
+    `목표: ${workflow.goal}  ·  소요: ${durationSec}초`,
+    "",
+    ...stepLines,
+    workflow.nextAction ? `\n*다음 액션:* ${workflow.nextAction}` : null,
+  ].filter((l) => l !== null) as string[];
 
   await sendSlackMessage(lines.join("\n"));
 }
