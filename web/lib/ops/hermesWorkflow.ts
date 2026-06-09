@@ -38,6 +38,9 @@ export async function runHermesWorkflow(
     vaultNotePath: null,
   };
 
+  // 시작 알림
+  void sendSlackMessage(`⚙️ *Cosmic Hustle* 작업 시작\n목표: ${workflow.goal}`).catch(() => {});
+
   try {
     const plan = await runStep("plan", buildPlanCommand(input));
     workflow.steps.push(plan);
@@ -94,6 +97,12 @@ export async function runHermesWorkflow(
   return workflow;
 }
 
+async function sendSlackMessage(message: string): Promise<void> {
+  await execFileAsync(hermesBin, ["send", "--to", "slack:ai-report", message], {
+    timeout: 15_000,
+  });
+}
+
 async function sendSlackNotification(workflow: HermesWorkflowResult): Promise<void> {
   const statusLabel =
     workflow.status === "done"
@@ -120,9 +129,7 @@ async function sendSlackNotification(workflow: HermesWorkflowResult): Promise<vo
     workflow.vaultNotePath ? `handoff: ${workflow.vaultNotePath}` : null,
   ].filter(Boolean) as string[];
 
-  await execFileAsync(hermesBin, ["send", "--to", "slack:ai-report", lines.join("\n")], {
-    timeout: 15_000,
-  });
+  await sendSlackMessage(lines.join("\n"));
 }
 
 export async function getHermesWorkflowHistory(limit = 5): Promise<HermesWorkflowHistory> {
