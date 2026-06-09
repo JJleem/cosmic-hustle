@@ -562,7 +562,7 @@ def _has_title_overlap(rss_result: str, recent_titles: list[str], threshold: int
     return matched >= threshold
 
 
-def _is_rss_stale(feed, max_age_days: int = 30) -> bool:
+def _is_rss_stale(feed, max_age_days: int = 14) -> bool:
     """최상위 3개 항목 중 max_age_days 이내 항목이 하나도 없으면 True."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
     for entry in feed.entries[:3]:
