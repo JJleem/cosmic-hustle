@@ -523,12 +523,44 @@ _WEBSEARCH_PROMPTS: dict[str, str] = {
         "반드시 아래 형식으로 5개만 출력:\n"
         "- [서비스/기술명]: [어떤 소식인지 한 줄] (출처: 매체명, 날짜)"
     ),
+    "ka": (
+        "최근 한 달 내 한국 소비 트렌드, 생활 통계, 행동 데이터 인사이트를 찾아줘. "
+        "앱 사용 패턴, 소비 변화, 설문 결과, 연구 발표 등. 정치·연예인 제외. "
+        "반드시 아래 형식으로 5개만 출력:\n"
+        "- [주제]: [핵심 수치나 인사이트 한 줄] (출처: 기관명·매체명)"
+    ),
+    "over": (
+        "최근 한 달 내 한국 사회에서 화제된 인간적인 이야기나 사회 현상을 찾아줘. "
+        "감동적인 사연, 공감되는 트렌드, 세대 변화, 일상의 작은 혁명 등. 정치·연예인 제외. "
+        "반드시 아래 형식으로 5개만 출력:\n"
+        "- [현상/이야기]: [왜 화제인지 한 줄] (출처: 매체명)"
+    ),
+    "pixel": (
+        "최근 한 달 내 디자인·브랜드·앱 UI 분야 새 소식을 찾아줘. "
+        "리브랜딩, 앱 개편, 패키지 디자인 변화, 디자인 트렌드 등. 정치·연예인 제외. "
+        "반드시 아래 형식으로 5개만 출력:\n"
+        "- [브랜드/서비스명]: [어떤 디자인 변화인지 한 줄] (출처: 매체명)"
+    ),
 }
 
 
 def _has_overlap(context: str, tags: list[str], threshold: int = 2) -> bool:
     """trending_context에 frequent_tags 항목이 threshold개 이상 등장하면 True."""
     return sum(1 for t in tags if t in context) >= threshold
+
+
+def _is_rss_stale(feed, max_age_days: int = 30) -> bool:
+    """최상위 3개 항목 중 max_age_days 이내 항목이 하나도 없으면 True."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    for entry in feed.entries[:3]:
+        pub = entry.get("published_parsed")
+        if pub:
+            try:
+                if datetime(*pub[:6], tzinfo=timezone.utc) >= cutoff:
+                    return False
+            except Exception:
+                pass
+    return True
 
 
 async def _fetch_websearch(agent_id: str) -> str:
@@ -549,20 +581,19 @@ async def _fetch_websearch(agent_id: str) -> str:
 
 
 async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None, agent_recent_tags: list[str] | None = None) -> str:
-    """에이전트별 트렌드 수집.
-    - ping·wiki: WebSearch (RSS 폴백)
-    - 나머지: RSS → frequent_tags 겹치면 WebSearch → 그래도 겹치면 빈 문자열(자유 작성)
-    buzz는 agent_recent_tags를 반영한 동적 쿼리 사용.
+    """에이전트별 트렌드 수집 폭포수 로직.
+    1. WebSearch 전용 에이전트(ping·pocke): WebSearch → 실패 시 RSS
+    2. 나머지: RSS → (stale·비어있음·frequent_tags 겹침) 중 하나라도 해당하면 WebSearch → WebSearch도 없으면 자유 작성("")
     """
 
-    # WebSearch 전용 에이전트
+    # 1. WebSearch 전용 에이전트
     if agent_id in _WEBSEARCH_AGENTS:
         result = await _fetch_websearch(agent_id)
         if result:
             return result
         # 실패 시 RSS 폴백
 
-    # RSS
+    # 2. RSS
     import feedparser
     from urllib.parse import quote
 
@@ -573,6 +604,8 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
         q = query or AGENT_SEARCH_QUERIES.get(agent_id, "최신 트렌드 뉴스")
     url = f"https://news.google.com/rss/search?q={quote(q)}&hl=ko&gl=KR&ceid=KR:ko"
 
+    feed = None
+    rss_result = ""
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -587,16 +620,24 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
         rss_result = "\n".join(lines)
     except Exception as e:
         logger.warning(f"Google 뉴스 RSS 검색 실패 ({agent_id}): {e}")
-        rss_result = ""
 
-    # RSS 결과가 frequent_tags와 많이 겹치면 WebSearch로 대체 시도
-    if frequent_tags and _has_overlap(rss_result, frequent_tags) and agent_id in _WEBSEARCH_PROMPTS:
-        logger.info(f"RSS가 frequent_tags와 겹침 ({agent_id}) → WebSearch 시도")
+    # 3. WebSearch 폴백 조건: stale·비어있음·frequent_tags 겹침
+    stale = _is_rss_stale(feed) if feed else True
+    overlap = bool(frequent_tags and _has_overlap(rss_result, frequent_tags))
+
+    if (stale or not rss_result or overlap) and agent_id in _WEBSEARCH_PROMPTS:
+        reason = "stale" if stale else ("empty" if not rss_result else "overlap")
+        logger.info(f"RSS {reason} ({agent_id}) → WebSearch 시도")
         ws_result = await _fetch_websearch(agent_id)
-        if ws_result and not _has_overlap(ws_result, frequent_tags):
-            logger.info(f"WebSearch 폴백 성공 ({agent_id})")
+        if ws_result:
+            logger.info(f"WebSearch 성공 ({agent_id})")
             return ws_result
-        logger.info(f"WebSearch도 겹치거나 비어있음 ({agent_id}) → 자유 작성")
+        logger.info(f"WebSearch도 비어있음 ({agent_id}) → 자유 작성")
+        return ""
+
+    # 4. WebSearch 프롬프트 없고 RSS도 stale·비어있음 → 자유 작성
+    if stale or not rss_result:
+        logger.info(f"RSS stale/empty ({agent_id}), WebSearch 없음 → 자유 작성")
         return ""
 
     return rss_result
