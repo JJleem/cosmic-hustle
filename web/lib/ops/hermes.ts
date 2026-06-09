@@ -1,6 +1,6 @@
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { access, mkdir, readFile, writeFile } from "fs/promises";
 import { homedir } from "os";
 import path from "path";
 import { promisify } from "util";
@@ -11,7 +11,7 @@ import {
   type HermesRunRequest,
   type HermesRunResult,
 } from "@/lib/ops/hermesAgents";
-import { getObsidianStatus, writeHermesRunHandoff } from "@/lib/ops/obsidian";
+import { getObsidianStatus, obsidianVaultPath, writeHermesRunHandoff } from "@/lib/ops/obsidian";
 
 const execFileAsync = promisify(execFile);
 
@@ -55,6 +55,7 @@ export async function runHermesAgent(input: HermesRunRequest): Promise<HermesRun
 
   let stdout = "";
   try {
+    await access(hermesBin);
     const result = await execFileAsync(
       hermesBin,
       [
@@ -74,6 +75,11 @@ export async function runHermesAgent(input: HermesRunRequest): Promise<HermesRun
     stdout = result.stdout;
   } catch (error) {
     const err = error as ExecError;
+    if ("code" in err && err.code === "ENOENT") {
+      throw new Error(
+        `Hermes binary not found at ${hermesBin}. Install Hermes or set HERMES_BIN to the executable path.`,
+      );
+    }
     const detail = [err.message, err.stderr, err.stdout].filter(Boolean).join("\n\n");
     throw new Error(detail || "Hermes command failed");
   }
@@ -134,13 +140,9 @@ async function buildPrompt(agentPrompt: string, input: HermesRunRequest): Promis
 }
 
 async function loadVaultContext(agentId: HermesAgentId): Promise<string> {
-  const vaultPath =
-    process.env.COSMIC_HUSTLE_VAULT_PATH ??
-    path.join(homedir(), "Desktop/repository/cosmic-hustle-vault");
-
   const targets = [
-    path.join(vaultPath, "projects", "cosmic-hustle.md"),
-    path.join(vaultPath, "agents", `${agentId}.md`),
+    path.join(obsidianVaultPath, "projects", "cosmic-hustle.md"),
+    path.join(obsidianVaultPath, "agents", `${agentId}.md`),
   ];
 
   const parts = await Promise.all(

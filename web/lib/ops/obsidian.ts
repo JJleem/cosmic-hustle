@@ -1,10 +1,18 @@
+import { existsSync } from "fs";
 import { mkdir, readdir, stat, writeFile } from "fs/promises";
+import { homedir } from "os";
 import path from "path";
 import type { HermesRunResult, HermesWorkflowResult } from "@/lib/ops/hermesAgents";
 
-const defaultVaultPath = "/Users/carima_mac/Desktop/repository/cosmic-hustle-vault";
+const defaultVaultCandidates = [
+  process.env.COSMIC_HUSTLE_VAULT_PATH,
+  path.join(homedir(), "Desktop/molt_repository/cosmic-hustle-vault"),
+  path.join(homedir(), "Desktop/repository/cosmic-hustle-vault"),
+  "/Users/carima_mac/Desktop/repository/cosmic-hustle-vault",
+].filter((candidate): candidate is string => Boolean(candidate));
 
-export const obsidianVaultPath = process.env.COSMIC_HUSTLE_VAULT_PATH ?? defaultVaultPath;
+export const obsidianVaultPath =
+  defaultVaultCandidates.find((candidate) => existsSync(candidate)) ?? defaultVaultCandidates[0];
 
 export type ObsidianStatus = {
   path: string;
@@ -61,7 +69,7 @@ async function findLatestHandoffPath(): Promise<string | null> {
     const entries = await readdir(logsDir, { withFileTypes: true });
     const files = await Promise.all(
       entries
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "README.md")
         .map(async (entry) => {
           const absolutePath = path.join(logsDir, entry.name);
           return {
