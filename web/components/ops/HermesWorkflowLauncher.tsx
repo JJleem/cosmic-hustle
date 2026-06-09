@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GitBranch, Loader2, Play, Workflow } from "lucide-react";
 import type {
   HermesWorkflowHistory,
+  HermesWorkflowJob,
   HermesWorkflowResult,
 } from "@/lib/ops/hermesAgents";
 
@@ -13,15 +14,11 @@ const defaultGoal =
 export default function HermesWorkflowLauncher() {
   const [goal, setGoal] = useState(defaultGoal);
   const [workflow, setWorkflow] = useState<HermesWorkflowResult | null>(null);
+  const [job, setJob] = useState<HermesWorkflowJob | null>(null);
   const [history, setHistory] = useState<HermesWorkflowHistory | null>(null);
   const [error, setError] = useState("");
-  const [isRunning, setIsRunning] = useState(false);
 
-  useEffect(() => {
-    void refreshHistory();
-  }, []);
-
-  async function refreshHistory() {
+  const refreshHistory = useCallback(async () => {
     try {
       const response = await fetch("/api/ops/hermes/workflow");
       if (!response.ok) return;
@@ -29,14 +26,61 @@ export default function HermesWorkflowLauncher() {
     } catch {
       setHistory(null);
     }
-  }
+  }, []);
+
+  const refreshJob = useCallback(
+    async (jobId: string, isCancelled: () => boolean) => {
+    try {
+      const response = await fetch(`/api/ops/hermes/workflow?jobId=${encodeURIComponent(jobId)}`);
+      if (!response.ok || isCancelled()) return;
+      const nextJob = (await response.json()) as HermesWorkflowJob;
+      setJob(nextJob);
+      setWorkflow(nextJob.workflow);
+      if (nextJob.status !== "queued" && nextJob.status !== "running") {
+        await refreshHistory();
+      }
+    } catch {
+      if (!isCancelled()) {
+        setError("워크플로우 상태를 불러오지 못했습니다.");
+      }
+    }
+    },
+    [refreshHistory],
+  );
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void refreshHistory();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [refreshHistory]);
+
+  useEffect(() => {
+    if (!job || (job.status !== "queued" && job.status !== "running")) return;
+
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+    const interval = window.setInterval(() => {
+      void refreshJob(job.id, isCancelled);
+    }, 2000);
+
+    const initialPoll = window.setTimeout(() => {
+      void refreshJob(job.id, isCancelled);
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initialPoll);
+      window.clearInterval(interval);
+    };
+  }, [job, refreshJob]);
 
   async function submitWorkflow() {
+    const isRunning = job?.status === "queued" || job?.status === "running";
     if (!goal.trim() || isRunning) return;
 
-    setIsRunning(true);
     setError("");
     setWorkflow(null);
+    setJob(null);
 
     try {
       const response = await fetch("/api/ops/hermes/workflow", {
@@ -48,23 +92,24 @@ export default function HermesWorkflowLauncher() {
       if (!response.ok) {
         throw new Error(data.message ?? data.error ?? `HTTP ${response.status}`);
       }
-      setWorkflow(data as HermesWorkflowResult);
+      const nextJob = data as HermesWorkflowJob;
+      setJob(nextJob);
+      setWorkflow(nextJob.workflow);
       await refreshHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hermes workflow failed");
-    } finally {
-      setIsRunning(false);
     }
   }
 
-  const activeWorkflow = workflow ?? history?.workflows[0] ?? null;
+  const isRunning = job?.status === "queued" || job?.status === "running";
+  const activeWorkflow = workflow ?? history?.activeJobs[0]?.workflow ?? history?.workflows[0] ?? null;
 
   return (
     <div className="rounded-md border border-white/10 bg-[#14181d]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-white">헤르메스 팀 워크플로우</h2>
-          <p className="text-xs text-zinc-500">V1: plan → run → wiki 순서 실행</p>
+          <p className="text-xs text-zinc-500">V1: plan → run → wiki · 백그라운드 실행</p>
         </div>
         <button
           type="button"
@@ -98,6 +143,7 @@ export default function HermesWorkflowLauncher() {
             <div className="rounded-md border border-emerald-300/20 bg-emerald-300/[0.06] p-3">
               <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                 <span>{activeWorkflow.status}</span>
+                {job?.currentAgentId ? <span>현재: {job.currentAgentId}</span> : null}
                 <span>{activeWorkflow.durationMs}ms</span>
                 {activeWorkflow.vaultNotePath ? <span>{activeWorkflow.vaultNotePath}</span> : null}
               </div>
@@ -110,6 +156,8 @@ export default function HermesWorkflowLauncher() {
                         className={`rounded border px-2 py-1 text-[11px] ${
                           step.status === "done"
                             ? "border-emerald-300/30 text-emerald-200"
+                            : step.status === "running"
+                              ? "border-sky-300/30 text-sky-200"
                             : "border-amber-300/30 text-amber-100"
                         }`}
                       >
@@ -140,6 +188,19 @@ export default function HermesWorkflowLauncher() {
             <Workflow className="h-4 w-4 text-zinc-500" />
           </div>
           <div className="divide-y divide-white/10">
+            {history?.activeJobs.length ? (
+              history.activeJobs.map((item) => (
+                <div key={item.id} className="grid gap-1 bg-sky-300/[0.04] px-3 py-2">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="font-semibold text-sky-200">{item.status}</span>
+                    <span className="shrink-0 text-zinc-500">
+                      {item.currentAgentId ? item.currentAgentId : "대기"}
+                    </span>
+                  </div>
+                  <p className="truncate text-sm text-zinc-400">{item.goal}</p>
+                </div>
+              ))
+            ) : null}
             {history?.workflows.length ? (
               history.workflows.map((item) => (
                 <div key={item.id} className="grid gap-1 px-3 py-2">

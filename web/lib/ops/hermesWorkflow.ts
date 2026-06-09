@@ -5,6 +5,8 @@ import { homedir } from "os";
 import path from "path";
 import { promisify } from "util";
 import type {
+  HermesAgentId,
+  HermesWorkflowJob,
   HermesWorkflowHistory,
   HermesWorkflowRequest,
   HermesWorkflowResult,
@@ -20,34 +22,157 @@ const logDir = path.join(process.cwd(), ".ops");
 const workflowLogPath = path.join(logDir, "hermes-workflows.jsonl");
 const defaultWorkflowLogLimit = 50;
 
-export type { HermesWorkflowHistory, HermesWorkflowRequest, HermesWorkflowResult };
+type HermesWorkflowRuntimeStore = {
+  jobs: Map<string, HermesWorkflowJob>;
+};
 
-export async function runHermesWorkflow(
+type HermesWorkflowRunOptions = {
+  id?: string;
+  onUpdate?: (workflow: HermesWorkflowResult) => void;
+};
+
+const runtimeStore = getRuntimeStore();
+
+export type { HermesWorkflowHistory, HermesWorkflowJob, HermesWorkflowRequest, HermesWorkflowResult };
+
+function getRuntimeStore(): HermesWorkflowRuntimeStore {
+  const globalStore = globalThis as typeof globalThis & {
+    __cosmicHermesWorkflowStore?: HermesWorkflowRuntimeStore;
+  };
+  globalStore.__cosmicHermesWorkflowStore ??= { jobs: new Map() };
+  return globalStore.__cosmicHermesWorkflowStore;
+}
+
+function createWorkflowShell(
   input: HermesWorkflowRequest,
-): Promise<HermesWorkflowResult> {
-  const startedAt = Date.now();
-  const workflow: HermesWorkflowResult = {
-    id: randomUUID(),
+  id: string | undefined = undefined,
+  createdAt = new Date().toISOString(),
+  status: HermesWorkflowResult["status"],
+): HermesWorkflowResult {
+  return {
+    id: id ?? randomUUID(),
     goal: input.goal.trim(),
-    status: "done",
+    status,
     steps: [],
-    createdAt: new Date().toISOString(),
-    completedAt: new Date().toISOString(),
+    createdAt,
+    completedAt: "",
     durationMs: 0,
     nextAction: "",
     vaultNotePath: null,
   };
+}
+
+async function executeWorkflowJob(id: string, input: HermesWorkflowRequest): Promise<void> {
+  const job = runtimeStore.jobs.get(id);
+  if (!job) return;
+
+  job.status = "running";
+  job.updatedAt = new Date().toISOString();
+  job.workflow.status = "running";
+
+  try {
+    const workflow = await runHermesWorkflow(input, {
+      id,
+      onUpdate: (nextWorkflow) => {
+        const activeJob = runtimeStore.jobs.get(id);
+        if (!activeJob) return;
+        activeJob.workflow = nextWorkflow;
+        activeJob.status = nextWorkflow.status;
+        activeJob.updatedAt = new Date().toISOString();
+        activeJob.currentAgentId = getCurrentAgentId(nextWorkflow.steps);
+      },
+    });
+    job.workflow = workflow;
+    job.status = workflow.status;
+    job.currentAgentId = null;
+    job.completedAt = workflow.completedAt;
+    job.updatedAt = workflow.completedAt;
+  } catch (error) {
+    job.status = "failed";
+    job.error = error instanceof Error ? error.message : "Hermes workflow job failed";
+    job.currentAgentId = null;
+    job.completedAt = new Date().toISOString();
+    job.updatedAt = job.completedAt;
+    job.workflow.status = "failed";
+    job.workflow.completedAt = job.completedAt;
+    job.workflow.durationMs = Date.now() - new Date(job.createdAt).getTime();
+    job.workflow.nextAction = "실패한 workflow job을 확인하고 같은 목표로 다시 실행한다.";
+  }
+}
+
+function getActiveWorkflowJobs(): HermesWorkflowJob[] {
+  return [...runtimeStore.jobs.values()]
+    .filter((job) => job.status === "queued" || job.status === "running")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function createPendingStep(
+  agentId: HermesAgentId,
+  status: "queued" | "running",
+): HermesWorkflowStep {
+  return { agentId, status, run: null };
+}
+
+function getCurrentAgentId(steps: HermesWorkflowStep[]): HermesAgentId | null {
+  return steps.find((step) => step.status === "running")?.agentId ?? null;
+}
+
+function cloneWorkflow(workflow: HermesWorkflowResult): HermesWorkflowResult {
+  return {
+    ...workflow,
+    steps: workflow.steps.map((step) => ({ ...step })),
+  };
+}
+
+export function startHermesWorkflowJob(input: HermesWorkflowRequest): HermesWorkflowJob {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const workflow = createWorkflowShell(input, id, now, "queued");
+  const job: HermesWorkflowJob = {
+    id,
+    goal: workflow.goal,
+    status: "queued",
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+    currentAgentId: null,
+    workflow,
+  };
+
+  runtimeStore.jobs.set(id, job);
+  void executeWorkflowJob(id, input);
+  return job;
+}
+
+export function getHermesWorkflowJob(id: string): HermesWorkflowJob | null {
+  return runtimeStore.jobs.get(id) ?? null;
+}
+
+export async function runHermesWorkflow(
+  input: HermesWorkflowRequest,
+  options: HermesWorkflowRunOptions = {},
+): Promise<HermesWorkflowResult> {
+  const startedAt = Date.now();
+  const workflow = createWorkflowShell(input, options.id, new Date().toISOString(), "running");
+  const notify = () => options.onUpdate?.(cloneWorkflow(workflow));
 
   // 시작 알림
   void sendSlackMessage(`⚙️ *Cosmic Hustle* 작업 시작\n목표: ${workflow.goal}`).catch(() => {});
+  notify();
 
   try {
+    workflow.steps.push(createPendingStep("plan", "running"));
+    notify();
     const plan = await runStep("plan", buildPlanCommand(input));
-    workflow.steps.push(plan);
+    workflow.steps[workflow.steps.length - 1] = plan;
+    notify();
 
     let run: HermesWorkflowStep;
     if (plan.status === "done" && plan.run) {
+      workflow.steps.push(createPendingStep("run", "running"));
+      notify();
       run = await runStep("run", buildRunCommand(input, plan.run.response));
+      workflow.steps[workflow.steps.length - 1] = run;
     } else {
       run = {
         agentId: "run",
@@ -55,11 +180,15 @@ export async function runHermesWorkflow(
         run: null,
         error: "plan step failed, so run step was skipped",
       };
+      workflow.steps.push(run);
     }
-    workflow.steps.push(run);
+    notify();
 
+    workflow.steps.push(createPendingStep("wiki", "running"));
+    notify();
     const wiki = await runStep("wiki", buildWikiCommand(input, workflow.steps));
-    workflow.steps.push(wiki);
+    workflow.steps[workflow.steps.length - 1] = wiki;
+    notify();
 
     workflow.status = getWorkflowStatus(workflow.steps);
   } catch (error) {
@@ -71,6 +200,7 @@ export async function runHermesWorkflow(
       run: null,
       error: error instanceof Error ? error.message : "Unexpected workflow error",
     });
+    notify();
   }
 
   workflow.completedAt = new Date().toISOString();
@@ -94,6 +224,7 @@ export async function runHermesWorkflow(
     // Slack 실패해도 workflow 결과에 영향 없음
   });
 
+  notify();
   return workflow;
 }
 
@@ -133,7 +264,7 @@ async function sendSlackNotification(workflow: HermesWorkflowResult): Promise<vo
 
 export async function getHermesWorkflowHistory(limit = 5): Promise<HermesWorkflowHistory> {
   const [workflows, vault] = await Promise.all([readWorkflowLog(limit), getObsidianStatus()]);
-  return { workflows, vault };
+  return { workflows, activeJobs: getActiveWorkflowJobs(), vault };
 }
 
 async function runStep(
@@ -148,9 +279,20 @@ async function runStep(
       agentId,
       status: "failed",
       run: null,
-      error: error instanceof Error ? error.message : "Hermes step failed",
+      error: summarizeStepError(error),
     };
   }
+}
+
+function summarizeStepError(error: unknown): string {
+  if (!(error instanceof Error)) return "Hermes step failed";
+
+  const [firstLine] = error.message.split("\n");
+  if (firstLine.startsWith("Command failed:")) {
+    return "Hermes step command failed";
+  }
+
+  return compactForPrompt(firstLine || "Hermes step failed", 300);
 }
 
 function buildPlanCommand(input: HermesWorkflowRequest): string {
@@ -175,7 +317,8 @@ function buildRunCommand(input: HermesWorkflowRequest, planOutput: string): stri
     "앞 단계 plan 요약:",
     compactForPrompt(planOutput, 900),
     "",
-    "plan의 handoff를 읽고, 실제 다음 작업 가능성과 확인 결과를 짧게 답해줘.",
+    "plan의 handoff를 읽고, 실제 다음 작업 가능성을 짧게 판단해줘.",
+    "이 workflow smoke 단계에서는 명령 실행, HTTP 호출, 파일 조회, 파일 수정 없이 답변만 해줘.",
     "",
     'JSON 코드블록 하나로만 답해줘: { "status": "done | blocked", "summary": "...", "handoff": "...", "next_action": "..." }',
   ].join("\n");
@@ -197,6 +340,7 @@ function buildWikiCommand(input: HermesWorkflowRequest, steps: HermesWorkflowSte
     stepSummary,
     "",
     "plan과 run이 목표를 향해 이어받아 작업했는지 판정하고, 다음 액션을 정리해줘.",
+    "이 workflow 정리 단계에서는 명령 실행, HTTP 호출, 파일 조회, 파일 수정 없이 답변만 해줘.",
     "3줄 이내로 답하되, 가능하면 next_action을 명확히 써줘.",
   ].join("\n");
 }

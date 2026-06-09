@@ -1,7 +1,9 @@
 import { isLocalRequest } from "@/lib/ops/hermes";
 import {
   getHermesWorkflowHistory,
+  getHermesWorkflowJob,
   runHermesWorkflow,
+  startHermesWorkflowJob,
   type HermesWorkflowRequest,
 } from "@/lib/ops/hermesWorkflow";
 
@@ -14,6 +16,16 @@ export async function GET(request: Request) {
       { error: "local_only", message: "Hermes workflows are only available from localhost." },
       { status: 403 },
     );
+  }
+
+  const url = new URL(request.url);
+  const jobId = url.searchParams.get("jobId");
+  if (jobId) {
+    const job = getHermesWorkflowJob(jobId);
+    if (!job) {
+      return Response.json({ error: "job_not_found" }, { status: 404 });
+    }
+    return Response.json(job);
   }
 
   const history = await getHermesWorkflowHistory();
@@ -40,11 +52,19 @@ export async function POST(request: Request) {
   }
 
   try {
-    const workflow = await runHermesWorkflow({
+    const asyncMode = body.async !== false;
+    const requestInput = {
       goal: body.goal.trim(),
       maxSteps: body.maxSteps,
-    });
-    return Response.json(workflow);
+    };
+
+    if (!asyncMode) {
+      const workflow = await runHermesWorkflow(requestInput);
+      return Response.json(workflow);
+    }
+
+    const job = startHermesWorkflowJob(requestInput);
+    return Response.json(job, { status: 202 });
   } catch (error) {
     return Response.json(
       {

@@ -20,7 +20,7 @@ export type { HermesRunRequest, HermesRunResult };
 type ExecError = Error & {
   stdout?: string;
   stderr?: string;
-  code?: number;
+  code?: number | string;
   signal?: NodeJS.Signals;
 };
 

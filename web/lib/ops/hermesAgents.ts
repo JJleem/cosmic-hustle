@@ -31,19 +31,22 @@ export type HermesRunHistory = {
 export type HermesWorkflowRequest = {
   goal: string;
   maxSteps?: number;
+  async?: boolean;
 };
 
 export type HermesWorkflowStep = {
   agentId: HermesAgentId;
-  status: "done" | "blocked" | "failed" | "skipped";
+  status: "queued" | "running" | "done" | "blocked" | "failed" | "skipped";
   run: HermesRunResult | null;
   error?: string;
 };
 
+export type HermesWorkflowStatus = "queued" | "running" | "done" | "blocked" | "failed";
+
 export type HermesWorkflowResult = {
   id: string;
   goal: string;
-  status: "done" | "blocked" | "failed";
+  status: HermesWorkflowStatus;
   steps: HermesWorkflowStep[];
   createdAt: string;
   completedAt: string;
@@ -53,8 +56,21 @@ export type HermesWorkflowResult = {
   vaultNoteError?: string;
 };
 
+export type HermesWorkflowJob = {
+  id: string;
+  goal: string;
+  status: HermesWorkflowStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  currentAgentId: HermesAgentId | null;
+  workflow: HermesWorkflowResult;
+  error?: string;
+};
+
 export type HermesWorkflowHistory = {
   workflows: HermesWorkflowResult[];
+  activeJobs: HermesWorkflowJob[];
   vault: {
     path: string;
     available: boolean;
