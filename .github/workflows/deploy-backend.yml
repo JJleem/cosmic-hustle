@@ -27,7 +27,6 @@ jobs:
           target: "~/"
           strip_components: 0
           rm: false
-          exclude: ".venv,__pycache__,*.pyc,.env"
 
       - name: Install dependencies & restart server
         uses: appleboy/ssh-action@v1.0.3
