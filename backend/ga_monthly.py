@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 # 글 쓰는 에이전트만 메모리 업데이트
 _WRITING_AGENTS = ["buzz", "over", "pixel", "ka"]
+GROWTH_MEMORY_START = "<!-- blog-growth-memory:start -->"
+GROWTH_MEMORY_END = "<!-- blog-growth-memory:end -->"
 
 KA_SYSTEM = """당신은 Cosmic Hustle의 카(유레카) 과장, 분석가입니다.
 다크서클이 짙고, 숫자에서 패턴을 찾으면 "찾았다!"를 외칩니다.
@@ -132,6 +134,26 @@ def _delta_str(curr: dict, prev: dict) -> str:
     return "\n".join(lines) if lines else "  변화 수치 없음"
 
 
+def _split_growth_memory(memory: str | None) -> tuple[str | None, str | None]:
+    if not memory:
+        return memory, None
+    start = memory.find(GROWTH_MEMORY_START)
+    end = memory.find(GROWTH_MEMORY_END)
+    if start < 0 or end < start:
+        return memory, None
+    end += len(GROWTH_MEMORY_END)
+    base = f"{memory[:start].rstrip()}\n\n{memory[end:].lstrip()}".strip()
+    growth = memory[start:end].strip()
+    return base or None, growth
+
+
+def _restore_growth_memory(memory: str, growth: str | None, limit: int = 1800) -> str:
+    if not growth:
+        return memory
+    updated = f"{memory.strip()}\n\n{growth}".strip() if memory.strip() else growth
+    return updated[-limit:].strip() if len(updated) > limit else updated
+
+
 async def _update_agent_memories(
     ka_analysis: str,
     buzz_suggestions: str,
@@ -175,6 +197,7 @@ async def _update_agent_memories(
         for agent_id in _WRITING_AGENTS:
             mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == agent_id).first()
             current_memory = mem_row.memory if mem_row else None
+            prompt_memory, growth_memory = _split_growth_memory(current_memory) if agent_id == "buzz" else (current_memory, None)
 
             # 현재 메모리를 히스토리에 스냅샷으로 저장
             db.add(AgentMemoryHistory(
@@ -214,7 +237,7 @@ async def _update_agent_memories(
 {buzz_suggestions}
 {prev_context}
 【현재 메모리 (업데이트 대상)】
-{current_memory or "없음 (첫 번째 기록)"}
+{prompt_memory or "없음 (첫 번째 기록)"}
 
 지시사항:
 1. {agent_id} 에이전트 글쓰기에 직접 적용 가능한 패턴만 추출
@@ -231,6 +254,8 @@ async def _update_agent_memories(
                 messages=[{"role": "user", "content": prompt}],
             )
             new_memory = msg.content[0].text.strip()[:1200]
+            if agent_id == "buzz":
+                new_memory = _restore_growth_memory(new_memory, growth_memory)
 
             if mem_row:
                 mem_row.memory = new_memory
