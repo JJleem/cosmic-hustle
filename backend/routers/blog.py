@@ -21,7 +21,7 @@ from blog_generator import (
     generate_intro_post, generate_intro_comments,
     generate_debate_post, generate_debate_comments,
     generate_discovery_post,
-    generate_quiz_post,
+    generate_quiz_post, _generate_thumbnail,
     request_gsc_indexing,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
@@ -440,10 +440,12 @@ async def trigger_generate_discovery(request: Request, topic: str | None = None,
 @router.post("/generate-quiz")
 async def trigger_generate_quiz(
     slug: str = "which-cosmic-hustle-ai-are-you",
+    force: bool = False,
     db: Session = Depends(get_db),
     _=Depends(_require_admin),
 ):
-    """퀴즈 포스트 콘텐츠 + 에이전트 댓글 생성/갱신. 기존 포스트 slug로 찾아서 content·tags·topic 업데이트."""
+    """퀴즈 포스트 콘텐츠 + 에이전트 댓글 + 썸네일 생성/갱신.
+    force=true: 기존 에이전트 댓글 삭제 후 재생성."""
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail=f"포스트 없음: {slug}")
@@ -453,8 +455,15 @@ async def trigger_generate_quiz(
     post.tags           = data["tags"]
     post.trending_topic = data["trending_topic"]
     post.agent_id       = "plan"
+    post.published      = True
 
-    # 에이전트 댓글이 아직 없으면 생성
+    # force=true면 기존 에이전트 댓글 삭제
+    if force:
+        db.query(BlogComment).filter(
+            BlogComment.post_id == post.id,
+            BlogComment.agent_id.isnot(None),
+        ).delete()
+
     has_agent_comments = db.query(BlogComment).filter(
         BlogComment.post_id == post.id,
         BlogComment.agent_id.isnot(None),
@@ -464,9 +473,23 @@ async def trigger_generate_quiz(
         for c in comments:
             db.add(BlogComment(**c))
 
+    # 썸네일 생성 (force 또는 기존 썸네일 없을 때)
+    if force or not post.thumbnail_url:
+        scene_prompt = await generate_scene_prompt_from_content("plan", post.title, data["content"])
+        thumbnail_url = await _generate_thumbnail("plan", scene_prompt)
+        if thumbnail_url:
+            post.thumbnail_url = thumbnail_url
+
     db.commit()
     db.refresh(post)
-    return {"slug": post.slug, "title": post.title, "tags": post.tags, "trending_topic": post.trending_topic}
+    return {
+        "slug": post.slug,
+        "title": post.title,
+        "tags": post.tags,
+        "trending_topic": post.trending_topic,
+        "published": post.published,
+        "thumbnail_url": post.thumbnail_url,
+    }
 
 
 @router.post("/quiz/{slug}/record")
