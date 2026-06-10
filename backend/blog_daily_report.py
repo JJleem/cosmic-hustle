@@ -302,6 +302,7 @@ def render_buzz_report(
     ga: dict,
     access_logs: dict,
     bot_signals: list[str],
+    judgement: str,
 ) -> str:
     visits_delta = snapshot["today_visits"] - snapshot["yesterday_visits"]
     delta_mark = "+" if visits_delta >= 0 else ""
@@ -381,9 +382,77 @@ def render_buzz_report(
 
     lines.extend([
         "",
-        "버즈 판단: 위 상위 태그/핫 신호를 섞어서 다음 글 제목은 더 직접적으로 가자. 바이럴 각은 숫자가 오른 포스트의 제목 패턴에서 먼저 찾기.",
+        f"버즈 판단: {judgement}",
     ])
     return "\n".join(lines)
+
+
+def _fallback_buzz_judgement(snapshot: dict, bot_signals: list[str]) -> str:
+    if bot_signals:
+        return "봇/저품질 신호가 있으니 조회수보다 GA 체류·채널을 우선 보고, 반응 상위 글의 제목 패턴만 다음 실험에 반영."
+    if snapshot["top_posts"]:
+        return "상위 글의 감성/직접 제목 패턴이 먹히는 중. 다음 글은 잘 먹힌 태그와 오늘 트렌드를 섞어 더 선명한 제목으로 가자."
+    return "데이터가 아직 얇음. 오늘은 트렌드 힌트 기반으로 짧고 직접적인 실험 글을 하나 쌓는 쪽이 좋음."
+
+
+async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> dict:
+    if os.environ.get("BLOG_REPORT_AI_JUDGEMENT", "1").lower() in ("0", "false", "no"):
+        return {"ok": False, "skipped": True, "text": _fallback_buzz_judgement(snapshot, bot_signals)}
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return {"ok": False, "skipped": True, "reason": "missing_anthropic_key", "text": _fallback_buzz_judgement(snapshot, bot_signals)}
+
+    overview = ga.get("overview") if ga.get("ok") else {}
+    payload = {
+        "date": snapshot["date"],
+        "db": {
+            "today": snapshot["today_visits"],
+            "yesterday": snapshot["yesterday_visits"],
+            "week": snapshot["week_visits"],
+            "post_views": snapshot["unique_post_views_today"],
+            "top_tags": snapshot["top_tags"][:5],
+            "top_posts": snapshot["top_posts"][:3],
+        },
+        "ga": {
+            "sessions": overview.get("sessions"),
+            "users": overview.get("total_users"),
+            "page_views": overview.get("page_views"),
+            "bounce_rate": overview.get("bounce_rate"),
+            "avg_session_sec": overview.get("avg_session_sec"),
+            "channels": ga.get("channels", [])[:3],
+        },
+        "logs": {
+            "source": access_logs.get("source"),
+            "top_ip_ratio": access_logs.get("top_ip_ratio"),
+            "top_paths": access_logs.get("top_paths", [])[:3],
+        },
+        "bot_signals": bot_signals[:3],
+        "headlines": headlines[:5],
+    }
+
+    prompt = f"""아래 블로그 성장 데이터를 보고 Cosmic Hustle의 마케터 버즈처럼 판단하세요.
+한국어로 3줄 이하, 450자 이하.
+반드시 포함:
+- 오늘 데이터 해석
+- 다음 글 주제/제목 방향 1개
+- 봇/저품질 유입 주의가 필요하면 짧게 경고
+
+데이터:
+{json.dumps(payload, ensure_ascii=False)}
+"""
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        msg = await client.messages.create(
+            model=os.environ.get("BLOG_REPORT_AI_MODEL", "claude-haiku-4-5-20251001"),
+            max_tokens=350,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = msg.content[0].text.strip()
+        return {"ok": True, "text": text[:700]}
+    except Exception as exc:
+        logger.warning("버즈 AI 판단 생성 실패: %s", exc)
+        return {"ok": False, "error": str(exc), "text": _fallback_buzz_judgement(snapshot, bot_signals)}
 
 
 def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> str:
@@ -454,7 +523,8 @@ async def build_daily_blog_report(db: Session, send_slack: bool = False, update_
     access_logs = analyze_access_logs()
     bot_signals = assess_bot_signals(snapshot, ga, access_logs)
     headlines = await fetch_trend_headlines()
-    text = render_buzz_report(snapshot, headlines, ga, access_logs, bot_signals)
+    judgement = await generate_buzz_judgement(snapshot, ga, access_logs, bot_signals, headlines)
+    text = render_buzz_report(snapshot, headlines, ga, access_logs, bot_signals, judgement["text"])
     should_update_memory = send_slack if update_memory is None else update_memory
     memory = update_buzz_growth_memory(db, snapshot, ga, access_logs, bot_signals, headlines) if should_update_memory else {"ok": False, "skipped": True}
     slack = await send_slack_report(text) if send_slack else {"ok": False, "skipped": True}
@@ -465,6 +535,7 @@ async def build_daily_blog_report(db: Session, send_slack: bool = False, update_
         "access_logs": access_logs,
         "bot_signals": bot_signals,
         "headlines": headlines,
+        "judgement": judgement,
         "memory": memory,
         "text": text,
         "slack": slack,
