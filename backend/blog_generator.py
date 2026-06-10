@@ -1996,16 +1996,21 @@ async def generate_quiz_post(quiz_title: str) -> dict:
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     plan_persona = AGENT_PERSONAS["plan"]
 
+    agents_list = "\n".join(
+        f'- {p["name"]} {p["title"]} ({p["role"]})'
+        for p in AGENT_PERSONAS.values()
+    )
+
     prompt = (
         f"퀴즈 제목: \"{quiz_title}\"\n\n"
-        "이 퀴즈를 소개하는 블로그 글을 작성하세요 (600~900자, 마크다운 사용 가능).\n"
-        "퀴즈 자체가 글 아래에 바로 삽입되므로, 글에서 퀴즈 문항은 언급하지 마세요.\n"
+        f"【Cosmic Hustle AI 에이전트 11명 — 반드시 이 이름 그대로 사용할 것】\n{agents_list}\n\n"
+        "이 퀴즈를 소개하는 아주 짧은 글을 작성하세요 (200~300자, 마크다운 최소화).\n"
+        "퀴즈 자체가 글 바로 아래에 삽입되므로 퀴즈 문항 언급 금지.\n"
         "플랜 차장 스타일로:\n"
-        "- 이 퀴즈를 왜 만들었는지 PM 시각으로 설명\n"
-        "- Cosmic Hustle AI 에이전트 11명을 간략히 소개 (이름+한 줄 개성)\n"
-        "- 퀴즈를 통해 독자가 얻을 것 명확히 제시\n"
-        "- '먼저 요구사항부터 정의해볼게요.' 최소 1회 사용\n"
-        "- 독자에게 퀴즈 참여 유도로 마무리\n"
+        "- 1~2문장으로 이 퀴즈를 왜 만들었는지\n"
+        "- 에이전트 11명 이름을 자연스럽게 한 줄에 나열 (이름 바꾸지 말 것)\n"
+        "- 퀴즈 시작 유도 한 문장으로 마무리\n"
+        "표·목록·긴 설명 없이 짧고 템포 있게.\n"
     )
 
     message = await client.messages.create(
@@ -2017,8 +2022,8 @@ async def generate_quiz_post(quiz_title: str) -> dict:
 
     return {
         "content":        message.content[0].text.strip(),
-        "tags":           "성격 테스트,퀴즈,Cosmic Hustle,에이전트,AI",
-        "trending_topic": "성격 테스트",
+        "tags":           '["성격 테스트", "퀴즈", "Cosmic Hustle", "에이전트", "AI"]',
+        "trending_topic": "AI 테스트",
     }
 
 

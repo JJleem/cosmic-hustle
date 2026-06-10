@@ -453,6 +453,16 @@ async def trigger_generate_quiz(
     post.tags           = data["tags"]
     post.trending_topic = data["trending_topic"]
 
+    # 에이전트 댓글이 아직 없으면 생성
+    has_agent_comments = db.query(BlogComment).filter(
+        BlogComment.post_id == post.id,
+        BlogComment.agent_id.isnot(None),
+    ).first() is not None
+    if not has_agent_comments:
+        comments = await generate_comments(post.id, post.agent_id, post.title, data["content"][:300])
+        for c in comments:
+            db.add(BlogComment(**c))
+
     db.commit()
     db.refresh(post)
     return {"slug": post.slug, "title": post.title, "tags": post.tags, "trending_topic": post.trending_topic}
