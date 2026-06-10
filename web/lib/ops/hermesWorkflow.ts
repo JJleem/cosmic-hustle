@@ -47,6 +47,11 @@ type HermesWorkflowRunOptions = {
   onUpdate?: (workflow: HermesWorkflowResult) => void;
 };
 
+type AssignmentParseResult = {
+  assignments: HermesAgentAssignment[];
+  warnings: string[];
+};
+
 const runtimeStore = getRuntimeStore();
 
 export type { HermesWorkflowHistory, HermesWorkflowJob, HermesWorkflowRequest, HermesWorkflowResult };
@@ -245,6 +250,8 @@ async function runDryProjectWorkflow(
     slug: `dry-${slugify(workflow.goal) || workflow.id.slice(0, 8)}`,
     assignments: [],
     notePaths: [],
+    assignmentSource: "fallback",
+    warnings: ["dryRun uses deterministic fallback assignments."],
   };
 
   const assignmentCount = Math.max(1, Math.min(4, Math.floor(input.maxAgents ?? 1)));
@@ -306,7 +313,13 @@ async function runProjectWorkflow(
   workflow: HermesWorkflowResult,
   notify: () => void,
 ): Promise<void> {
-  workflow.project = { slug: slugify(workflow.goal) || workflow.id.slice(0, 8), assignments: [], notePaths: [] };
+  workflow.project = {
+    slug: slugify(workflow.goal) || workflow.id.slice(0, 8),
+    assignments: [],
+    notePaths: [],
+    assignmentSource: "plan",
+    warnings: [],
+  };
 
   workflow.steps.push(createPendingStep("plan", "running"));
   notify();
@@ -314,8 +327,14 @@ async function runProjectWorkflow(
   workflow.steps[workflow.steps.length - 1] = plan;
   notify();
 
-  const assignments = pickAssignments(parseAssignments(plan.run?.response), input.maxAgents ?? 4);
+  const parsedAssignments = parseAssignments(plan.run?.response);
+  const assignments = pickAssignments(parsedAssignments.assignments, input.maxAgents ?? 4);
   workflow.project.assignments = assignments;
+  workflow.project.warnings = parsedAssignments.warnings;
+  workflow.project.assignmentSource = parsedAssignments.assignments.length ? "plan" : "fallback";
+  if (!parsedAssignments.assignments.length) {
+    workflow.project.warnings.push("No valid active assignment from plan; fallback assignments used.");
+  }
 
   for (const assignment of assignments) {
     workflow.steps.push(createPendingStep(assignment.agentId, "running"));
@@ -515,22 +534,42 @@ function buildProjectWikiCommand(
   ].join("\n");
 }
 
-function parseAssignments(response: string | undefined): HermesAgentAssignment[] {
-  if (!response) return [];
+function parseAssignments(response: string | undefined): AssignmentParseResult {
+  if (!response) {
+    return { assignments: [], warnings: ["Plan response was empty."] };
+  }
 
   const jsonText = extractJsonText(response);
-  if (!jsonText) return [];
+  if (!jsonText) {
+    return { assignments: [], warnings: ["Plan response did not contain JSON."] };
+  }
 
   try {
     const parsed = JSON.parse(jsonText) as { assignments?: unknown };
-    if (!Array.isArray(parsed.assignments)) return [];
+    if (!Array.isArray(parsed.assignments)) {
+      return { assignments: [], warnings: ["Plan JSON did not include assignments array."] };
+    }
 
-    return parsed.assignments.flatMap((item) => {
-      if (!item || typeof item !== "object") return [];
+    const warnings: string[] = [];
+    const assignments = parsed.assignments.flatMap((item, index) => {
+      if (!item || typeof item !== "object") {
+        warnings.push(`Assignment ${index + 1} was not an object.`);
+        return [];
+      }
       const record = item as Record<string, unknown>;
       const agentId = record.agentId;
       const task = record.task;
-      if (!isProjectAgentId(agentId) || typeof task !== "string" || !task.trim()) return [];
+      if (!isProjectAgentId(agentId)) {
+        warnings.push(`Assignment ${index + 1} had invalid agentId.`);
+        return [];
+      }
+      if (typeof task !== "string" || !task.trim()) {
+        warnings.push(`Assignment ${index + 1} had empty task.`);
+        return [];
+      }
+      if (record.active === false) {
+        return [];
+      }
 
       return [
         {
@@ -541,8 +580,13 @@ function parseAssignments(response: string | undefined): HermesAgentAssignment[]
         },
       ];
     });
+
+    if (!assignments.length && !warnings.length) {
+      warnings.push("Plan assignments array had no active assignments.");
+    }
+    return { assignments, warnings };
   } catch {
-    return [];
+    return { assignments: [], warnings: ["Plan JSON could not be parsed."] };
   }
 }
 
@@ -551,7 +595,7 @@ function pickAssignments(
   maxAgents: number,
 ): HermesAgentAssignment[] {
   const limit = Math.max(1, Math.min(6, Math.floor(maxAgents)));
-  const active = assignments.filter((assignment) => assignment.active !== false).slice(0, limit);
+  const active = assignments.slice(0, limit);
   if (active.length) return active;
 
   const fallback: HermesAgentAssignment[] = [

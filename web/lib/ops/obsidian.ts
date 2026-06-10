@@ -216,6 +216,13 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     "",
     "`plan -> run -> wiki` 순서로 앞 단계 결과를 다음 단계 프롬프트에 포함해 전달함.",
     "",
+    workflow.project
+      ? `Project assignment source: ${workflow.project.assignmentSource ?? "unknown"}`
+      : "",
+    ...(workflow.project?.warnings?.length
+      ? ["", "Project assignment warnings:", ...workflow.project.warnings.map((item) => `- ${item}`)]
+      : []),
+    workflow.project ? "" : "",
     "## Step Outputs",
     "",
     ...stepLines,
