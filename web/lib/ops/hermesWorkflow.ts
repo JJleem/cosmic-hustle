@@ -582,15 +582,15 @@ function parseAssignments(response: string | undefined): AssignmentParseResult {
       const record = item as Record<string, unknown>;
       const agentId = record.agentId;
       const task = record.task;
+      if (record.active === false) {
+        return [];
+      }
       if (!isProjectAgentId(agentId)) {
         warnings.push(`Assignment ${index + 1} had invalid agentId.`);
         return [];
       }
       if (typeof task !== "string" || !task.trim()) {
         warnings.push(`Assignment ${index + 1} had empty task.`);
-        return [];
-      }
-      if (record.active === false) {
         return [];
       }
 
