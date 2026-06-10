@@ -106,7 +106,7 @@ export default function VaultSyncPanel() {
             {status.pendingFiles.map((f) => (
               <div key={f} className="flex items-center gap-2 px-3 py-2">
                 <GitBranch className="h-3.5 w-3.5 shrink-0 text-violet-300" />
-                <p className="truncate text-sm text-zinc-300">{f}</p>
+                <p className="break-all text-sm text-zinc-300">{f}</p>
               </div>
             ))}
           </div>
@@ -126,7 +126,7 @@ export default function VaultSyncPanel() {
             <p className="text-xs text-zinc-500">{result.commitMessage}</p>
             <div className="space-y-1">
               {result.committed.map((f) => (
-                <p key={f} className="truncate text-xs text-zinc-400">{f}</p>
+                <p key={f} className="break-all text-xs text-zinc-400">{f}</p>
               ))}
             </div>
           </div>

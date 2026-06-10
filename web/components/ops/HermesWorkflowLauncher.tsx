@@ -8,11 +8,23 @@ import type {
   HermesWorkflowResult,
   HermesWorkflowStep,
 } from "@/lib/ops/hermesAgents";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const defaultGoal =
   "Cosmic Hustle 프로젝트 실행 테스트. plan은 11명 업무 배정을 만들고, 선택된 직원들은 각자 산출물을 내고, wiki는 결과를 정리해줘.";
 
-function StepCard({ step }: { step: HermesWorkflowStep }) {
+function StepCard({
+  step,
+  onClick,
+}: {
+  step: HermesWorkflowStep;
+  onClick: () => void;
+}) {
   const statusCls =
     step.status === "done"
       ? "border-emerald-300/30 text-emerald-200"
@@ -22,8 +34,16 @@ function StepCard({ step }: { step: HermesWorkflowStep }) {
           ? "border-red-300/30 text-red-200"
           : "border-white/10 text-zinc-500";
 
+  const hasContent = !!(step.run?.response ?? step.error);
+
   return (
-    <div className="flex items-start justify-between gap-2 rounded border border-white/10 bg-[#0f1216] px-2.5 py-2">
+    <button
+      type="button"
+      onClick={hasContent ? onClick : undefined}
+      className={`flex w-full items-start justify-between gap-2 rounded border border-white/10 bg-[#0f1216] px-2.5 py-2 text-left ${
+        hasContent ? "cursor-pointer transition hover:border-white/20" : "cursor-default"
+      }`}
+    >
       <div className="min-w-0">
         <p className="text-xs font-semibold text-zinc-200">{step.agentId}</p>
         <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-zinc-600">
@@ -33,7 +53,7 @@ function StepCard({ step }: { step: HermesWorkflowStep }) {
       <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] ${statusCls}`}>
         {step.status}
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -44,6 +64,8 @@ function WorkflowResultPanel({
   w: HermesWorkflowResult;
   currentAgentId?: string | null;
 }) {
+  const [selectedStep, setSelectedStep] = useState<HermesWorkflowStep | null>(null);
+
   const statusCls =
     w.status === "done"
       ? "border-emerald-300/30 text-emerald-200"
@@ -75,7 +97,7 @@ function WorkflowResultPanel({
       {w.steps.length > 0 && (
         <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
           {w.steps.map((step) => (
-            <StepCard key={step.agentId} step={step} />
+            <StepCard key={step.agentId} step={step} onClick={() => setSelectedStep(step)} />
           ))}
         </div>
       )}
@@ -88,7 +110,7 @@ function WorkflowResultPanel({
           </p>
           <div className="space-y-0.5">
             {w.project.notePaths.map((p) => (
-              <p key={p} className="truncate font-mono text-[11px] text-emerald-300/80">
+              <p key={p} className="break-all font-mono text-[11px] text-emerald-300/80">
                 {p}
               </p>
             ))}
@@ -98,13 +120,47 @@ function WorkflowResultPanel({
 
       {/* vault handoff path */}
       {w.vaultNotePath ? (
-        <div className="flex items-center gap-2 rounded border border-white/10 bg-[#0b0d10] px-2.5 py-2">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+        <div className="rounded border border-white/10 bg-[#0b0d10] px-2.5 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
             Handoff
           </span>
-          <p className="truncate font-mono text-[11px] text-violet-300/80">{w.vaultNotePath}</p>
+          <p className="mt-0.5 break-all font-mono text-[11px] text-violet-300/80">{w.vaultNotePath}</p>
         </div>
       ) : null}
+
+      <Dialog open={!!selectedStep} onOpenChange={(open) => { if (!open) setSelectedStep(null); }}>
+        <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col border-white/10 bg-[#14181d] text-zinc-100">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="text-sm font-semibold text-white">
+              {selectedStep?.agentId} — {selectedStep?.status}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedStep && (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto text-sm">
+              {selectedStep.run?.response && (
+                <div className="rounded-md border border-white/10 bg-[#0f1216] p-3">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">응답</p>
+                  <pre className="whitespace-pre-wrap leading-6 text-zinc-200 text-sm">
+                    {selectedStep.run.response}
+                  </pre>
+                </div>
+              )}
+              {selectedStep.error && (
+                <div className="rounded-md border border-red-300/20 bg-red-950/20 p-3">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-red-400">에러</p>
+                  <p className="leading-6 text-red-200">{selectedStep.error}</p>
+                </div>
+              )}
+              {selectedStep.run?.vaultNotePath && (
+                <div className="rounded-md border border-emerald-300/20 bg-[#0f1216] px-3 py-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Vault</p>
+                  <p className="break-all text-xs text-emerald-300">{selectedStep.run.vaultNotePath}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -117,6 +173,7 @@ export default function HermesWorkflowLauncher() {
   const [job, setJob] = useState<HermesWorkflowJob | null>(null);
   const [history, setHistory] = useState<HermesWorkflowHistory | null>(null);
   const [error, setError] = useState("");
+  const [selectedWorkflow, setSelectedWorkflow] = useState<HermesWorkflowResult | null>(null);
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -288,7 +345,7 @@ export default function HermesWorkflowLauncher() {
         </div>
 
         {/* right: history */}
-        <div className="rounded-md border border-white/10 bg-[#0f1216]">
+        <div className="overflow-hidden rounded-md border border-white/10 bg-[#0f1216]">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
               워크플로우 기록
@@ -298,7 +355,12 @@ export default function HermesWorkflowLauncher() {
           <div className="divide-y divide-white/10">
             {history?.activeJobs.length
               ? history.activeJobs.map((item) => (
-                  <div key={item.id} className="grid gap-1 bg-sky-300/[0.04] px-3 py-2">
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedWorkflow(item.workflow)}
+                    className="grid min-w-0 w-full gap-1 bg-sky-300/[0.04] px-3 py-2 text-left transition hover:bg-sky-300/[0.07]"
+                  >
                     <div className="flex items-center gap-2 text-[11px]">
                       <span
                         className={`rounded border px-1.5 py-0.5 font-semibold ${
@@ -315,13 +377,18 @@ export default function HermesWorkflowLauncher() {
                       </span>
                     </div>
                     <p className="truncate text-xs text-zinc-400">{item.goal}</p>
-                  </div>
+                  </button>
                 ))
               : null}
 
             {history?.workflows.length ? (
               history.workflows.map((item) => (
-                <div key={item.id} className="grid gap-1 px-3 py-2">
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedWorkflow(item)}
+                  className="grid min-w-0 w-full gap-1 px-3 py-2 text-left transition hover:bg-white/[0.03]"
+                >
                   <div className="flex items-center gap-2 text-[11px]">
                     <span
                       className={`rounded border px-1.5 py-0.5 font-semibold ${
@@ -355,7 +422,7 @@ export default function HermesWorkflowLauncher() {
                       {item.vaultNotePath}
                     </p>
                   ) : null}
-                </div>
+                </button>
               ))
             ) : (
               <div className="flex gap-3 px-3 py-4">
@@ -368,6 +435,68 @@ export default function HermesWorkflowLauncher() {
           </div>
         </div>
       </div>
+
+      <Dialog open={!!selectedWorkflow} onOpenChange={(open) => { if (!open) setSelectedWorkflow(null); }}>
+        <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col border-white/10 bg-[#14181d] text-zinc-100">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold text-white">
+              <span
+                className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${
+                  selectedWorkflow?.dryRun
+                    ? "border-amber-300/30 text-amber-300"
+                    : "border-violet-300/30 text-violet-300"
+                }`}
+              >
+                {selectedWorkflow?.dryRun ? "dry" : "real"}
+              </span>
+              {selectedWorkflow?.status}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedWorkflow && (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto text-sm">
+              <div className="rounded-md border border-white/10 bg-[#0f1216] p-3">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">목표</p>
+                <p className="leading-6 text-zinc-300 whitespace-pre-wrap">{selectedWorkflow.goal}</p>
+              </div>
+              {selectedWorkflow.steps.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">스텝</p>
+                  {selectedWorkflow.steps.map((step) => (
+                    <div key={step.agentId} className="rounded-md border border-white/10 bg-[#0f1216] p-3">
+                      <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-zinc-200">{step.agentId}</span>
+                        <span className="text-zinc-500">{step.status}</span>
+                      </div>
+                      {step.run?.response && (
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-zinc-400">
+                          {step.run.response}
+                        </pre>
+                      )}
+                      {step.error && (
+                        <p className="text-[11px] leading-5 text-red-300">{step.error}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedWorkflow.project?.notePaths.length ? (
+                <div className="rounded-md border border-emerald-300/20 bg-[#0f1216] px-3 py-2">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">프로젝트 노트</p>
+                  {selectedWorkflow.project.notePaths.map((p) => (
+                    <p key={p} className="break-all font-mono text-xs text-emerald-300">{p}</p>
+                  ))}
+                </div>
+              ) : null}
+              {selectedWorkflow.vaultNotePath && (
+                <div className="rounded-md border border-violet-300/20 bg-[#0f1216] px-3 py-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Handoff</p>
+                  <p className="break-all font-mono text-xs text-violet-300">{selectedWorkflow.vaultNotePath}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

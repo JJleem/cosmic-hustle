@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.1.118",
+    "@radix-ui/react-dialog": "^1.1.16",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@tailwindcss/typography": "^0.5.19",

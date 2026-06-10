@@ -8,6 +8,12 @@ import {
   type HermesRunHistory,
   type HermesRunResult,
 } from "@/lib/ops/hermesAgents";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const defaultCommand =
   "Cosmic Hustle Hermes 연결 테스트. 너의 역할 기준으로 현재 다음 액션을 짧게 정리해줘.";
@@ -19,6 +25,7 @@ export default function HermesCommandLauncher() {
   const [history, setHistory] = useState<HermesRunHistory | null>(null);
   const [error, setError] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const [selected, setSelected] = useState<HermesRunResult | null>(null);
 
   useEffect(() => {
     void refreshHistory();
@@ -61,6 +68,7 @@ export default function HermesCommandLauncher() {
   }
 
   return (
+    <>
     <div className="rounded-md border border-white/10 bg-[#14181d]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div>
@@ -78,23 +86,22 @@ export default function HermesCommandLauncher() {
         </button>
       </div>
 
-      <div className="grid gap-3 p-4 lg:grid-cols-[180px_1fr]">
-        <div className="space-y-2">
-          {HERMES_AGENT_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setAgentId(id)}
-              className={`flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm ${
-                agentId === id
-                  ? "border-amber-300/60 bg-amber-300/10 text-amber-100"
-                  : "border-white/10 bg-[#0f1216] text-zinc-300"
-              }`}
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-[#0f1216] px-3 text-xs text-zinc-400">
+            에이전트
+            <select
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value as HermesAgentId)}
+              className="bg-transparent text-sm font-semibold text-zinc-100 outline-none"
             >
-              <span>{id}</span>
-              <span className="text-xs text-zinc-500">에이전트</span>
-            </button>
-          ))}
+              {HERMES_AGENT_IDS.map((id) => (
+                <option key={id} value={id} className="bg-[#0f1216]">
+                  {id}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="space-y-3">
@@ -146,7 +153,12 @@ export default function HermesCommandLauncher() {
               <div className="divide-y divide-white/10">
                 {history?.runs.length ? (
                   history.runs.slice(0, 4).map((item) => (
-                    <div key={item.id} className="grid gap-1 px-3 py-2">
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelected(item)}
+                      className="grid w-full gap-1 px-3 py-2 text-left transition hover:bg-white/[0.03]"
+                    >
                       <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
                         <span className="font-semibold text-zinc-200">{item.agentId}</span>
                         <span className="shrink-0 text-zinc-500">
@@ -160,7 +172,7 @@ export default function HermesCommandLauncher() {
                       {item.vaultNotePath ? (
                         <p className="truncate text-xs text-emerald-300">{item.vaultNotePath}</p>
                       ) : null}
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <p className="px-3 py-4 text-sm text-zinc-500">아직 헤르메스 실행 기록이 없습니다.</p>
@@ -189,5 +201,43 @@ export default function HermesCommandLauncher() {
         </div>
       </div>
     </div>
+
+      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col border-white/10 bg-[#14181d] text-zinc-100">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="text-sm font-semibold text-white">
+              {selected?.agentId} —{" "}
+              {selected
+                ? new Date(selected.createdAt).toLocaleTimeString("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                : null}
+            </DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto text-sm">
+              <div className="rounded-md border border-white/10 bg-[#0f1216] p-3">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">명령</p>
+                <p className="leading-6 text-zinc-300 whitespace-pre-wrap">{selected.command}</p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-[#0f1216] p-3">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">응답</p>
+                <pre className="whitespace-pre-wrap leading-6 text-zinc-200 text-sm">
+                  {selected.response}
+                </pre>
+              </div>
+              {selected.vaultNotePath && (
+                <div className="rounded-md border border-emerald-300/20 bg-[#0f1216] px-3 py-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Vault</p>
+                  <p className="break-all text-xs text-emerald-300">{selected.vaultNotePath}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
