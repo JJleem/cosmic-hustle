@@ -278,6 +278,24 @@ async def _daily_blog_report_job():
         db.close()
 
 
+async def _weekly_prompt_memory_report_job():
+    """매주 월요일 09:30 KST — 프롬프트 주입 메모리 현황을 Slack으로 보고."""
+    from blog_daily_report import build_weekly_prompt_memory_report
+
+    db = SessionLocal()
+    try:
+        result = await build_weekly_prompt_memory_report(db, send_slack=True)
+        slack = result.get("slack", {})
+        if slack.get("ok"):
+            logger.info("주간 프롬프트 메모리 Slack 리포트 완료")
+        else:
+            logger.warning(f"주간 프롬프트 메모리 Slack 리포트 미전송: {slack}")
+    except Exception as e:
+        logger.error(f"주간 프롬프트 메모리 리포트 실패: {e}")
+    finally:
+        db.close()
+
+
 @app.post("/api/ga/run-monthly")
 async def run_ga_monthly_now(start_date: str | None = None, end_date: str | None = None):
     """수동 테스트용 — start_date/end_date 미지정 시 전달 기준."""
@@ -318,8 +336,14 @@ async def startup():
         id="daily_blog_report",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _weekly_prompt_memory_report_job,
+        CronTrigger(day_of_week="mon", hour=9, minute=30, timezone="Asia/Seoul"),
+        id="weekly_prompt_memory_report",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 매월 1일 06:00 GA 분석")
+    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석")
 
 
 @app.on_event("shutdown")

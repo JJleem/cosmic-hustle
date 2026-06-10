@@ -505,6 +505,61 @@ def update_buzz_growth_memory(db: Session, snapshot: dict, ga: dict, access_logs
     return {"ok": True, "agent_id": "buzz", "chars": len(row.memory or "")}
 
 
+def _memory_excerpt(text: str | None, limit: int = 650) -> str:
+    if not text:
+        return "없음"
+    compact = "\n".join(line.rstrip() for line in text.strip().splitlines() if line.strip())
+    return compact[:limit] + ("..." if len(compact) > limit else "")
+
+
+def _growth_memory_section(text: str | None) -> str | None:
+    if not text:
+        return None
+    start = text.find(GROWTH_MEMORY_START)
+    end = text.find(GROWTH_MEMORY_END)
+    if start < 0 or end < start:
+        return None
+    end += len(GROWTH_MEMORY_END)
+    return text[start:end].strip()
+
+
+def render_weekly_prompt_memory_report(db: Session) -> dict:
+    agent_ids = ["buzz", "over", "pixel", "ka"]
+    rows = {row.agent_id: row for row in db.query(AgentMemory).filter(AgentMemory.agent_id.in_(agent_ids)).all()}
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
+    lines = [
+        f"프롬프트 주입 메모리 주간 리포트 ({today})",
+        "",
+        "이번 주 블로그 생성 프롬프트에 들어갈 에이전트 메모리 요약입니다.",
+    ]
+    payload = {}
+
+    for agent_id in agent_ids:
+        row = rows.get(agent_id)
+        memory = row.memory if row else None
+        growth = _growth_memory_section(memory) if agent_id == "buzz" else None
+        excerpt = _memory_excerpt(memory)
+        payload[agent_id] = {
+            "chars": len(memory or ""),
+            "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
+            "growth_section": growth,
+            "excerpt": excerpt,
+        }
+        lines.extend([
+            "",
+            f"[{agent_id}] chars={payload[agent_id]['chars']} updated={payload[agent_id]['updated_at'] or 'unknown'}",
+            _memory_excerpt(growth, 500) if growth else excerpt,
+        ])
+
+    return {"date": today, "agents": payload, "text": "\n".join(lines)}
+
+
+async def build_weekly_prompt_memory_report(db: Session, send_slack: bool = False) -> dict:
+    report = render_weekly_prompt_memory_report(db)
+    slack = await send_slack_report(report["text"]) if send_slack else {"ok": False, "skipped": True}
+    return {"ok": True, **report, "slack": slack}
+
+
 async def send_slack_report(text: str) -> dict:
     webhook_url = os.environ.get("BLOG_REPORT_SLACK_WEBHOOK_URL") or os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook_url:

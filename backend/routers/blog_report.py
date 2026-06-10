@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from blog_daily_report import build_daily_blog_report
+from blog_daily_report import build_daily_blog_report, build_weekly_prompt_memory_report
 from db.connection import get_db
 
 router = APIRouter(prefix="/api/blog/report", tags=["blog-report"])
@@ -27,3 +27,15 @@ async def preview_daily_blog_report(request: Request, db: Session = Depends(get_
 async def send_daily_blog_report(request: Request, db: Session = Depends(get_db)):
     _require_admin(request)
     return await build_daily_blog_report(db, send_slack=True)
+
+
+@router.get("/prompt-memory/weekly/preview")
+async def preview_weekly_prompt_memory_report(request: Request, db: Session = Depends(get_db)):
+    _require_admin(request)
+    return await build_weekly_prompt_memory_report(db, send_slack=False)
+
+
+@router.post("/prompt-memory/weekly")
+async def send_weekly_prompt_memory_report(request: Request, db: Session = Depends(get_db)):
+    _require_admin(request)
+    return await build_weekly_prompt_memory_report(db, send_slack=True)
