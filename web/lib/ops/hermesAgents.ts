@@ -82,6 +82,7 @@ export type HermesWorkflowResult = {
     slug: string;
     assignments: HermesAgentAssignment[];
     notePaths: string[];
+    indexNotePath?: string;
     assignmentSource?: "plan" | "fallback";
     warnings?: string[];
   };

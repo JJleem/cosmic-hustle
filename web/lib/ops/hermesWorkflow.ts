@@ -18,6 +18,7 @@ import {
   getObsidianStatus,
   writeHermesWorkflowHandoff,
   writeProjectAgentNote,
+  writeProjectIndexNote,
 } from "@/lib/ops/obsidian";
 
 const execFileAsync = promisify(execFile);
@@ -378,11 +379,33 @@ async function finishWorkflow(
   workflow.nextAction =
     extractNextAction(lastWikiStep?.run?.response) || fallbackNextAction(workflow);
 
+  if (workflow.project) {
+    try {
+      workflow.project.indexNotePath = await writeProjectIndexNote(workflow);
+    } catch {
+      workflow.project.warnings = [
+        ...(workflow.project.warnings ?? []),
+        "Project index note could not be written.",
+      ];
+    }
+  }
+
   try {
     workflow.vaultNotePath = await writeHermesWorkflowHandoff(workflow);
   } catch (error) {
     workflow.vaultNoteError =
       error instanceof Error ? error.message : "Failed to write workflow handoff note";
+  }
+
+  if (workflow.project) {
+    try {
+      workflow.project.indexNotePath = await writeProjectIndexNote(workflow);
+    } catch {
+      workflow.project.warnings = [
+        ...(workflow.project.warnings ?? []),
+        "Project index note could not be updated after handoff write.",
+      ];
+    }
   }
 
   await appendWorkflowLog(workflow);

@@ -80,6 +80,18 @@ export async function writeProjectAgentNote(
   return relativePath;
 }
 
+export async function writeProjectIndexNote(workflow: HermesWorkflowResult): Promise<string> {
+  const projectSlug = workflow.project?.slug ?? (slugify(workflow.goal) || workflow.id.slice(0, 8));
+  const projectDir = path.join(obsidianVaultPath, "projects", projectSlug);
+  const fileName = "index.md";
+  const absolutePath = path.join(projectDir, fileName);
+  const relativePath = path.join("projects", projectSlug, fileName);
+
+  await mkdir(projectDir, { recursive: true });
+  await writeFile(absolutePath, renderProjectIndexNote(workflow, relativePath), "utf8");
+  return relativePath;
+}
+
 async function directoryExists(targetPath: string): Promise<boolean> {
   try {
     return (await stat(targetPath)).isDirectory();
@@ -246,6 +258,7 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     "## Files Or Notes Changed",
     "",
     `- ${relativePath}`,
+    workflow.project?.indexNotePath ? `- ${workflow.project.indexNotePath}` : "",
     ...(workflow.project?.notePaths.map((notePath) => `- ${notePath}`) ?? []),
     "- web/.ops/hermes-workflows.jsonl",
     "- web/.ops/hermes-runs.jsonl",
@@ -305,6 +318,61 @@ function renderProjectAgentNote(
     step.run?.response ? "````text" : "",
     step.run?.response?.trim() ?? "",
     step.run?.response ? "````" : "",
+    "",
+    "## Files Or Notes Changed",
+    "",
+    `- ${relativePath}`,
+    "",
+  ].join("\n");
+}
+
+function renderProjectIndexNote(workflow: HermesWorkflowResult, relativePath: string): string {
+  const timestamp = formatKstTimestamp(
+    new Date(workflow.completedAt || workflow.createdAt),
+  );
+  const assignments = workflow.project?.assignments ?? [];
+  const notePaths = workflow.project?.notePaths ?? [];
+
+  return [
+    "---",
+    `title: ${workflow.goal}`,
+    `timestamp: ${timestamp}`,
+    `workflow_id: ${workflow.id}`,
+    `status: ${workflow.status}`,
+    "---",
+    "",
+    `# ${workflow.goal}`,
+    "",
+    "Links: [[projects/cosmic-hustle]] · [[knowledge/vault-curation-policy]]",
+    "",
+    "## Workflow",
+    "",
+    `- Status: ${workflow.status}`,
+    `- DryRun: ${workflow.dryRun ? "yes" : "no"}`,
+    `- Workflow id: ${workflow.id}`,
+    workflow.vaultNotePath ? `- Handoff: ${workflow.vaultNotePath}` : "- Handoff: pending",
+    `- Duration: ${workflow.durationMs}ms`,
+    "",
+    "## Assignment",
+    "",
+    `- Source: ${workflow.project?.assignmentSource ?? "unknown"}`,
+    ...(workflow.project?.warnings?.length
+      ? workflow.project.warnings.map((warning) => `- Warning: ${warning}`)
+      : ["- Warning: none"]),
+    "",
+    "## Agents",
+    "",
+    ...(assignments.length
+      ? assignments.map((assignment) => `- ${agentWikiLink(assignment.agentId)}: ${assignment.task}`)
+      : ["- none"]),
+    "",
+    "## Project Notes",
+    "",
+    ...(notePaths.length ? notePaths.map((notePath) => `- ${notePath}`) : ["- none"]),
+    "",
+    "## Next Action",
+    "",
+    workflow.nextAction.trim() || "- 없음.",
     "",
     "## Files Or Notes Changed",
     "",
