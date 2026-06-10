@@ -2,7 +2,12 @@ import { existsSync } from "fs";
 import { mkdir, readdir, stat, writeFile } from "fs/promises";
 import { homedir } from "os";
 import path from "path";
-import type { HermesRunResult, HermesWorkflowResult } from "@/lib/ops/hermesAgents";
+import type {
+  HermesAgentAssignment,
+  HermesRunResult,
+  HermesWorkflowResult,
+  HermesWorkflowStep,
+} from "@/lib/ops/hermesAgents";
 
 const defaultVaultCandidates = [
   process.env.COSMIC_HUSTLE_VAULT_PATH,
@@ -52,6 +57,26 @@ export async function writeHermesWorkflowHandoff(workflow: HermesWorkflowResult)
 
   await mkdir(logsDir, { recursive: true });
   await writeFile(absolutePath, renderWorkflowHandoff(workflow, relativePath), "utf8");
+  return relativePath;
+}
+
+export async function writeProjectAgentNote(
+  workflow: HermesWorkflowResult,
+  assignment: HermesAgentAssignment,
+  step: HermesWorkflowStep,
+): Promise<string> {
+  const projectSlug = workflow.project?.slug ?? (slugify(workflow.goal) || workflow.id.slice(0, 8));
+  const projectDir = path.join(obsidianVaultPath, "projects", projectSlug);
+  const fileName = `${assignment.agentId}.md`;
+  const absolutePath = path.join(projectDir, fileName);
+  const relativePath = path.join("projects", projectSlug, fileName);
+
+  await mkdir(projectDir, { recursive: true });
+  await writeFile(
+    absolutePath,
+    renderProjectAgentNote(workflow, assignment, step, relativePath),
+    "utf8",
+  );
   return relativePath;
 }
 
@@ -209,6 +234,7 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     "## Files Or Notes Changed",
     "",
     `- ${relativePath}`,
+    ...(workflow.project?.notePaths.map((notePath) => `- ${notePath}`) ?? []),
     "- web/.ops/hermes-workflows.jsonl",
     "- web/.ops/hermes-runs.jsonl",
     "",
@@ -220,6 +246,50 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     "## Git Commit Or Push Status",
     "",
     "- Not committed by dashboard workflow.",
+    "",
+  ].join("\n");
+}
+
+function renderProjectAgentNote(
+  workflow: HermesWorkflowResult,
+  assignment: HermesAgentAssignment,
+  step: HermesWorkflowStep,
+  relativePath: string,
+): string {
+  const timestamp = formatKstTimestamp(new Date(step.run?.createdAt ?? workflow.createdAt));
+  return [
+    "---",
+    `title: ${workflow.goal} - ${assignment.agentId}`,
+    `timestamp: ${timestamp}`,
+    `agent: ${assignment.agentId}`,
+    `workflow_id: ${workflow.id}`,
+    `status: ${step.status}`,
+    "---",
+    "",
+    `# ${assignment.agentId} 작업 기록`,
+    "",
+    "## Project",
+    "",
+    workflow.goal.trim(),
+    "",
+    "## Assigned Task",
+    "",
+    assignment.task.trim(),
+    "",
+    "## Reason",
+    "",
+    assignment.reason?.trim() || "- 없음.",
+    "",
+    "## Result",
+    "",
+    step.error ? `Error: ${step.error}` : "",
+    step.run?.response ? "````text" : "",
+    step.run?.response?.trim() ?? "",
+    step.run?.response ? "````" : "",
+    "",
+    "## Files Or Notes Changed",
+    "",
+    `- ${relativePath}`,
     "",
   ].join("\n");
 }

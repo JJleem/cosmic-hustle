@@ -1,4 +1,16 @@
-export const HERMES_AGENT_IDS = ["plan", "run", "wiki"] as const;
+export const HERMES_AGENT_IDS = [
+  "plan",
+  "wiki",
+  "pocke",
+  "run",
+  "ka",
+  "over",
+  "pixel",
+  "ping",
+  "fact",
+  "root",
+  "buzz",
+] as const;
 
 export type HermesAgentId = (typeof HERMES_AGENT_IDS)[number];
 
@@ -31,7 +43,17 @@ export type HermesRunHistory = {
 export type HermesWorkflowRequest = {
   goal: string;
   maxSteps?: number;
+  maxAgents?: number;
+  mode?: "basic" | "project";
+  dryRun?: boolean;
   async?: boolean;
+};
+
+export type HermesAgentAssignment = {
+  agentId: HermesAgentId;
+  task: string;
+  active?: boolean;
+  reason?: string;
 };
 
 export type HermesWorkflowStep = {
@@ -54,6 +76,12 @@ export type HermesWorkflowResult = {
   nextAction: string;
   vaultNotePath: string | null;
   vaultNoteError?: string;
+  dryRun?: boolean;
+  project?: {
+    slug: string;
+    assignments: HermesAgentAssignment[];
+    notePaths: string[];
+  };
 };
 
 export type HermesWorkflowJob = {

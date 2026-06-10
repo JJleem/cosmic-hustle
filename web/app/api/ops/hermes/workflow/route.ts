@@ -56,6 +56,9 @@ export async function POST(request: Request) {
     const requestInput = {
       goal: body.goal.trim(),
       maxSteps: body.maxSteps,
+      maxAgents: body.maxAgents,
+      mode: body.mode,
+      dryRun: body.dryRun,
     };
 
     if (!asyncMode) {

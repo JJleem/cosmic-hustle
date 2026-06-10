@@ -6,6 +6,7 @@ import path from "path";
 import { promisify } from "util";
 import type {
   HermesAgentId,
+  HermesAgentAssignment,
   HermesWorkflowJob,
   HermesWorkflowHistory,
   HermesWorkflowRequest,
@@ -13,7 +14,11 @@ import type {
   HermesWorkflowStep,
 } from "@/lib/ops/hermesAgents";
 import { runHermesAgent } from "@/lib/ops/hermes";
-import { getObsidianStatus, writeHermesWorkflowHandoff } from "@/lib/ops/obsidian";
+import {
+  getObsidianStatus,
+  writeHermesWorkflowHandoff,
+  writeProjectAgentNote,
+} from "@/lib/ops/obsidian";
 
 const execFileAsync = promisify(execFile);
 const hermesBin = process.env.HERMES_BIN ?? path.join(homedir(), ".local/bin/hermes");
@@ -21,6 +26,17 @@ const hermesBin = process.env.HERMES_BIN ?? path.join(homedir(), ".local/bin/her
 const logDir = path.join(process.cwd(), ".ops");
 const workflowLogPath = path.join(logDir, "hermes-workflows.jsonl");
 const defaultWorkflowLogLimit = 50;
+const projectAgentIds: HermesAgentId[] = [
+  "pocke",
+  "ka",
+  "run",
+  "over",
+  "pixel",
+  "ping",
+  "fact",
+  "root",
+  "buzz",
+];
 
 type HermesWorkflowRuntimeStore = {
   jobs: Map<string, HermesWorkflowJob>;
@@ -59,6 +75,7 @@ function createWorkflowShell(
     durationMs: 0,
     nextAction: "",
     vaultNotePath: null,
+    dryRun: input.dryRun === true,
   };
 }
 
@@ -156,11 +173,24 @@ export async function runHermesWorkflow(
   const workflow = createWorkflowShell(input, options.id, new Date().toISOString(), "running");
   const notify = () => options.onUpdate?.(cloneWorkflow(workflow));
 
-  // 시작 알림
-  void sendSlackMessage(`⚙️ *Cosmic Hustle* 작업 시작\n목표: ${workflow.goal}`).catch(() => {});
+  if (!input.dryRun) {
+    void sendSlackMessage(`⚙️ *Cosmic Hustle* 작업 시작\n목표: ${workflow.goal}`).catch(() => {});
+  }
   notify();
 
   try {
+    if (input.dryRun) {
+      await runDryProjectWorkflow(input, workflow, notify);
+      workflow.status = getWorkflowStatus(workflow.steps);
+      return await finishWorkflow(workflow, startedAt, notify);
+    }
+
+    if (input.mode === "project") {
+      await runProjectWorkflow(input, workflow, notify);
+      workflow.status = getWorkflowStatus(workflow.steps);
+      return await finishWorkflow(workflow, startedAt, notify);
+    }
+
     workflow.steps.push(createPendingStep("plan", "running"));
     notify();
     const plan = await runStep("plan", buildPlanCommand(input));
@@ -203,6 +233,120 @@ export async function runHermesWorkflow(
     notify();
   }
 
+  return await finishWorkflow(workflow, startedAt, notify);
+}
+
+async function runDryProjectWorkflow(
+  input: HermesWorkflowRequest,
+  workflow: HermesWorkflowResult,
+  notify: () => void,
+): Promise<void> {
+  workflow.project = {
+    slug: `dry-${slugify(workflow.goal) || workflow.id.slice(0, 8)}`,
+    assignments: [],
+    notePaths: [],
+  };
+
+  const assignmentCount = Math.max(1, Math.min(4, Math.floor(input.maxAgents ?? 1)));
+  const assignments = pickAssignments([], assignmentCount);
+  workflow.project.assignments = assignments;
+
+  workflow.steps.push(
+    createDryStep(
+      "plan",
+      input.goal,
+      JSON.stringify({
+        status: "done",
+        summary: "dryRun plan",
+        assignments,
+        next_action: "dryRun assigned agents execute.",
+      }),
+    ),
+  );
+  notify();
+
+  for (const assignment of assignments) {
+    const step = createDryStep(
+      assignment.agentId,
+      assignment.task,
+      JSON.stringify({
+        status: "done",
+        summary: "dryRun agent output",
+        handoff: `${assignment.agentId} 테스트 산출물.`,
+        next_action: "wiki cleanup.",
+      }),
+    );
+    workflow.steps.push(step);
+
+    try {
+      const notePath = await writeProjectAgentNote(workflow, assignment, step);
+      workflow.project.notePaths.push(notePath);
+    } catch {
+      // Project note failure should not stop dryRun cleanup.
+    }
+    notify();
+  }
+
+  workflow.steps.push(
+    createDryStep(
+      "wiki",
+      input.goal,
+      JSON.stringify({
+        status: "done",
+        summary: "dryRun wiki cleanup",
+        next_action: "실제 Hermes 실행이 필요하면 테스트 실행을 끄고 다시 실행한다.",
+      }),
+    ),
+  );
+  notify();
+}
+
+async function runProjectWorkflow(
+  input: HermesWorkflowRequest,
+  workflow: HermesWorkflowResult,
+  notify: () => void,
+): Promise<void> {
+  workflow.project = { slug: slugify(workflow.goal) || workflow.id.slice(0, 8), assignments: [], notePaths: [] };
+
+  workflow.steps.push(createPendingStep("plan", "running"));
+  notify();
+  const plan = await runStep("plan", buildProjectPlanCommand(input));
+  workflow.steps[workflow.steps.length - 1] = plan;
+  notify();
+
+  const assignments = pickAssignments(parseAssignments(plan.run?.response), input.maxAgents ?? 4);
+  workflow.project.assignments = assignments;
+
+  for (const assignment of assignments) {
+    workflow.steps.push(createPendingStep(assignment.agentId, "running"));
+    notify();
+    const step = await runStep(
+      assignment.agentId,
+      buildProjectAgentCommand(input, assignment, plan.run?.response ?? ""),
+    );
+    workflow.steps[workflow.steps.length - 1] = step;
+
+    try {
+      const notePath = await writeProjectAgentNote(workflow, assignment, step);
+      workflow.project.notePaths.push(notePath);
+    } catch {
+      // Project note failure should not stop wiki cleanup.
+    }
+    notify();
+  }
+
+  workflow.steps.push(createPendingStep("wiki", "running"));
+  notify();
+  const wiki = await runStep("wiki", buildProjectWikiCommand(input, workflow.steps, workflow.project.notePaths));
+  workflow.steps[workflow.steps.length - 1] = wiki;
+  notify();
+}
+
+async function finishWorkflow(
+  workflow: HermesWorkflowResult,
+  startedAt: number,
+  notify: () => void,
+): Promise<HermesWorkflowResult> {
   workflow.completedAt = new Date().toISOString();
   workflow.durationMs = Date.now() - startedAt;
 
@@ -219,10 +363,11 @@ export async function runHermesWorkflow(
 
   await appendWorkflowLog(workflow);
 
-  // 항상 Slack 알림 전송 (완료/중단/실패 모두)
-  void sendSlackNotification(workflow).catch(() => {
-    // Slack 실패해도 workflow 결과에 영향 없음
-  });
+  if (!workflow.dryRun) {
+    void sendSlackNotification(workflow).catch(() => {
+      // Slack 실패해도 workflow 결과에 영향 없음
+    });
+  }
 
   notify();
   return workflow;
@@ -268,7 +413,7 @@ export async function getHermesWorkflowHistory(limit = 5): Promise<HermesWorkflo
 }
 
 async function runStep(
-  agentId: "plan" | "run" | "wiki",
+  agentId: HermesAgentId,
   command: string,
 ): Promise<HermesWorkflowStep> {
   try {
@@ -282,6 +427,168 @@ async function runStep(
       error: summarizeStepError(error),
     };
   }
+}
+
+function createDryStep(
+  agentId: HermesAgentId,
+  command: string,
+  response: string,
+): HermesWorkflowStep {
+  return {
+    agentId,
+    status: "done",
+    run: {
+      id: randomUUID(),
+      agentId,
+      command,
+      response,
+      sessionId: null,
+      createdAt: new Date().toISOString(),
+      durationMs: 0,
+      vaultNotePath: null,
+    },
+  };
+}
+
+function buildProjectPlanCommand(input: HermesWorkflowRequest): string {
+  return [
+    "프로젝트 실행 workflow의 계획 단계야.",
+    `목표: ${input.goal}`,
+    "",
+    "11명 직원 전체에 대한 task distribution JSON을 만들어줘.",
+    "active=true인 직원만 이번 실행에서 돌릴 거야. active는 최대 4명.",
+    "plan과 wiki는 orchestration/cleanup 담당이므로 active=false.",
+    "",
+    "JSON 코드블록 하나로만 답해줘.",
+    "형식:",
+    '{ "status": "done | blocked", "summary": "...", "assignments": [{ "agentId": "pocke", "active": true, "task": "...", "reason": "..." }], "next_action": "..." }',
+  ].join("\n");
+}
+
+function buildProjectAgentCommand(
+  input: HermesWorkflowRequest,
+  assignment: HermesAgentAssignment,
+  planOutput: string,
+): string {
+  return [
+    "프로젝트 실행 workflow의 담당 직원 단계야.",
+    `프로젝트 목표: ${input.goal}`,
+    `담당 직원: ${assignment.agentId}`,
+    `담당 작업: ${assignment.task}`,
+    "",
+    "plan 출력:",
+    compactForPrompt(planOutput, 900),
+    "",
+    "파일 수정 없이 네 담당 산출물을 짧게 작성해줘.",
+    'JSON 코드블록 하나로 답해줘: { "status": "done | blocked", "summary": "...", "handoff": "...", "next_action": "..." }',
+  ].join("\n");
+}
+
+function buildProjectWikiCommand(
+  input: HermesWorkflowRequest,
+  steps: HermesWorkflowStep[],
+  notePaths: string[],
+): string {
+  return [
+    "프로젝트 실행 workflow의 wiki cleanup 단계야.",
+    `프로젝트 목표: ${input.goal}`,
+    "",
+    "직원별 결과:",
+    steps
+      .filter((step) => step.agentId !== "wiki")
+      .map(
+        (step) =>
+          `${step.agentId} - ${step.status}: ${compactForPrompt(step.run?.response ?? step.error ?? "", 500)}`,
+      )
+      .join("\n"),
+    "",
+    "저장된 프로젝트 노트:",
+    notePaths.map((notePath) => `- ${notePath}`).join("\n") || "- 없음",
+    "",
+    "전체 결과, 열린 질문, next_action을 5줄 이내로 정리해줘.",
+  ].join("\n");
+}
+
+function parseAssignments(response: string | undefined): HermesAgentAssignment[] {
+  if (!response) return [];
+
+  const jsonText = extractJsonText(response);
+  if (!jsonText) return [];
+
+  try {
+    const parsed = JSON.parse(jsonText) as { assignments?: unknown };
+    if (!Array.isArray(parsed.assignments)) return [];
+
+    return parsed.assignments.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as Record<string, unknown>;
+      const agentId = record.agentId;
+      const task = record.task;
+      if (!isProjectAgentId(agentId) || typeof task !== "string" || !task.trim()) return [];
+
+      return [
+        {
+          agentId,
+          task: task.trim(),
+          active: record.active === true,
+          reason: typeof record.reason === "string" ? record.reason.trim() : "",
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function pickAssignments(
+  assignments: HermesAgentAssignment[],
+  maxAgents: number,
+): HermesAgentAssignment[] {
+  const limit = Math.max(1, Math.min(6, Math.floor(maxAgents)));
+  const active = assignments.filter((assignment) => assignment.active !== false).slice(0, limit);
+  if (active.length) return active;
+
+  const fallback: HermesAgentAssignment[] = [
+    {
+      agentId: "ping",
+      task: "목표를 빠르게 확장할 아이디어와 작업 갈래를 제안한다.",
+      active: true,
+      reason: "fallback idea collection",
+    },
+    {
+      agentId: "pocke",
+      task: "목표 수행에 필요한 조사 포인트와 확인할 데이터를 정리한다.",
+      active: true,
+      reason: "fallback research",
+    },
+    {
+      agentId: "ka",
+      task: "아이디어와 조사 포인트를 분석해 실행 우선순위를 제안한다.",
+      active: true,
+      reason: "fallback analysis",
+    },
+    {
+      agentId: "fact",
+      task: "앞선 결과의 리스크와 검증 필요사항을 점검한다.",
+      active: true,
+      reason: "fallback review",
+    },
+  ];
+  return fallback.slice(0, limit);
+}
+
+function extractJsonText(value: string): string | null {
+  const codeBlock = value.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  if (codeBlock) return codeBlock;
+
+  const first = value.indexOf("{");
+  const last = value.lastIndexOf("}");
+  if (first === -1 || last === -1 || last <= first) return null;
+  return value.slice(first, last + 1);
+}
+
+function isProjectAgentId(value: unknown): value is HermesAgentId {
+  return typeof value === "string" && projectAgentIds.includes(value as HermesAgentId);
 }
 
 function summarizeStepError(error: unknown): string {
@@ -420,4 +727,12 @@ function getWorkflowStatus(steps: HermesWorkflowStep[]): HermesWorkflowResult["s
 
 function isBlockedResponse(response: string): boolean {
   return /["']?status["']?\s*[:：]\s*["']?blocked/i.test(response);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
 }

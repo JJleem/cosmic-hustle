@@ -9,10 +9,12 @@ import type {
 } from "@/lib/ops/hermesAgents";
 
 const defaultGoal =
-  "Cosmic Hustle 팀 실행 테스트. plan은 작업 계획을 만들고, run은 실행 가능성을 판단하고, wiki는 다음 액션을 정리해줘.";
+  "Cosmic Hustle 프로젝트 실행 테스트. plan은 11명 업무 배정을 만들고, 선택된 직원들은 각자 산출물을 내고, wiki는 결과를 정리해줘.";
 
 export default function HermesWorkflowLauncher() {
   const [goal, setGoal] = useState(defaultGoal);
+  const [dryRun, setDryRun] = useState(true);
+  const [maxAgents, setMaxAgents] = useState(1);
   const [workflow, setWorkflow] = useState<HermesWorkflowResult | null>(null);
   const [job, setJob] = useState<HermesWorkflowJob | null>(null);
   const [history, setHistory] = useState<HermesWorkflowHistory | null>(null);
@@ -86,7 +88,7 @@ export default function HermesWorkflowLauncher() {
       const response = await fetch("/api/ops/hermes/workflow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal, maxSteps: 3 }),
+        body: JSON.stringify({ goal, mode: "project", maxAgents, dryRun }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -109,7 +111,9 @@ export default function HermesWorkflowLauncher() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-white">헤르메스 팀 워크플로우</h2>
-          <p className="text-xs text-zinc-500">V1: plan → run → wiki · 백그라운드 실행</p>
+          <p className="text-xs text-zinc-500">
+            프로젝트: plan → assigned agents → wiki · {dryRun ? "테스트 실행" : "실제 실행"}
+          </p>
         </div>
         <button
           type="button"
@@ -133,6 +137,44 @@ export default function HermesWorkflowLauncher() {
             />
           </label>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-md border border-white/10 bg-[#0f1216] p-1">
+              <button
+                type="button"
+                onClick={() => setDryRun(true)}
+                className={`h-8 rounded px-3 text-xs font-semibold ${
+                  dryRun ? "bg-emerald-300 text-zinc-950" : "text-zinc-400"
+                }`}
+              >
+                테스트 실행
+              </button>
+              <button
+                type="button"
+                onClick={() => setDryRun(false)}
+                className={`h-8 rounded px-3 text-xs font-semibold ${
+                  !dryRun ? "bg-amber-300 text-zinc-950" : "text-zinc-400"
+                }`}
+              >
+                실제 실행
+              </button>
+            </div>
+
+            <label className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-[#0f1216] px-3 text-xs text-zinc-400">
+              직원 수
+              <select
+                value={maxAgents}
+                onChange={(event) => setMaxAgents(Number(event.target.value))}
+                className="bg-transparent text-sm font-semibold text-zinc-100 outline-none"
+              >
+                {[1, 2, 3, 4].map((value) => (
+                  <option key={value} value={value} className="bg-[#0f1216]">
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           {error ? (
             <div className="rounded-md border border-red-300/20 bg-red-950/20 p-3 text-sm leading-6 text-red-100">
               {error}
@@ -143,10 +185,25 @@ export default function HermesWorkflowLauncher() {
             <div className="rounded-md border border-emerald-300/20 bg-emerald-300/[0.06] p-3">
               <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                 <span>{activeWorkflow.status}</span>
+                {activeWorkflow.dryRun ? <span>dryRun</span> : null}
                 {job?.currentAgentId ? <span>현재: {job.currentAgentId}</span> : null}
                 <span>{activeWorkflow.durationMs}ms</span>
                 {activeWorkflow.vaultNotePath ? <span>{activeWorkflow.vaultNotePath}</span> : null}
               </div>
+              {activeWorkflow.project?.notePaths.length ? (
+                <div className="mb-3 rounded-md border border-white/10 bg-[#0f1216] p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                    프로젝트 노트
+                  </p>
+                  <div className="mt-2 grid gap-1">
+                    {activeWorkflow.project.notePaths.map((notePath) => (
+                      <p key={notePath} className="truncate text-xs text-emerald-300">
+                        {notePath}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="grid gap-2 md:grid-cols-3">
                 {activeWorkflow.steps.map((step) => (
                   <div key={step.agentId} className="rounded-md border border-white/10 bg-[#0f1216] p-3">
