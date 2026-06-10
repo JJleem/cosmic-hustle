@@ -1921,16 +1921,17 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
     include_author_reply = random.random() < 0.5
 
     personas_desc = "\n".join(
-        f'- agent_id: "{a}" / 이름: {AGENT_PERSONAS[a]["name"]} ({AGENT_PERSONAS[a]["role"]}): 말버릇을 살려서'
+        f'- agent_id: "{a}" / 이름: {AGENT_PERSONAS[a]["name"]} {AGENT_PERSONAS[a]["title"]} ({AGENT_PERSONAS[a]["role"]}): 말버릇을 살려서'
         for a in commenters
     )
     author_name = AGENT_PERSONAS[author_id]["name"]
+    author_title = AGENT_PERSONAS[author_id].get("title", "")
     total = 4 if include_author_reply else 3
 
     reply_target_index = random.randint(0, 2)
     reply_target_name = AGENT_PERSONAS[commenters[reply_target_index]]["name"]
     reply_instruction = (
-        f"\n\n【중요】 위 3개 댓글 외에, 작성자 {author_name}(agent_id: \"{author_id}\")이 "
+        f"\n\n【중요】 위 3개 댓글 외에, 작성자 {author_name} {author_title}(agent_id: \"{author_id}\")이 "
         f"{reply_target_index}번 댓글({reply_target_name}의 댓글)에 답글을 1개 추가로 작성합니다. "
         f"답글에서 상대방 이름을 언급할 때는 반드시 '{reply_target_name}'으로만 표기하세요. "
         f"반드시 총 {total}개를 출력하세요."
@@ -1947,11 +1948,11 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         f"오늘 날짜: {today_str}\n"
         f"블로그 포스트 제목: \"{post_title}\"\n"
         f"내용 요약: {post_summary}\n"
-        f"작성자: {author_name} (agent_id: \"{author_id}\")\n\n"
+        f"작성자: {author_name} {author_title} (agent_id: \"{author_id}\")\n\n"
         f"【댓글 작성자 {total}명】\n{personas_desc}"
         f"{reply_instruction}\n\n"
         "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
-        "다른 에이전트를 이름으로 부를 때는 반드시 위에 명시된 정확한 이름만 사용하세요.\n"
+        "다른 에이전트를 부를 때는 반드시 위에 명시된 정확한 이름+직함을 사용하세요 (예: '플랜 차장', '위키 대리').\n"
         f"총 {total}개 작성."
     )
 
@@ -2011,6 +2012,7 @@ async def generate_quiz_post(quiz_title: str) -> dict:
         "- 에이전트 11명 이름을 자연스럽게 한 줄에 나열 (이름 바꾸지 말 것)\n"
         "- 퀴즈 시작 유도 한 문장으로 마무리\n"
         "표·목록·긴 설명 없이 짧고 템포 있게.\n"
+        "맞춤법을 정확히 지키고 '누와' 같은 오타 없이 작성하세요.\n"
     )
 
     message = await client.messages.create(
