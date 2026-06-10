@@ -387,24 +387,40 @@ async function runProjectAssignments(
   planOutput: string,
 ): Promise<void> {
   if (!workflow.project) return;
-  for (const assignment of workflow.project.assignments) {
-    workflow.steps.push(createPendingStep(assignment.agentId, "running"));
-    notify();
-    const step = await runStep(
-      assignment.agentId,
-      buildProjectAgentCommand(input, assignment, planOutput),
-      { writeHandoff: false },
-    );
-    workflow.steps[workflow.steps.length - 1] = step;
+  const stepStartIndex = workflow.steps.length;
+  const notePaths = new Array<string | null>(workflow.project.assignments.length).fill(null);
 
-    try {
-      const notePath = await writeProjectAgentNote(workflow, assignment, step);
-      workflow.project.notePaths.push(notePath);
-    } catch {
-      // Project note failure should not stop wiki cleanup.
-    }
-    notify();
+  for (const assignment of workflow.project.assignments) {
+    workflow.steps.push(createPendingStep(assignment.agentId, "queued"));
   }
+  notify();
+
+  await Promise.all(
+    workflow.project.assignments.map(async (assignment, index) => {
+      workflow.steps[stepStartIndex + index] = createPendingStep(assignment.agentId, "running");
+      notify();
+
+      const step = await runStep(
+        assignment.agentId,
+        buildProjectAgentCommand(input, assignment, planOutput),
+        { writeHandoff: false },
+      );
+      workflow.steps[stepStartIndex + index] = step;
+
+      try {
+        const notePath = await writeProjectAgentNote(workflow, assignment, step);
+        notePaths[index] = notePath;
+      } catch {
+        // Project note failure should not stop wiki cleanup.
+      }
+      notify();
+    }),
+  );
+
+  workflow.project.notePaths.push(
+    ...notePaths.filter((notePath): notePath is string => Boolean(notePath)),
+  );
+  notify();
 
   workflow.steps.push(createPendingStep("wiki", "running"));
   notify();
