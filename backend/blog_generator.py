@@ -1991,5 +1991,36 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
     return results
 
 
+async def generate_quiz_post(quiz_title: str) -> dict:
+    """플랜 차장이 쓰는 퀴즈 소개 글. 짧고 구조적이되 개성 있게."""
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    plan_persona = AGENT_PERSONAS["plan"]
+
+    prompt = (
+        f"퀴즈 제목: \"{quiz_title}\"\n\n"
+        "이 퀴즈를 소개하는 블로그 글을 작성하세요 (600~900자, 마크다운 사용 가능).\n"
+        "퀴즈 자체가 글 아래에 바로 삽입되므로, 글에서 퀴즈 문항은 언급하지 마세요.\n"
+        "플랜 차장 스타일로:\n"
+        "- 이 퀴즈를 왜 만들었는지 PM 시각으로 설명\n"
+        "- Cosmic Hustle AI 에이전트 11명을 간략히 소개 (이름+한 줄 개성)\n"
+        "- 퀴즈를 통해 독자가 얻을 것 명확히 제시\n"
+        "- '먼저 요구사항부터 정의해볼게요.' 최소 1회 사용\n"
+        "- 독자에게 퀴즈 참여 유도로 마무리\n"
+    )
+
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1200,
+        system=plan_persona["system"],
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return {
+        "content":        message.content[0].text.strip(),
+        "tags":           "성격 테스트,퀴즈,Cosmic Hustle,에이전트,AI",
+        "trending_topic": "성격 테스트",
+    }
+
+
 def _weekday_kr(weekday: int) -> str:
     return ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"][weekday]

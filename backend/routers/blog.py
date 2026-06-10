@@ -14,13 +14,14 @@ from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from db.connection import get_db
-from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog
+from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
     generate_intro_post, generate_intro_comments,
     generate_debate_post, generate_debate_comments,
     generate_discovery_post,
+    generate_quiz_post,
     request_gsc_indexing,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
@@ -190,6 +191,18 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
         result.update(_vote_result(db, post.id, my_voter_key=ip_hash))
 
     return result
+
+
+@router.get("/posts/{slug}/my-identity")
+def get_my_identity(slug: str, request: Request, db: Session = Depends(get_db)):
+    """IP 기반 익명 정체성 미리 조회 — 댓글을 달지 않아도 내 이름/아바타를 알 수 있음."""
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    forwarded = request.headers.get("x-forwarded-for")
+    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "unknown")
+    name, avatar = _anon_identity(ip, post.id, db)
+    return {"user_name": name, "anon_avatar": avatar}
 
 
 @router.get("/posts/{slug}/vote")
@@ -422,6 +435,49 @@ async def trigger_generate_discovery(request: Request, topic: str | None = None,
     db.commit()
     db.refresh(post)
     return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url, "agent_id": post.agent_id}
+
+
+@router.post("/generate-quiz")
+async def trigger_generate_quiz(
+    slug: str = "which-cosmic-hustle-ai-are-you",
+    db: Session = Depends(get_db),
+    _=Depends(_require_admin),
+):
+    """퀴즈 포스트 콘텐츠 + 에이전트 댓글 생성/갱신. 기존 포스트 slug로 찾아서 content·tags·topic 업데이트."""
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail=f"포스트 없음: {slug}")
+
+    data = await generate_quiz_post(post.title)
+    post.content        = data["content"]
+    post.tags           = data["tags"]
+    post.trending_topic = data["trending_topic"]
+
+    db.commit()
+    db.refresh(post)
+    return {"slug": post.slug, "title": post.title, "tags": post.tags, "trending_topic": post.trending_topic}
+
+
+@router.post("/quiz/{slug}/record")
+def record_quiz_result(slug: str, body: dict, request: Request, db: Session = Depends(get_db)):
+    """퀴즈 결과 기록 (집계용). body: {agent_id: string}"""
+    agent_id = (body.get("agent_id") or "").strip()
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="agent_id 필요")
+    db.add(QuizResultLog(id=str(uuid.uuid4()), slug=slug, agent_id=agent_id))
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/quiz/{slug}/stats")
+def get_quiz_stats(slug: str, db: Session = Depends(get_db)):
+    """퀴즈 결과 집계 반환. {total, counts: {agent_id: count}}"""
+    rows = db.query(QuizResultLog.agent_id, func.count().label("cnt")).filter(
+        QuizResultLog.slug == slug
+    ).group_by(QuizResultLog.agent_id).all()
+    counts = {r.agent_id: r.cnt for r in rows}
+    total  = sum(counts.values())
+    return {"total": total, "counts": counts}
 
 
 @router.patch("/posts/{post_id}")

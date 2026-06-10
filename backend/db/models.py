@@ -149,6 +149,15 @@ class BlogViewLog(Base):
     date = Column(String(10), primary_key=True)  # YYYY-MM-DD
 
 
+class QuizResultLog(Base):
+    __tablename__ = "quiz_result_logs"
+
+    id         = Column(String(36), primary_key=True)
+    slug       = Column(String(200), nullable=False, index=True)
+    agent_id   = Column(String(50), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 
