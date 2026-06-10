@@ -13,11 +13,13 @@ import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import BlogComment, BlogDailyVisit, BlogPost, BlogViewLog
+from db.models import AgentMemory, BlogComment, BlogDailyVisit, BlogPost, BlogViewLog
 
 logger = logging.getLogger(__name__)
 
 TREND_QUERIES = ("AI 트렌드", "블로그 바이럴", "테크 트렌드")
+GROWTH_MEMORY_START = "<!-- blog-growth-memory:start -->"
+GROWTH_MEMORY_END = "<!-- blog-growth-memory:end -->"
 BOT_UA_MARKERS = (
     "bot", "crawler", "spider", "slurp", "bingpreview", "facebookexternalhit",
     "ahrefs", "semrush", "bytespider", "petalbot", "mj12bot", "python-requests",
@@ -384,6 +386,56 @@ def render_buzz_report(
     return "\n".join(lines)
 
 
+def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> str:
+    top_tags = ", ".join(tag for tag, _ in snapshot["top_tags"][:5]) or "없음"
+    top_posts = "; ".join(post["title"] for post in snapshot["top_posts"][:3]) or "없음"
+    hot_signals = "; ".join(item["title"] for item in headlines[:3]) or "없음"
+    bot_text = "; ".join(bot_signals[:3]) or "강한 의심 신호 없음"
+    overview = ga.get("overview") if ga.get("ok") else {}
+    channels = ", ".join(f"{c['channel']} {c['sessions']}" for c in ga.get("channels", [])[:3]) or "없음"
+
+    return "\n".join([
+        GROWTH_MEMORY_START,
+        f"[Blog Growth Signals {snapshot['date']}]",
+        f"- 자체 조회: 오늘 {snapshot['today_visits']}, 7일 {snapshot['week_visits']}, 포스트뷰 {snapshot['unique_post_views_today']}",
+        f"- GA: 세션 {overview.get('sessions', 'N/A')}, 페이지뷰 {overview.get('page_views', 'N/A')}, 이탈률 {overview.get('bounce_rate', 'N/A')}%, 체류 {overview.get('avg_session_sec', 'N/A')}초",
+        f"- 유입 채널: {channels}",
+        f"- 잘 먹힌 태그: {top_tags}",
+        f"- 반응 상위 글: {top_posts}",
+        f"- 봇/저품질 신호: {bot_text}",
+        f"- 오늘 트렌드 힌트: {hot_signals}",
+        "- 다음 글 전략: 상위 태그와 트렌드 힌트를 섞되, 봇 의심 신호가 강한 날은 조회수보다 GA 체류/채널을 우선 판단.",
+        GROWTH_MEMORY_END,
+    ])
+
+
+def _replace_growth_memory_section(current_memory: str | None, section: str, limit: int = 1800) -> str:
+    current = (current_memory or "").strip()
+    start = current.find(GROWTH_MEMORY_START)
+    end = current.find(GROWTH_MEMORY_END)
+    if start >= 0 and end >= start:
+        end += len(GROWTH_MEMORY_END)
+        updated = f"{current[:start].rstrip()}\n\n{section}\n\n{current[end:].lstrip()}".strip()
+    elif current:
+        updated = f"{current}\n\n{section}"
+    else:
+        updated = section
+    return updated[-limit:].strip() if len(updated) > limit else updated
+
+
+def update_buzz_growth_memory(db: Session, snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> dict:
+    section = render_buzz_growth_memory(snapshot, ga, access_logs, bot_signals, headlines)
+    row = db.query(AgentMemory).filter(AgentMemory.agent_id == "buzz").first()
+    if row:
+        row.memory = _replace_growth_memory_section(row.memory, section)
+        row.updated_at = datetime.utcnow()
+    else:
+        row = AgentMemory(agent_id="buzz", memory=section)
+        db.add(row)
+    db.commit()
+    return {"ok": True, "agent_id": "buzz", "chars": len(row.memory or "")}
+
+
 async def send_slack_report(text: str) -> dict:
     webhook_url = os.environ.get("BLOG_REPORT_SLACK_WEBHOOK_URL") or os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook_url:
@@ -396,13 +448,15 @@ async def send_slack_report(text: str) -> dict:
     return {"ok": True, "status_code": response.status_code}
 
 
-async def build_daily_blog_report(db: Session, send_slack: bool = False) -> dict:
+async def build_daily_blog_report(db: Session, send_slack: bool = False, update_memory: bool | None = None) -> dict:
     snapshot = collect_blog_report_snapshot(db)
     ga = fetch_daily_ga_summary()
     access_logs = analyze_access_logs()
     bot_signals = assess_bot_signals(snapshot, ga, access_logs)
     headlines = await fetch_trend_headlines()
     text = render_buzz_report(snapshot, headlines, ga, access_logs, bot_signals)
+    should_update_memory = send_slack if update_memory is None else update_memory
+    memory = update_buzz_growth_memory(db, snapshot, ga, access_logs, bot_signals, headlines) if should_update_memory else {"ok": False, "skipped": True}
     slack = await send_slack_report(text) if send_slack else {"ok": False, "skipped": True}
     return {
         "ok": True,
@@ -411,6 +465,7 @@ async def build_daily_blog_report(db: Session, send_slack: bool = False) -> dict
         "access_logs": access_logs,
         "bot_signals": bot_signals,
         "headlines": headlines,
+        "memory": memory,
         "text": text,
         "slack": slack,
     }
