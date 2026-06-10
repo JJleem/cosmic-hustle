@@ -113,6 +113,7 @@ async function findLatestHandoffPath(): Promise<string | null> {
 function renderHandoff(run: HermesRunResult, relativePath: string): string {
   const timestamp = formatKstTimestamp(new Date(run.createdAt));
   const title = `Hermes ${run.agentId} Dashboard Run`;
+  const agentLink = agentWikiLink(run.agentId);
 
   return [
     "---",
@@ -125,6 +126,8 @@ function renderHandoff(run: HermesRunResult, relativePath: string): string {
     "",
     `# ${title}`,
     "",
+    "Links: [[projects/cosmic-hustle]] · [[knowledge/session-memory-automation]] · [[knowledge/vault-curation-policy]]",
+    "",
     "## Trigger",
     "",
     "Dashboard에서 Hermes employee command가 실행됨.",
@@ -135,7 +138,7 @@ function renderHandoff(run: HermesRunResult, relativePath: string): string {
     "",
     "## Agents Involved",
     "",
-    `- ${run.agentId}`,
+    `- ${agentLink}`,
     "",
     "## What Was Done",
     "",
@@ -200,6 +203,8 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     "",
     `# ${title}`,
     "",
+    "Links: [[projects/cosmic-hustle]] · [[knowledge/session-memory-automation]] · [[knowledge/vault-curation-policy]]",
+    "",
     "## Trigger",
     "",
     "Dashboard에서 팀 실행 workflow가 시작됨.",
@@ -210,7 +215,7 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     "",
     "## Agents Involved",
     "",
-    ...workflow.steps.map((step) => `- ${step.agentId}: ${step.status}`),
+    ...workflow.steps.map((step) => `- ${agentWikiLink(step.agentId)}: ${step.status}`),
     "",
     "## What Was Done",
     "",
@@ -264,6 +269,7 @@ function renderProjectAgentNote(
   relativePath: string,
 ): string {
   const timestamp = formatKstTimestamp(new Date(step.run?.createdAt ?? workflow.createdAt));
+  const agentLink = agentWikiLink(assignment.agentId);
   return [
     "---",
     `title: ${workflow.goal} - ${assignment.agentId}`,
@@ -275,9 +281,15 @@ function renderProjectAgentNote(
     "",
     `# ${assignment.agentId} 작업 기록`,
     "",
+    `Links: [[projects/cosmic-hustle]] · ${agentLink} · [[knowledge/vault-curation-policy]]`,
+    "",
     "## Project",
     "",
-    workflow.goal.trim(),
+    `[[projects/cosmic-hustle]] - ${workflow.goal.trim()}`,
+    "",
+    "## Agent",
+    "",
+    agentLink,
     "",
     "## Assigned Task",
     "",
@@ -331,4 +343,8 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9가-힣]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 72);
+}
+
+function agentWikiLink(agentId: string): string {
+  return `[[agents/${agentId}]]`;
 }
