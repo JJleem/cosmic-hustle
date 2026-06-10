@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 from collections import Counter
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -167,8 +168,12 @@ def analyze_access_logs(today: date | None = None, max_lines: int = 5000) -> dic
                 top_paths.update([path_match.group(1)[:120]])
 
     ratio = round((bot_hits / total) * 100, 1) if total else 0
+    if not readable:
+        return analyze_journal_logs(today=today, max_lines=max_lines, checked_paths=checked)
+
     return {
         "ok": bool(readable),
+        "source": "access_log",
         "date": today.isoformat(),
         "checked_paths": checked,
         "readable_paths": readable,
@@ -177,6 +182,69 @@ def analyze_access_logs(today: date | None = None, max_lines: int = 5000) -> dic
         "bot_ratio": ratio,
         "top_bot_uas": bot_uas.most_common(5),
         "top_paths": top_paths.most_common(5),
+    }
+
+
+def analyze_journal_logs(today: date | None = None, max_lines: int = 5000, checked_paths: list[str] | None = None) -> dict:
+    today = today or datetime.now(ZoneInfo("Asia/Seoul")).date()
+    unit = os.environ.get("BLOG_REPORT_JOURNAL_UNIT", "cosmic-backend")
+    cmd = ["journalctl", "-u", unit, "--since", today.isoformat(), "--no-pager", "-n", str(max_lines)]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=8, check=False)
+    except Exception as exc:
+        logger.warning("journal 로그 읽기 실패: %s", exc)
+        return {
+            "ok": False,
+            "source": "none",
+            "date": today.isoformat(),
+            "checked_paths": checked_paths or [],
+            "readable_paths": [],
+            "error": str(exc),
+        }
+    if result.returncode != 0:
+        return {
+            "ok": False,
+            "source": "journal",
+            "date": today.isoformat(),
+            "checked_paths": checked_paths or [],
+            "readable_paths": [],
+            "error": result.stderr[:300],
+        }
+
+    access_re = re.compile(r"INFO:\s+([0-9a-fA-F:.]+):\d+\s+-\s+\"(?:GET|POST|HEAD)\s+([^\"\s]+).*\"\s+(\d{3})")
+    ip_counter: Counter[str] = Counter()
+    path_counter: Counter[str] = Counter()
+    status_counter: Counter[str] = Counter()
+    total = 0
+    for line in result.stdout.splitlines():
+        match = access_re.search(line)
+        if not match:
+            continue
+        ip, path, status = match.groups()
+        total += 1
+        ip_counter.update([ip])
+        status_counter.update([status])
+        if path.startswith("/api/blog"):
+            path_counter.update([path[:120]])
+
+    top_ip_hits = ip_counter.most_common(1)[0][1] if ip_counter else 0
+    top_ip_ratio = round((top_ip_hits / total) * 100, 1) if total else 0
+    return {
+        "ok": True,
+        "source": "journal",
+        "date": today.isoformat(),
+        "checked_paths": checked_paths or [],
+        "readable_paths": [],
+        "journal_unit": unit,
+        "total_lines_today": total,
+        "bot_hits": 0,
+        "bot_ratio": 0,
+        "top_ip_ratio": top_ip_ratio,
+        "top_ips": ip_counter.most_common(5),
+        "top_statuses": status_counter.most_common(5),
+        "top_bot_uas": [],
+        "top_paths": path_counter.most_common(5),
     }
 
 
@@ -196,6 +264,8 @@ def assess_bot_signals(snapshot: dict, ga: dict, access_logs: dict) -> list[str]
         signals.append(f"GA 이탈률 {ga_bounce}%: 저품질/봇성 유입 가능")
     if access_logs.get("ok") and access_logs.get("bot_ratio", 0) >= 20:
         signals.append(f"access log bot UA 비율 {access_logs['bot_ratio']}%")
+    if access_logs.get("source") == "journal" and access_logs.get("top_ip_ratio", 0) >= 40:
+        signals.append(f"journal 상위 IP 비중 {access_logs['top_ip_ratio']}%: 반복 요청 의심")
     if not access_logs.get("ok"):
         signals.append("access log 미연결: AWS/Lightsail 봇 판정은 아직 제한적")
     return signals
@@ -268,9 +338,14 @@ def render_buzz_report(
     else:
         lines.append("- 강한 의심 신호 없음")
     if access_logs.get("ok"):
-        lines.append(
-            f"- access log: 오늘 {access_logs['total_lines_today']}줄 중 bot UA {access_logs['bot_hits']}건 ({access_logs['bot_ratio']}%)"
-        )
+        if access_logs.get("source") == "journal":
+            lines.append(
+                f"- journal: 오늘 API access {access_logs['total_lines_today']}건, 상위 IP 비중 {access_logs.get('top_ip_ratio', 0)}%"
+            )
+        else:
+            lines.append(
+                f"- access log: 오늘 {access_logs['total_lines_today']}줄 중 bot UA {access_logs['bot_hits']}건 ({access_logs['bot_ratio']}%)"
+            )
 
     if access_logs.get("top_bot_uas"):
         ua = access_logs["top_bot_uas"][0][0]
@@ -278,6 +353,9 @@ def render_buzz_report(
     if access_logs.get("top_paths"):
         path = access_logs["top_paths"][0][0]
         lines.append(f"- 의심/주요 경로: {path}")
+    if access_logs.get("top_ips"):
+        ip, count = access_logs["top_ips"][0]
+        lines.append(f"- 최다 요청 IP: {ip} ({count}건)")
 
     lines.extend([
         "",
