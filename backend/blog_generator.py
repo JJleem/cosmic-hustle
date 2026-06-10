@@ -2022,7 +2022,7 @@ async def generate_quiz_post(quiz_title: str) -> dict:
 
     return {
         "content":        message.content[0].text.strip(),
-        "tags":           '["성격 테스트", "퀴즈", "Cosmic Hustle", "에이전트", "AI"]',
+        "tags":           '["성격 테스트", "퀴즈", "quiz", "Cosmic Hustle", "에이전트", "AI"]',
         "trending_topic": "AI 테스트",
     }
 
