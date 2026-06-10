@@ -473,8 +473,8 @@ async def trigger_generate_quiz(
         for c in comments:
             db.add(BlogComment(**c))
 
-    # 썸네일 생성 (force 또는 기존 썸네일 없을 때)
-    if force or not post.thumbnail_url:
+    # 썸네일 생성 (기존 썸네일 없을 때만)
+    if not post.thumbnail_url:
         scene_prompt = await generate_scene_prompt_from_content("plan", post.title, data["content"])
         thumbnail_url = await _generate_thumbnail("plan", scene_prompt)
         if thumbnail_url:
