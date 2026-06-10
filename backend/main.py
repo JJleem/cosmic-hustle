@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
 from db.models import BlogPost, AgentMemory
-from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog
+from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog, blog_report
 
 Base.metadata.create_all(bind=engine)
 
@@ -60,6 +60,7 @@ app.include_router(export.router)
 app.include_router(logs.router)
 app.include_router(thumbnail.router)
 app.include_router(blog.router)
+app.include_router(blog_report.router)
 
 
 async def _daily_blog_job():
@@ -259,6 +260,24 @@ async def _ga_monthly_job():
         logger.error(f"GA 월간 분석 실패: {result.get('error')}")
 
 
+async def _daily_blog_report_job():
+    """매일 09:20 KST — 버즈가 블로그 성장 지표/트렌드를 Slack으로 보고."""
+    from blog_daily_report import build_daily_blog_report
+
+    db = SessionLocal()
+    try:
+        result = await build_daily_blog_report(db, send_slack=True)
+        slack = result.get("slack", {})
+        if slack.get("ok"):
+            logger.info("버즈 블로그 데일리 Slack 리포트 완료")
+        else:
+            logger.warning(f"버즈 블로그 데일리 Slack 리포트 미전송: {slack}")
+    except Exception as e:
+        logger.error(f"버즈 블로그 데일리 리포트 실패: {e}")
+    finally:
+        db.close()
+
+
 @app.post("/api/ga/run-monthly")
 async def run_ga_monthly_now(start_date: str | None = None, end_date: str | None = None):
     """수동 테스트용 — start_date/end_date 미지정 시 전달 기준."""
@@ -293,8 +312,14 @@ async def startup():
         id="ga_monthly",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _daily_blog_report_job,
+        CronTrigger(hour=9, minute=20, timezone="Asia/Seoul"),
+        id="daily_blog_report",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 매월 1일 06:00 GA 분석")
+    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 매월 1일 06:00 GA 분석")
 
 
 @app.on_event("shutdown")
