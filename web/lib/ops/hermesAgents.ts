@@ -47,6 +47,8 @@ export type HermesWorkflowRequest = {
   maxAgents?: number;
   mode?: "basic" | "project";
   dryRun?: boolean;
+  planOnly?: boolean;
+  approvedAssignments?: HermesAgentAssignment[];
   async?: boolean;
 };
 
@@ -83,7 +85,8 @@ export type HermesWorkflowResult = {
     assignments: HermesAgentAssignment[];
     notePaths: string[];
     indexNotePath?: string;
-    assignmentSource?: "plan" | "fallback";
+    assignmentSource?: "plan" | "fallback" | "approved";
+    awaitingApproval?: boolean;
     warnings?: string[];
   };
 };

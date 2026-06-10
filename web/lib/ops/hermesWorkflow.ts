@@ -187,13 +187,13 @@ export async function runHermesWorkflow(
   try {
     if (input.dryRun) {
       await runDryProjectWorkflow(input, workflow, notify);
-      workflow.status = getWorkflowStatus(workflow.steps);
+      workflow.status = workflow.project?.awaitingApproval ? "blocked" : getWorkflowStatus(workflow.steps);
       return await finishWorkflow(workflow, startedAt, notify);
     }
 
     if (input.mode === "project") {
       await runProjectWorkflow(input, workflow, notify);
-      workflow.status = getWorkflowStatus(workflow.steps);
+      workflow.status = workflow.project?.awaitingApproval ? "blocked" : getWorkflowStatus(workflow.steps);
       return await finishWorkflow(workflow, startedAt, notify);
     }
 
@@ -252,12 +252,20 @@ async function runDryProjectWorkflow(
     assignments: [],
     notePaths: [],
     assignmentSource: "fallback",
-    warnings: ["dryRun uses deterministic fallback assignments."],
+    warnings: [],
+    awaitingApproval: input.planOnly === true,
   };
 
   const assignmentCount = Math.max(1, Math.min(4, Math.floor(input.maxAgents ?? 1)));
-  const assignments = pickAssignments([], assignmentCount);
+  const approvedAssignments = normalizeAssignments(input.approvedAssignments);
+  const assignments = approvedAssignments.length
+    ? pickAssignments(approvedAssignments, assignmentCount)
+    : pickAssignments([], assignmentCount);
   workflow.project.assignments = assignments;
+  workflow.project.assignmentSource = approvedAssignments.length ? "approved" : "fallback";
+  if (!approvedAssignments.length) {
+    workflow.project.warnings = ["dryRun uses deterministic fallback assignments."];
+  }
 
   workflow.steps.push(
     createDryStep(
@@ -272,6 +280,11 @@ async function runDryProjectWorkflow(
     ),
   );
   notify();
+
+  if (input.planOnly) {
+    workflow.nextAction = "승인 후 approvedAssignments로 project workflow를 실행한다.";
+    return;
+  }
 
   for (const assignment of assignments) {
     const step = createDryStep(
@@ -320,7 +333,29 @@ async function runProjectWorkflow(
     notePaths: [],
     assignmentSource: "plan",
     warnings: [],
+    awaitingApproval: input.planOnly === true,
   };
+
+  const approvedAssignments = normalizeAssignments(input.approvedAssignments);
+  if (approvedAssignments.length) {
+    workflow.project.assignments = pickAssignments(approvedAssignments, input.maxAgents ?? 4);
+    workflow.project.assignmentSource = "approved";
+    workflow.steps.push(
+      createDryStep(
+        "plan",
+        workflow.goal,
+        JSON.stringify({
+          status: "done",
+          summary: "Approved assignments supplied; plan step was not re-run.",
+          assignments: workflow.project.assignments,
+          next_action: "Run approved assignments.",
+        }),
+      ),
+    );
+    notify();
+    await runProjectAssignments(input, workflow, notify, "");
+    return;
+  }
 
   workflow.steps.push(createPendingStep("plan", "running"));
   notify();
@@ -337,12 +372,27 @@ async function runProjectWorkflow(
     workflow.project.warnings.push("No valid active assignment from plan; fallback assignments used.");
   }
 
-  for (const assignment of assignments) {
+  if (input.planOnly) {
+    workflow.nextAction = "승인 후 approvedAssignments로 project workflow를 실행한다.";
+    return;
+  }
+
+  await runProjectAssignments(input, workflow, notify, plan.run?.response ?? "");
+}
+
+async function runProjectAssignments(
+  input: HermesWorkflowRequest,
+  workflow: HermesWorkflowResult,
+  notify: () => void,
+  planOutput: string,
+): Promise<void> {
+  if (!workflow.project) return;
+  for (const assignment of workflow.project.assignments) {
     workflow.steps.push(createPendingStep(assignment.agentId, "running"));
     notify();
     const step = await runStep(
       assignment.agentId,
-      buildProjectAgentCommand(input, assignment, plan.run?.response ?? ""),
+      buildProjectAgentCommand(input, assignment, planOutput),
       { writeHandoff: false },
     );
     workflow.steps[workflow.steps.length - 1] = step;
@@ -377,7 +427,7 @@ async function finishWorkflow(
 
   const lastWikiStep = workflow.steps.findLast((s) => s.agentId === "wiki");
   workflow.nextAction =
-    extractNextAction(lastWikiStep?.run?.response) || fallbackNextAction(workflow);
+    workflow.nextAction || extractNextAction(lastWikiStep?.run?.response) || fallbackNextAction(workflow);
 
   if (workflow.project) {
     try {
@@ -611,6 +661,28 @@ function parseAssignments(response: string | undefined): AssignmentParseResult {
   } catch {
     return { assignments: [], warnings: ["Plan JSON could not be parsed."] };
   }
+}
+
+function normalizeAssignments(value: unknown): HermesAgentAssignment[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const agentId = record.agentId;
+    const task = record.task;
+    if (!isProjectAgentId(agentId) || typeof task !== "string" || !task.trim()) return [];
+    if (record.active === false) return [];
+
+    return [
+      {
+        agentId,
+        task: task.trim(),
+        active: true,
+        reason: typeof record.reason === "string" ? record.reason.trim() : "approved assignment",
+      },
+    ];
+  });
 }
 
 function pickAssignments(

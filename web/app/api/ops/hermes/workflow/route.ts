@@ -59,6 +59,8 @@ export async function POST(request: Request) {
       maxAgents: body.maxAgents,
       mode: body.mode,
       dryRun: body.dryRun,
+      planOnly: body.planOnly,
+      approvedAssignments: body.approvedAssignments,
     };
 
     if (!asyncMode) {

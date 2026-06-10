@@ -236,6 +236,7 @@ function renderWorkflowHandoff(workflow: HermesWorkflowResult, relativePath: str
     workflow.project
       ? `Project assignment source: ${workflow.project.assignmentSource ?? "unknown"}`
       : "",
+    workflow.project?.awaitingApproval ? "Project awaiting approval: yes" : "",
     ...(workflow.project?.warnings?.length
       ? ["", "Project assignment warnings:", ...workflow.project.warnings.map((item) => `- ${item}`)]
       : []),
@@ -349,6 +350,7 @@ function renderProjectIndexNote(workflow: HermesWorkflowResult, relativePath: st
     "",
     `- Status: ${workflow.status}`,
     `- DryRun: ${workflow.dryRun ? "yes" : "no"}`,
+    `- Awaiting approval: ${workflow.project?.awaitingApproval ? "yes" : "no"}`,
     `- Workflow id: ${workflow.id}`,
     workflow.vaultNotePath ? `- Handoff: ${workflow.vaultNotePath}` : "- Handoff: pending",
     `- Duration: ${workflow.durationMs}ms`,
