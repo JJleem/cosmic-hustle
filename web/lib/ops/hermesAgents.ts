@@ -17,6 +17,7 @@ export type HermesAgentId = (typeof HERMES_AGENT_IDS)[number];
 export type HermesRunRequest = {
   agentId: HermesAgentId;
   command: string;
+  writeHandoff?: boolean;
 };
 
 export type HermesRunResult = {

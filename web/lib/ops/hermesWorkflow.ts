@@ -310,7 +310,7 @@ async function runProjectWorkflow(
 
   workflow.steps.push(createPendingStep("plan", "running"));
   notify();
-  const plan = await runStep("plan", buildProjectPlanCommand(input));
+  const plan = await runStep("plan", buildProjectPlanCommand(input), { writeHandoff: false });
   workflow.steps[workflow.steps.length - 1] = plan;
   notify();
 
@@ -323,6 +323,7 @@ async function runProjectWorkflow(
     const step = await runStep(
       assignment.agentId,
       buildProjectAgentCommand(input, assignment, plan.run?.response ?? ""),
+      { writeHandoff: false },
     );
     workflow.steps[workflow.steps.length - 1] = step;
 
@@ -337,7 +338,11 @@ async function runProjectWorkflow(
 
   workflow.steps.push(createPendingStep("wiki", "running"));
   notify();
-  const wiki = await runStep("wiki", buildProjectWikiCommand(input, workflow.steps, workflow.project.notePaths));
+  const wiki = await runStep(
+    "wiki",
+    buildProjectWikiCommand(input, workflow.steps, workflow.project.notePaths),
+    { writeHandoff: false },
+  );
   workflow.steps[workflow.steps.length - 1] = wiki;
   notify();
 }
@@ -415,9 +420,10 @@ export async function getHermesWorkflowHistory(limit = 5): Promise<HermesWorkflo
 async function runStep(
   agentId: HermesAgentId,
   command: string,
+  options: { writeHandoff?: boolean } = {},
 ): Promise<HermesWorkflowStep> {
   try {
-    const run = await runHermesAgent({ agentId, command });
+    const run = await runHermesAgent({ agentId, command, writeHandoff: options.writeHandoff });
     return { agentId, status: isBlockedResponse(run.response) ? "blocked" : "done", run };
   } catch (error) {
     return {

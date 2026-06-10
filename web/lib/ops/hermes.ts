@@ -96,11 +96,13 @@ export async function runHermesAgent(input: HermesRunRequest): Promise<HermesRun
     vaultNotePath: null,
   };
 
-  try {
-    run.vaultNotePath = await writeHermesRunHandoff(run);
-  } catch (error) {
-    run.vaultNoteError =
-      error instanceof Error ? error.message : "Failed to write Obsidian handoff note";
+  if (input.writeHandoff !== false) {
+    try {
+      run.vaultNotePath = await writeHermesRunHandoff(run);
+    } catch (error) {
+      run.vaultNoteError =
+        error instanceof Error ? error.message : "Failed to write Obsidian handoff note";
+    }
   }
 
   await appendRunLog(run);
