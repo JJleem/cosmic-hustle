@@ -1727,9 +1727,10 @@ async def generate_intro_comments(post_id: str, post_title: str, post_summary: s
 
 async def generate_debate_post(
     topic: str,
-    agent_a: str = "over",
+    agent_a: str = "buzz",
     agent_b: str = "fact",
     preset_thumbnail: str | None = None,
+    recent_debates: list[str] | None = None,
 ) -> dict:
     """두 에이전트가 한 주제로 정면 대결하는 이벤트 포스트."""
     today  = datetime.now(KST).date()
@@ -1755,6 +1756,8 @@ async def generate_debate_post(
 - 첫 블록은 반드시 ::{agent_a}:: 로 시작, 제목(# ...)은 맨 첫 줄에
 - 각 블록 3~6문장, 상대방 직전 주장에 직접 반박할 것
 - 마지막 블록 다음에 독자 투표 CTA 섹션 추가 (## 여러분의 판단은?)
+- 최근 토론과 같은 논점축을 반복하지 말 것. 같은 AI 주제라도 '글쓰기 실력', '인간 감성 대체', '자동화 블로그의 정당성' 같은 축으로 되돌아가지 말고, 새 주제의 핵심 축을 선명하게 잡을 것
+- Cosmic Hustle 블로그 자체를 깎아내리거나 "이 블로그는 안 된다"는 자해형 논점으로 흐르지 말 것. 바깥 현상에 대한 토론으로 유지할 것
 
 【{pa['name']} 말투·논거】
 {pa['system'][:300]}
@@ -1775,10 +1778,19 @@ async def generate_debate_post(
 - 마지막 줄 태그:
   {{{{TAGS: 태그1, 태그2, 태그3, 태그4}}}}"""
 
+    recent_block = ""
+    if recent_debates:
+        recent_block = "【최근 AI 토론 — 같은 논점 반복 금지】\n" + "\n".join(
+            f"- {title}" for title in recent_debates[:6]
+        ) + "\n\n"
+
     user_content = (
         f"오늘({today.strftime('%Y년 %m월 %d일')}) 배틀 주제: **{topic}**\n\n"
+        f"{recent_block}"
         f"{pa['name']}은 찬성 측, {pb['name']}은 반대 측으로 배정합니다.\n"
         "팽팽하게 맞서되, 각자 자기 말투와 논거 스타일을 끝까지 유지하세요.\n"
+        "이 주제의 찬반 축은 'AI가 만든 유행도 사람들이 실제로 반응하고 따라 하면 문화인가' vs '데이터로 최적화된 노출은 자연 발생 유행과 다른가'처럼 잡으세요.\n"
+        "이미 했던 'AI가 인간보다 글을 잘 쓰는가'식 글쓰기 능력 비교로 돌아가지 마세요.\n"
         "마지막 투표 CTA에서 독자가 댓글로 승자를 선택하도록 강력하게 유도하세요.\n\n"
         "포스트 전체를 다 작성한 뒤 맨 끝에 {{THUMBNAIL: ...}} 태그, 그 다음 줄에 {{TAGS: 태그1, 태그2, 태그3, 태그4}} 태그를 반드시 붙이세요."
     )

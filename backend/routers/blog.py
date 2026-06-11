@@ -369,7 +369,7 @@ async def trigger_generate_intro(request: Request, db: Session = Depends(get_db)
 async def trigger_generate_debate(
     request: Request,
     topic: str,
-    agent_a: str = "over",
+    agent_a: str = "buzz",
     agent_b: str = "fact",
     thumbnail_url: str | None = None,
     db: Session = Depends(get_db),
@@ -381,7 +381,23 @@ async def trigger_generate_debate(
     if agent_a == agent_b:
         raise HTTPException(status_code=400, detail="두 에이전트가 달라야 합니다")
 
-    data = await generate_debate_post(topic, agent_a, agent_b, preset_thumbnail=thumbnail_url)
+    recent_debates = [
+        row[0] for row in (
+            db.query(BlogPost.title)
+            .filter(BlogPost.trending_topic.like("AI 토론 시리즈:%"))
+            .order_by(BlogPost.published_at.desc())
+            .limit(6)
+            .all()
+        )
+    ]
+
+    data = await generate_debate_post(
+        topic,
+        agent_a,
+        agent_b,
+        preset_thumbnail=thumbnail_url,
+        recent_debates=recent_debates,
+    )
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:
