@@ -20,8 +20,7 @@ _GSC_SITE_URL = f"https://{_SITE_HOST}"
 
 async def request_indexnow(url: str) -> None:
     """IndexNow로 색인 요청 (Bing·Yandex·Naver·Seznam). 실패해도 조용히 넘어감.
-    주의: Google은 IndexNow를 지원하지 않으므로 이 호출로는 Google 색인이 트리거되지 않음.
-    Google 색인은 sitemap.xml 또는 GSC Indexing API로 별도 처리 필요."""
+    주의: Google은 IndexNow를 지원하지 않음 → Google은 request_google_indexing()으로 별도 통보."""
     key = os.getenv("INDEXNOW_KEY")
     if not key:
         return
@@ -38,6 +37,56 @@ async def request_indexnow(url: str) -> None:
                 logger.warning(f"IndexNow 색인 요청 실패 {url}: {resp.status_code}")
     except Exception as e:
         logger.warning(f"IndexNow 색인 요청 오류: {e}")
+
+
+def _load_indexing_credentials():
+    """Google Indexing API용 서비스 계정 자격증명 로드 (path 또는 inline JSON 모두 지원).
+    GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON 우선, 없으면 GA4_SERVICE_ACCOUNT_JSON 재사용.
+    어느 쪽이든 해당 서비스 계정이 GSC에서 사이트 소유자로 등록돼 있어야 함. 미설정 시 None."""
+    sa_json = os.environ.get("GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON") or os.environ.get("GA4_SERVICE_ACCOUNT_JSON")
+    if not sa_json:
+        return None
+    from google.oauth2.service_account import Credentials
+    if sa_json.strip().startswith("{"):
+        info = json.loads(sa_json)
+    else:
+        with open(sa_json) as f:
+            info = json.load(f)
+    return Credentials.from_service_account_info(
+        info, scopes=["https://www.googleapis.com/auth/indexing"]
+    )
+
+
+async def request_google_indexing(url: str) -> None:
+    """Google Indexing API로 색인 요청 (URL_UPDATED). 실패해도 조용히 넘어감.
+    주의: 공식적으론 JobPosting/BroadcastEvent 전용 API이며, 일반 페이지 사용은 회색지대.
+    서비스 계정이 GSC 소유자로 등록돼 있어야 200을 받음. 자격증명 미설정 시 no-op."""
+    try:
+        creds = await asyncio.to_thread(_load_indexing_credentials)
+        if creds is None:
+            return
+        from google.auth.transport.requests import Request as _GoogleRequest
+        await asyncio.to_thread(creds.refresh, _GoogleRequest())
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://indexing.googleapis.com/v3/urlNotifications:publish",
+                headers={"Authorization": f"Bearer {creds.token}"},
+                json={"url": url, "type": "URL_UPDATED"},
+                timeout=10.0,
+            )
+        if resp.status_code == 200:
+            logger.info(f"Google Indexing 요청 완료: {url}")
+        else:
+            logger.warning(f"Google Indexing 요청 실패 {url}: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"Google Indexing 요청 오류: {e}")
+
+
+async def notify_search_engines(url: str) -> None:
+    """발행 URL을 검색엔진에 통보 — IndexNow(Bing·Naver 등) + Google Indexing API 동시.
+    두 함수 모두 내부에서 예외를 삼키므로 한쪽 실패가 다른 쪽을 막지 않음."""
+    await asyncio.gather(request_indexnow(url), request_google_indexing(url))
+
 
 _CHAR_DIR = Path(__file__).parent / "characters"
 
