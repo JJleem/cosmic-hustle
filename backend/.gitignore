@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .env
 *.db
+# 비밀 자격증명 — 절대 커밋 금지
+client_secret*.json
+gsc_token.json
+*service_account*.json
