@@ -67,6 +67,7 @@ GA4_PROPERTY_ID=539592160
 GA4_SERVICE_ACCOUNT_JSON=/path/to/ga_service_account.json
 INDEXNOW_KEY=...  # IndexNow(Bing·Naver 등) 색인 통보용, 없으면 IndexNow no-op
 GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON=/path/to/sa.json  # 선택. 없으면 GA4 서비스계정 재사용. Indexing API 활성화 + GSC 소유자 등록 필요
+GSC_SITE_URL=https://cosmic-hustle.ai.kr/  # 선택. GSC 검색어 수집용 속성 URL(URL-prefix는 끝에 /, 도메인 속성은 sc-domain:cosmic-hustle.ai.kr). 자격증명은 위 INDEXING/GA4 SA 재사용. 사전작업: Cloud에서 "Search Console API" 활성화(Indexing API와 별개). 미설정/실패 시 GSC 섹션 no-op
 VAPID_PUBLIC_KEY=...   # 웹푸시 공개키 — 프론트가 /api/blog/push/vapid-public-key로 받아감
 VAPID_PRIVATE_KEY=...  # 웹푸시 개인키 — 절대 커밋·노출 금지. 없으면 웹푸시 전체 no-op
 VAPID_SUBJECT=mailto:leemjaejun@gmail.com  # 선택 (기본값 동일)

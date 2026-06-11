@@ -142,6 +142,47 @@ def fetch_daily_ga_summary(today: date | None = None) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
+def fetch_gsc_summary(window_days: int = 28, lag_days: int = 3) -> dict:
+    """GSC 검색어 성과 수집 → 제목 보강 후보 + 상위 검색어.
+
+    용도는 '기존 글 제목 교정'뿐. 주제 선택에는 쓰지 않는다(오버피팅 방지).
+    GSC 데이터는 2~3일 지연되므로 today-lag_days를 끝점으로, 트래픽이 적어
+    하루치는 너무 얇으니 window_days(기본 28일) 누적 윈도로 본다.
+    실패/미설정/빈값 모두 안 깨지게 ok 플래그로만 처리.
+    """
+    try:
+        import gsc_client
+
+        end = datetime.now(ZoneInfo("Asia/Seoul")).date() - timedelta(days=lag_days)
+        start = end - timedelta(days=window_days - 1)
+        rows = gsc_client.fetch_query_page_rows(start.isoformat(), end.isoformat())
+        return {
+            "ok": True,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "title_fix_candidates": gsc_client.select_title_fix_candidates(rows),
+            "top_queries": gsc_client.top_queries(rows),
+        }
+    except Exception as exc:
+        logger.warning("GSC 수집 실패: %s", exc)
+        return {"ok": False, "error": str(exc)}
+
+
+def attach_post_titles(db: Session, candidates: list[dict]) -> list[dict]:
+    """제목 보강 후보의 page URL → 글 제목 매핑(사람용 리포트 가독성)."""
+    if not candidates:
+        return candidates
+    slugs = {cand["page"].rstrip("/").rsplit("/", 1)[-1] for cand in candidates}
+    titles = {
+        post.slug: post.title
+        for post in db.query(BlogPost).filter(BlogPost.slug.in_(slugs)).all()
+    }
+    for cand in candidates:
+        slug = cand["page"].rstrip("/").rsplit("/", 1)[-1]
+        cand["title"] = titles.get(slug, slug)
+    return candidates
+
+
 def analyze_access_logs(today: date | None = None, max_lines: int = 5000) -> dict:
     today = today or _default_report_date()
     raw_paths = os.environ.get("BLOG_REPORT_ACCESS_LOG_PATHS", "/var/log/nginx/access.log")
@@ -321,6 +362,7 @@ def render_buzz_report(
     access_logs: dict,
     bot_signals: list[str],
     judgement: str,
+    gsc: dict | None = None,
 ) -> str:
     visits_delta = snapshot["today_visits"] - snapshot["yesterday_visits"]
     delta_mark = "+" if visits_delta >= 0 else ""
@@ -397,6 +439,22 @@ def render_buzz_report(
             lines.append(f"- [{item['query']}] {item['title']}")
     else:
         lines.append("- 외부 트렌드 수집값 없음. 내부 반응 기준으로만 판단.")
+
+    lines.extend(["", "제목 보강 후보 (GSC: 노출되는데 클릭 안 되는 검색어 → 기존 글 제목 손볼 대상)"])
+    if gsc and gsc.get("ok"):
+        candidates = gsc.get("title_fix_candidates", [])
+        if candidates:
+            for cand in candidates[:5]:
+                ctr_pct = round(cand["ctr"] * 100, 1)
+                title = cand.get("title", cand["page"])
+                lines.append(
+                    f"- '{cand['query']}' 노출 {cand['impressions']}/CTR {ctr_pct}%/순위 {cand['position']} → [{title}] 제목 재검토"
+                )
+        else:
+            lines.append("- 조건 충족 검색어 없음 (트래픽 누적 중)")
+    else:
+        reason = gsc.get("error", "미설정") if gsc else "미수집"
+        lines.append(f"- GSC 미연결/실패: {reason}")
 
     lines.extend([
         "",
@@ -475,7 +533,30 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
         return {"ok": False, "error": str(exc), "text": _fallback_buzz_judgement(snapshot, bot_signals)}
 
 
-def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> str:
+def _gsc_title_lesson(gsc: dict | None) -> str:
+    """GSC 저CTR 검색어 → '제목 표현 교훈'으로 변환.
+
+    핵심: 이건 제목을 어떻게 쓸지에 대한 교훈이지, 해당 주제를 반복하라는 신호가 아님.
+    (예: '포켓몬카드 왜삼?'이 노출되는 건 포켓몬 글을 더 쓰라는 뜻이 아니라,
+    사람들이 질문형·구체 키워드로 검색하니 제목을 그 표현에 맞추라는 뜻.)
+    """
+    if not gsc or not gsc.get("ok"):
+        return "- 제목 표현 교훈(GSC): 데이터 미수집"
+    candidates = gsc.get("title_fix_candidates", [])
+    if not candidates:
+        return "- 제목 표현 교훈(GSC): 노출 대비 저CTR 검색어 아직 없음 (트래픽 누적 중)"
+    queries = "; ".join(
+        f"'{c['query']}'(노출 {c['impressions']})" for c in candidates[:4]
+    )
+    return (
+        f"- 제목 표현 교훈(GSC): 다음 검색어들은 노출은 되는데 클릭이 안 됨 → 사람들이 실제로 "
+        f"검색하는 표현(질문형·구체 키워드)을 제목에 반영하라. "
+        f"단, 이건 '제목을 어떻게 쓸지'에 대한 교훈일 뿐 해당 주제를 다시 쓰라는 뜻이 아니다 "
+        f"(주제는 최신 트렌드에서 고른다). 근거 검색어: {queries}"
+    )
+
+
+def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict], gsc: dict | None = None) -> str:
     top_tags = ", ".join(tag for tag, _ in snapshot["top_tags"][:5]) or "없음"
     top_posts = "; ".join(post["title"] for post in snapshot["top_posts"][:3]) or "없음"
     hot_signals = "; ".join(item["title"] for item in headlines[:3]) or "없음"
@@ -493,6 +574,7 @@ def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_s
         f"- 반응 상위 글: {top_posts}",
         f"- 봇/저품질 신호: {bot_text}",
         f"- 현재 트렌드 힌트: {hot_signals}",
+        _gsc_title_lesson(gsc),
         "- 다음 글 전략: 상위 태그와 트렌드 힌트를 섞되, 봇 의심 신호가 강한 날은 조회수보다 GA 체류/채널을 우선 판단.",
         GROWTH_MEMORY_END,
     ])
@@ -512,8 +594,8 @@ def _replace_growth_memory_section(current_memory: str | None, section: str, lim
     return updated[-limit:].strip() if len(updated) > limit else updated
 
 
-def update_buzz_growth_memory(db: Session, snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> dict:
-    section = render_buzz_growth_memory(snapshot, ga, access_logs, bot_signals, headlines)
+def update_buzz_growth_memory(db: Session, snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict], gsc: dict | None = None) -> dict:
+    section = render_buzz_growth_memory(snapshot, ga, access_logs, bot_signals, headlines, gsc)
     row = db.query(AgentMemory).filter(AgentMemory.agent_id == "buzz").first()
     if row:
         row.memory = _replace_growth_memory_section(row.memory, section)
@@ -598,10 +680,13 @@ async def build_daily_blog_report(db: Session, send_slack: bool = False, update_
     access_logs = analyze_access_logs()
     bot_signals = assess_bot_signals(snapshot, ga, access_logs)
     headlines = await fetch_trend_headlines()
+    gsc = fetch_gsc_summary()
+    if gsc.get("ok"):
+        attach_post_titles(db, gsc.get("title_fix_candidates", []))
     judgement = await generate_buzz_judgement(snapshot, ga, access_logs, bot_signals, headlines)
-    text = render_buzz_report(snapshot, headlines, ga, access_logs, bot_signals, judgement["text"])
+    text = render_buzz_report(snapshot, headlines, ga, access_logs, bot_signals, judgement["text"], gsc)
     should_update_memory = send_slack if update_memory is None else update_memory
-    memory = update_buzz_growth_memory(db, snapshot, ga, access_logs, bot_signals, headlines) if should_update_memory else {"ok": False, "skipped": True}
+    memory = update_buzz_growth_memory(db, snapshot, ga, access_logs, bot_signals, headlines, gsc) if should_update_memory else {"ok": False, "skipped": True}
     slack = await send_slack_report(text) if send_slack else {"ok": False, "skipped": True}
     return {
         "ok": True,
@@ -610,6 +695,7 @@ async def build_daily_blog_report(db: Session, send_slack: bool = False, update_
         "access_logs": access_logs,
         "bot_signals": bot_signals,
         "headlines": headlines,
+        "gsc": gsc,
         "judgement": judgement,
         "memory": memory,
         "text": text,
