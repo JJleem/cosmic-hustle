@@ -4,9 +4,13 @@
 주제 선택(다음에 뭘 쓸까)에는 쓰지 않는다 — 그건 외부 트렌드 신호의 몫이고,
 GSC로 주제를 고르면 이미 쓴 주제로만 회귀하는 오버피팅이 생긴다.
 
-자격증명은 blog_generator._load_indexing_credentials 패턴을 그대로 따름:
-GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON 우선, 없으면 GA4_SERVICE_ACCOUNT_JSON 재사용.
-어느 쪽이든 해당 서비스 계정이 GSC 사이트 소유자로 등록돼 있어야 함.
+자격증명 우선순위:
+1. GSC_TOKEN_JSON (OAuth 사용자 토큰) — 사이트 소유자 본인 계정. 권장.
+   GSC 새 UI는 서비스 계정 이메일을 "찾을 수 없음"으로 거부하는 경우가 많아,
+   SA를 GSC 사용자로 못 붙임 → 소유자 본인 OAuth 토큰을 쓴다.
+   토큰 발급: scripts/generate_gsc_token.py (로컬 1회 실행).
+2. GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON / GA4_SERVICE_ACCOUNT_JSON (서비스 계정) 폴백 —
+   단 해당 SA가 GSC 사이트 소유자/사용자로 등록돼 있어야 함(보통 막힘).
 사전작업: Google Cloud에서 "Search Console API" 활성화 필요 (Indexing API와 별개).
 """
 import os
@@ -27,7 +31,12 @@ def _site_url() -> str:
 
 
 def _load_credentials():
-    """webmasters.readonly 스코프 서비스 계정 자격증명 로드. 미설정 시 None."""
+    """webmasters.readonly 자격증명 로드. OAuth 사용자 토큰 우선, 없으면 서비스 계정. 미설정 시 None."""
+    token_path = os.environ.get("GSC_TOKEN_JSON")
+    if token_path:
+        from google.oauth2.credentials import Credentials as UserCredentials
+        return UserCredentials.from_authorized_user_file(token_path, _SCOPES)
+
     sa_json = os.environ.get("GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON") or os.environ.get("GA4_SERVICE_ACCOUNT_JSON")
     if not sa_json:
         return None
