@@ -42,8 +42,13 @@ def _visit_count(db: Session, day: date) -> int:
     return int(row.count) if row else 0
 
 
+def _default_report_date() -> date:
+    return datetime.now(ZoneInfo("Asia/Seoul")).date() - timedelta(days=1)
+
+
 def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict:
-    today = today or datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today or _default_report_date()
+    compare_day = today - timedelta(days=1)
     week_start = today - timedelta(days=6)
 
     daily_rows = (
@@ -104,8 +109,10 @@ def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict
 
     return {
         "date": today.isoformat(),
+        "generated_date": datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat(),
+        "compare_date": compare_day.isoformat(),
         "today_visits": _visit_count(db, today),
-        "yesterday_visits": _visit_count(db, today - timedelta(days=1)),
+        "yesterday_visits": _visit_count(db, compare_day),
         "week_visits": sum(item["count"] for item in daily_visits),
         "total_visits": int(total_visits),
         "unique_post_views_today": int(unique_post_views_today),
@@ -117,7 +124,7 @@ def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict
 
 
 def fetch_daily_ga_summary(today: date | None = None) -> dict:
-    today = today or datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today or _default_report_date()
     start = end = today.isoformat()
     try:
         import ga_client
@@ -136,7 +143,7 @@ def fetch_daily_ga_summary(today: date | None = None) -> dict:
 
 
 def analyze_access_logs(today: date | None = None, max_lines: int = 5000) -> dict:
-    today = today or datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today or _default_report_date()
     raw_paths = os.environ.get("BLOG_REPORT_ACCESS_LOG_PATHS", "/var/log/nginx/access.log")
     paths = [Path(item.strip()) for item in raw_paths.split(",") if item.strip()]
     date_token = today.strftime("%d/%b/%Y")
@@ -188,9 +195,20 @@ def analyze_access_logs(today: date | None = None, max_lines: int = 5000) -> dic
 
 
 def analyze_journal_logs(today: date | None = None, max_lines: int = 5000, checked_paths: list[str] | None = None) -> dict:
-    today = today or datetime.now(ZoneInfo("Asia/Seoul")).date()
+    today = today or _default_report_date()
     unit = os.environ.get("BLOG_REPORT_JOURNAL_UNIT", "cosmic-backend")
-    cmd = ["journalctl", "-u", unit, "--since", today.isoformat(), "--no-pager", "-n", str(max_lines)]
+    cmd = [
+        "journalctl",
+        "-u",
+        unit,
+        "--since",
+        today.isoformat(),
+        "--until",
+        (today + timedelta(days=1)).isoformat(),
+        "--no-pager",
+        "-n",
+        str(max_lines),
+    ]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=8, check=False)
@@ -310,10 +328,10 @@ def render_buzz_report(
     top_trends = ", ".join(topic for topic, _ in snapshot["recent_trends"][:3]) or "아직 없음"
 
     lines = [
-        f"버즈의 블로그 데일리 리포트 ({snapshot['date']})",
+        f"버즈의 블로그 데일리 리포트 (대상일 {snapshot['date']}, 발송일 {snapshot['generated_date']})",
         "",
-        f"조회: 오늘 {snapshot['today_visits']} / 어제 {snapshot['yesterday_visits']} ({delta_mark}{visits_delta}) / 7일 {snapshot['week_visits']} / 누적 {snapshot['total_visits']}",
-        f"자체 포스트뷰: 오늘 {snapshot['unique_post_views_today']}",
+        f"조회: 대상일 {snapshot['today_visits']} / 전일 {snapshot['yesterday_visits']} ({delta_mark}{visits_delta}) / 대상 7일 {snapshot['week_visits']} / 누적 {snapshot['total_visits']}",
+        f"자체 포스트뷰: 대상일 {snapshot['unique_post_views_today']}",
         f"잘 먹히는 태그: {top_tags}",
         f"최근 포스트 주제: {top_trends}",
         "",
@@ -343,11 +361,11 @@ def render_buzz_report(
     if access_logs.get("ok"):
         if access_logs.get("source") == "journal":
             lines.append(
-                f"- journal: 오늘 API access {access_logs['total_lines_today']}건, 상위 IP 비중 {access_logs.get('top_ip_ratio', 0)}%"
+                f"- journal: 대상일 API access {access_logs['total_lines_today']}건, 상위 IP 비중 {access_logs.get('top_ip_ratio', 0)}%"
             )
         else:
             lines.append(
-                f"- access log: 오늘 {access_logs['total_lines_today']}줄 중 bot UA {access_logs['bot_hits']}건 ({access_logs['bot_ratio']}%)"
+                f"- access log: 대상일 {access_logs['total_lines_today']}줄 중 bot UA {access_logs['bot_hits']}건 ({access_logs['bot_ratio']}%)"
             )
 
     if access_logs.get("top_bot_uas"):
@@ -373,7 +391,7 @@ def render_buzz_report(
     else:
         lines.append("아직 발행/반응 데이터가 부족함")
 
-    lines.extend(["", "오늘 핫한 신호"])
+    lines.extend(["", "현재 핫한 신호"])
     if headlines:
         for item in headlines[:5]:
             lines.append(f"- [{item['query']}] {item['title']}")
@@ -403,7 +421,9 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
 
     overview = ga.get("overview") if ga.get("ok") else {}
     payload = {
-        "date": snapshot["date"],
+        "report_date": snapshot["date"],
+        "generated_date": snapshot["generated_date"],
+        "compare_date": snapshot["compare_date"],
         "db": {
             "today": snapshot["today_visits"],
             "yesterday": snapshot["yesterday_visits"],
@@ -432,7 +452,7 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
     prompt = f"""아래 블로그 성장 데이터를 보고 Cosmic Hustle의 마케터 버즈처럼 판단하세요.
 한국어로 3줄 이하, 450자 이하.
 반드시 포함:
-- 오늘 데이터 해석
+- 대상일 데이터 해석
 - 다음 글 주제/제목 방향 1개
 - 봇/저품질 유입 주의가 필요하면 짧게 경고
 
@@ -466,13 +486,13 @@ def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_s
     return "\n".join([
         GROWTH_MEMORY_START,
         f"[Blog Growth Signals {snapshot['date']}]",
-        f"- 자체 조회: 오늘 {snapshot['today_visits']}, 7일 {snapshot['week_visits']}, 포스트뷰 {snapshot['unique_post_views_today']}",
+        f"- 자체 조회: 대상일 {snapshot['today_visits']}, 전일 {snapshot['yesterday_visits']}, 대상 7일 {snapshot['week_visits']}, 포스트뷰 {snapshot['unique_post_views_today']}",
         f"- GA: 세션 {overview.get('sessions', 'N/A')}, 페이지뷰 {overview.get('page_views', 'N/A')}, 이탈률 {overview.get('bounce_rate', 'N/A')}%, 체류 {overview.get('avg_session_sec', 'N/A')}초",
         f"- 유입 채널: {channels}",
         f"- 잘 먹힌 태그: {top_tags}",
         f"- 반응 상위 글: {top_posts}",
         f"- 봇/저품질 신호: {bot_text}",
-        f"- 오늘 트렌드 힌트: {hot_signals}",
+        f"- 현재 트렌드 힌트: {hot_signals}",
         "- 다음 글 전략: 상위 태그와 트렌드 힌트를 섞되, 봇 의심 신호가 강한 날은 조회수보다 GA 체류/채널을 우선 판단.",
         GROWTH_MEMORY_END,
     ])
