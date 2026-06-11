@@ -954,33 +954,46 @@ async def _generate_content_image(prompt: str, cheap: bool = False) -> str | Non
     비용 절감이 필요하면 flux/schnell(약 8배 저렴, ~4 steps·guidance 미사용)로 교체 가능."""
     if not _fal_available():
         return None
-    model = "fal-ai/flux/schnell" if cheap else "fal-ai/flux/dev"
-    arguments = {
-        "prompt": (
-            f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
-            "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
-            "smooth 3D render, playful and charming, no text, no watermark."
-        ),
-        "image_size": "square_hd",
-    }
-    if cheap:
-        arguments["num_inference_steps"] = 4
-    else:
-        arguments["num_inference_steps"] = 28
-        arguments["guidance_scale"] = 3.5
-    try:
+    def build_arguments(use_cheap: bool) -> dict:
+        arguments = {
+            "prompt": (
+                f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
+                "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
+                "smooth 3D render, playful and charming, no text, no watermark."
+            ),
+            "image_size": "square_hd",
+        }
+        if use_cheap:
+            arguments["num_inference_steps"] = 4
+        else:
+            arguments["num_inference_steps"] = 28
+            arguments["guidance_scale"] = 3.5
+        return arguments
+
+    async def run_generation(use_cheap: bool) -> str:
         import fal_client
+        model = "fal-ai/flux/schnell" if use_cheap else "fal-ai/flux/dev"
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 fal_client.subscribe,
                 model,
-                arguments=arguments,
+                arguments=build_arguments(use_cheap),
             ),
             timeout=120.0,
         )
         fal_url = result["images"][0]["url"]
         return await _download_image(fal_url)
+
+    try:
+        return await run_generation(cheap)
     except Exception as e:
+        if cheap:
+            logger.warning(f"싼 본문 이미지 생성 실패, dev fallback 시도: {e}")
+            try:
+                return await run_generation(False)
+            except Exception as fallback_error:
+                logger.warning(f"본문 이미지 dev fallback 실패: {fallback_error}")
+                return None
         logger.warning(f"본문 이미지 생성 실패: {e}")
         return None
 
