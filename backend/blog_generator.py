@@ -1773,7 +1773,7 @@ async def generate_debate_post(
 - 【저작권 규칙】 참고자료에서 '사실·수치·주제'만 추출할 것. 원문의 표현·문장 구조를 그대로 따라 쓰거나 단어만 바꾼 요약은 절대 금지. 반드시 새로운 문장·구조·관점으로 재창작할 것
 - 전체 2500자 이상
 - 인용구 태그 사용 가능: > [happy] / [err] / [working] / [done] / [talk_2]
-- 본문 이미지는 글 전체에서 최대 2장만 삽입. 대화 리듬이 깨질 것 같으면 0장도 가능:
+- 본문 이미지는 글 전체에서 최대 5장만 삽입. 대화 리듬을 보조하는 장면에만 넣을 것:
   {{{{IMAGE: 구체적 씬 (반드시 영어, 캐릭터 없는 오브젝트/풍경, 위트 포함)}}}}
 - 글 맨 끝 썸네일 태그 (반드시 영어):
   {{{{THUMBNAIL: 두 캐릭터가 대결하는 역동적인 씬. 동작·감정·의상·배경 상세하게.}}}}
@@ -1816,11 +1816,11 @@ async def generate_debate_post(
     content = _TAGS_RE.sub("", content).strip()
 
     if preset_thumbnail:
-        content = await _process_content_images(content, agent_a, limit=0)
+        content = await _process_content_images(content, agent_a, limit=5)
         thumbnail_url = preset_thumbnail
     else:
         content, thumbnail_url = await asyncio.gather(
-            _process_content_images(content, agent_a, limit=2),
+            _process_content_images(content, agent_a, limit=5),
             _generate_thumbnail(agent_a, scene),
         )
 
