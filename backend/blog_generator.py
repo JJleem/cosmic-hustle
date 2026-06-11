@@ -45,6 +45,19 @@ async def notify_search_engines(url: str) -> None:
     await request_indexnow(url)
 
 
+# 백그라운드 task가 완료 전 GC로 사라지는 것을 막기 위한 강한 참조 보관(asyncio 권장 패턴).
+_notify_tasks: set = set()
+
+
+def notify_search_engines_bg(url: str) -> None:
+    """notify_search_engines를 안전한 fire-and-forget으로 실행(응답/잡 블로킹 없이).
+    bare asyncio.create_task는 참조 미보관 시 완료 전 GC돼 통보가 누락될 수 있어,
+    task 참조를 보관했다가 완료 시 해제한다."""
+    task = asyncio.create_task(notify_search_engines(url))
+    _notify_tasks.add(task)
+    task.add_done_callback(_notify_tasks.discard)
+
+
 _CHAR_DIR = Path(__file__).parent / "characters"
 
 # ── 오버 에세이 형식 · 감정 로테이션 ──────────────────────────────────────────

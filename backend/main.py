@@ -103,8 +103,8 @@ async def _daily_blog_job():
                 db.add(BlogComment(**c))
             db.commit()
             logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
-            from blog_generator import notify_search_engines, AGENT_PERSONAS
-            asyncio.create_task(notify_search_engines(f"https://cosmic-hustle.ai.kr/{data['slug']}"))
+            from blog_generator import notify_search_engines_bg, AGENT_PERSONAS
+            notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{data['slug']}")
 
             from web_push import broadcast_new_post
             agent_name = AGENT_PERSONAS.get(data["agent_id"], {}).get("name", data["agent_id"])

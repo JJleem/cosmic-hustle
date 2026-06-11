@@ -22,7 +22,7 @@ from blog_generator import (
     generate_debate_post, generate_debate_comments,
     generate_discovery_post,
     generate_quiz_post, _generate_thumbnail,
-    notify_search_engines,
+    notify_search_engines_bg,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -337,7 +337,7 @@ async def trigger_generate(request: Request, agent_id: str | None = None, theme:
 
     if post.published:
         post_url = f"https://cosmic-hustle.ai.kr/{post.slug}"
-        asyncio.create_task(notify_search_engines(post_url))
+        notify_search_engines_bg(post_url)
 
     return post
 
