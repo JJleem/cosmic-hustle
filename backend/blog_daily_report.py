@@ -25,6 +25,8 @@ BOT_UA_MARKERS = (
     "ahrefs", "semrush", "bytespider", "petalbot", "mj12bot", "python-requests",
     "curl", "wget",
 )
+HAIKU_INPUT_USD_PER_MTOK = 1.0
+HAIKU_OUTPUT_USD_PER_MTOK = 5.0
 
 
 def _parse_tags(raw: str | None) -> list[str]:
@@ -363,6 +365,7 @@ def render_buzz_report(
     bot_signals: list[str],
     judgement: str,
     gsc: dict | None = None,
+    ai_cost_line: str | None = None,
 ) -> str:
     visits_delta = snapshot["today_visits"] - snapshot["yesterday_visits"]
     delta_mark = "+" if visits_delta >= 0 else ""
@@ -458,17 +461,53 @@ def render_buzz_report(
 
     lines.extend([
         "",
-        f"버즈 판단: {judgement}",
+        f"버즈 판단:\n{judgement}",
     ])
+    if ai_cost_line:
+        lines.extend(["", ai_cost_line])
     return "\n".join(lines)
+
+
+def render_ai_cost_line(judgement: dict) -> str:
+    usage = judgement.get("usage") or {}
+    cost = judgement.get("cost_usd")
+    if not usage or cost is None:
+        if judgement.get("skipped"):
+            return "AI 비용: 판단 생성 스킵됨 (0달러)"
+        return "AI 비용: usage 미수집"
+    return (
+        f"AI 비용: Haiku input {usage.get('input_tokens', 0)} / output {usage.get('output_tokens', 0)} "
+        f"→ 약 ${cost:.6f}"
+    )
 
 
 def _fallback_buzz_judgement(snapshot: dict, bot_signals: list[str]) -> str:
     if bot_signals:
-        return "봇/저품질 신호가 있으니 조회수보다 GA 체류·채널을 우선 보고, 반응 상위 글의 제목 패턴만 다음 실험에 반영."
+        return "\n".join([
+            "추천 슬롯: trend_reaction",
+            "이유: 봇/저품질 신호가 있으니 조회수보다 GA 체류·채널을 우선 보며, 트렌드를 Cosmic Hustle 관점으로 짧게 해석하는 편이 안전.",
+            "제목 후보: 1. AI 뉴스가 매일 쏟아질 때 우리가 봐야 할 신호 2. 바이럴보다 체류시간이 먼저다 3. 오늘의 AI 트렌드를 우주 직원들이 읽는 법",
+            "피할 것: 조회수만 보고 같은 주제 반복하기",
+        ])
     if snapshot["top_posts"]:
-        return "상위 글의 감성/직접 제목 패턴이 먹히는 중. 다음 글은 잘 먹힌 태그와 오늘 트렌드를 섞어 더 선명한 제목으로 가자."
-    return "데이터가 아직 얇음. 오늘은 트렌드 힌트 기반으로 짧고 직접적인 실험 글을 하나 쌓는 쪽이 좋음."
+        return "\n".join([
+            "추천 슬롯: character_essay",
+            "이유: 상위 글의 감성/직접 제목 패턴이 먹히는 중이라 캐릭터 목소리로 체류를 늘리는 실험이 좋음.",
+            "제목 후보: 1. 아이디어가 너무 많은 사람의 밤 2. 시작 전 설렘을 오래 붙잡는 법 3. 내가 만든 세계에 내가 제일 늦게 도착했다",
+            "피할 것: 현재 트렌드 기사를 그대로 요약하기",
+        ])
+    return "\n".join([
+        "추천 슬롯: ai_test",
+        "이유: 데이터가 아직 얇으니 댓글/체류를 만들 수 있는 참여형 실험을 쌓는 편이 좋음.",
+        "제목 후보: 1. 나는 어떤 Cosmic Hustle 직원일까? 2. 내 아이디어는 핑형인가 버즈형인가? 3. AI 사무실에서 내 역할은 무엇일까?",
+        "피할 것: 너무 기술적인 AI 뉴스 단순 요약",
+    ])
+
+
+def _cost_usd(input_tokens: int, output_tokens: int) -> float:
+    input_rate = float(os.environ.get("BLOG_REPORT_AI_INPUT_USD_PER_MTOK", HAIKU_INPUT_USD_PER_MTOK))
+    output_rate = float(os.environ.get("BLOG_REPORT_AI_OUTPUT_USD_PER_MTOK", HAIKU_OUTPUT_USD_PER_MTOK))
+    return (input_tokens / 1_000_000 * input_rate) + (output_tokens / 1_000_000 * output_rate)
 
 
 async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict]) -> dict:
@@ -508,11 +547,30 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
     }
 
     prompt = f"""아래 블로그 성장 데이터를 보고 Cosmic Hustle의 마케터 버즈처럼 판단하세요.
-한국어로 3줄 이하, 450자 이하.
-반드시 포함:
-- 대상일 데이터 해석
-- 다음 글 주제/제목 방향 1개
-- 봇/저품질 유입 주의가 필요하면 짧게 경고
+한국어로 650자 이하.
+
+반드시 아래 형식으로 출력:
+추천 슬롯: <regular_post | character_essay | trend_reaction | ai_debate | ai_test | behind_story | marketing_hook 중 하나>
+이유: <대상일 데이터 해석 + 왜 이 슬롯인지>
+제목 후보:
+1. <제목>
+2. <제목>
+3. <제목>
+피할 것: <내일 글에서 피해야 할 방향>
+
+슬롯 의미:
+- regular_post: 일반 블로그/정보글
+- character_essay: 오버식 감성 에세이
+- trend_reaction: 최신 트렌드에 Cosmic Hustle식 반응
+- ai_debate: AI 토론/찬반형
+- ai_test: 퀴즈/테스트/참여형
+- behind_story: 세계관/캐릭터/제작 비하인드
+- marketing_hook: 버즈식 바이럴/마케팅 글
+
+주의:
+- GSC 검색어는 제목 표현 교정용이지, 그 주제를 반복하라는 뜻이 아님.
+- 최근 상위 글/태그는 참고하되 같은 장르만 반복하지 말 것.
+- 봇/저품질 유입 주의가 필요하면 이유나 피할 것에 짧게 반영.
 
 데이터:
 {json.dumps(payload, ensure_ascii=False)}
@@ -527,7 +585,15 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
             messages=[{"role": "user", "content": prompt}],
         )
         text = msg.content[0].text.strip()
-        return {"ok": True, "text": text[:700]}
+        usage_obj = getattr(msg, "usage", None)
+        input_tokens = int(getattr(usage_obj, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(usage_obj, "output_tokens", 0) or 0)
+        return {
+            "ok": True,
+            "text": text[:900],
+            "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+            "cost_usd": _cost_usd(input_tokens, output_tokens),
+        }
     except Exception as exc:
         logger.warning("버즈 AI 판단 생성 실패: %s", exc)
         return {"ok": False, "error": str(exc), "text": _fallback_buzz_judgement(snapshot, bot_signals)}
@@ -556,7 +622,15 @@ def _gsc_title_lesson(gsc: dict | None) -> str:
     )
 
 
-def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict], gsc: dict | None = None) -> str:
+def render_buzz_growth_memory(
+    snapshot: dict,
+    ga: dict,
+    access_logs: dict,
+    bot_signals: list[str],
+    headlines: list[dict],
+    gsc: dict | None = None,
+    judgement_text: str | None = None,
+) -> str:
     top_tags = ", ".join(tag for tag, _ in snapshot["top_tags"][:5]) or "없음"
     top_posts = "; ".join(post["title"] for post in snapshot["top_posts"][:3]) or "없음"
     hot_signals = "; ".join(item["title"] for item in headlines[:3]) or "없음"
@@ -575,6 +649,7 @@ def render_buzz_growth_memory(snapshot: dict, ga: dict, access_logs: dict, bot_s
         f"- 봇/저품질 신호: {bot_text}",
         f"- 현재 트렌드 힌트: {hot_signals}",
         _gsc_title_lesson(gsc),
+        f"- 버즈 슬롯 제안: {(judgement_text or '없음')[:650]}",
         "- 다음 글 전략: 상위 태그와 트렌드 힌트를 섞되, 봇 의심 신호가 강한 날은 조회수보다 GA 체류/채널을 우선 판단.",
         GROWTH_MEMORY_END,
     ])
@@ -594,8 +669,17 @@ def _replace_growth_memory_section(current_memory: str | None, section: str, lim
     return updated[-limit:].strip() if len(updated) > limit else updated
 
 
-def update_buzz_growth_memory(db: Session, snapshot: dict, ga: dict, access_logs: dict, bot_signals: list[str], headlines: list[dict], gsc: dict | None = None) -> dict:
-    section = render_buzz_growth_memory(snapshot, ga, access_logs, bot_signals, headlines, gsc)
+def update_buzz_growth_memory(
+    db: Session,
+    snapshot: dict,
+    ga: dict,
+    access_logs: dict,
+    bot_signals: list[str],
+    headlines: list[dict],
+    gsc: dict | None = None,
+    judgement_text: str | None = None,
+) -> dict:
+    section = render_buzz_growth_memory(snapshot, ga, access_logs, bot_signals, headlines, gsc, judgement_text)
     row = db.query(AgentMemory).filter(AgentMemory.agent_id == "buzz").first()
     if row:
         row.memory = _replace_growth_memory_section(row.memory, section)
@@ -684,9 +768,18 @@ async def build_daily_blog_report(db: Session, send_slack: bool = False, update_
     if gsc.get("ok"):
         attach_post_titles(db, gsc.get("title_fix_candidates", []))
     judgement = await generate_buzz_judgement(snapshot, ga, access_logs, bot_signals, headlines)
-    text = render_buzz_report(snapshot, headlines, ga, access_logs, bot_signals, judgement["text"], gsc)
+    text = render_buzz_report(
+        snapshot,
+        headlines,
+        ga,
+        access_logs,
+        bot_signals,
+        judgement["text"],
+        gsc,
+        render_ai_cost_line(judgement),
+    )
     should_update_memory = send_slack if update_memory is None else update_memory
-    memory = update_buzz_growth_memory(db, snapshot, ga, access_logs, bot_signals, headlines, gsc) if should_update_memory else {"ok": False, "skipped": True}
+    memory = update_buzz_growth_memory(db, snapshot, ga, access_logs, bot_signals, headlines, gsc, judgement["text"]) if should_update_memory else {"ok": False, "skipped": True}
     slack = await send_slack_report(text) if send_slack else {"ok": False, "skipped": True}
     return {
         "ok": True,
