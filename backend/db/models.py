@@ -122,7 +122,19 @@ class BlogComment(Base):
     user_name = Column(String, nullable=True)
     anon_avatar = Column(Integer, nullable=True)   # 익명 아바타 인덱스 (0-49)
     ip_hash = Column(String(16), nullable=True)    # hash(ip+post_id+salt) 앞 16자 — IP 미저장
+    client_id = Column(String(64), nullable=True)  # 브라우저 생성 익명 ID — 웹푸시 답글 알림 연결용
     content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id = Column(String, primary_key=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(Text, nullable=False)
+    auth = Column(Text, nullable=False)
+    client_id = Column(String(64), nullable=True)  # 브라우저 익명 ID — 답글 알림 타겟팅용
     created_at = Column(DateTime, server_default=func.now())
 
 

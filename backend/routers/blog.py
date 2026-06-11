@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from db.connection import get_db
-from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog
+from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog, PushSubscription
 from blog_generator import (
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
@@ -755,6 +755,7 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
         user_name, anon_avatar = _anon_identity(ip, post.id, db)
         ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
 
+    client_id = (body.get("client_id") or "").strip()[:64] or None
     comment = BlogComment(
         id=str(uuid.uuid4()),
         post_id=post.id,
@@ -763,6 +764,7 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
         user_name=user_name,
         anon_avatar=anon_avatar,
         ip_hash=ip_hash,
+        client_id=client_id,
         content=content,
     )
     db.add(comment)
@@ -815,3 +817,46 @@ def get_schedule():
 def list_agents():
     """에이전트 목록 반환 (블로그 프론트용)."""
     return [{"id": aid, **info} for aid, info in AGENT_PERSONAS.items()]
+
+
+# ── 웹푸시 구독 ──────────────────────────────────────────────────────────────
+
+@router.get("/push/vapid-public-key")
+def push_vapid_public_key():
+    """프론트가 PushManager.subscribe에 쓸 VAPID 공개키. 미설정 시 빈 문자열."""
+    return {"key": os.environ.get("VAPID_PUBLIC_KEY", "")}
+
+
+@router.post("/push/subscribe")
+@limiter.limit("10/minute")
+def push_subscribe(request: Request, body: dict, db: Session = Depends(get_db)):
+    """웹푸시 구독 등록(업서트). body: {subscription:{endpoint,keys:{p256dh,auth}}, client_id}."""
+    sub = body.get("subscription") or {}
+    endpoint = sub.get("endpoint")
+    keys = sub.get("keys") or {}
+    p256dh, auth = keys.get("p256dh"), keys.get("auth")
+    if not (endpoint and p256dh and auth):
+        raise HTTPException(status_code=400, detail="유효하지 않은 구독 정보")
+
+    client_id = (body.get("client_id") or "").strip()[:64] or None
+    row = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).first()
+    if row:
+        row.p256dh, row.auth, row.client_id = p256dh, auth, client_id
+    else:
+        db.add(PushSubscription(
+            id=str(uuid.uuid4()), endpoint=endpoint,
+            p256dh=p256dh, auth=auth, client_id=client_id,
+        ))
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/push/unsubscribe")
+def push_unsubscribe(body: dict, db: Session = Depends(get_db)):
+    """구독 해지 — endpoint 기준 삭제."""
+    endpoint = body.get("endpoint")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="endpoint 필요")
+    db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).delete()
+    db.commit()
+    return {"ok": True}

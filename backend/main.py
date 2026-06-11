@@ -103,8 +103,18 @@ async def _daily_blog_job():
                 db.add(BlogComment(**c))
             db.commit()
             logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
-            from blog_generator import notify_search_engines
+            from blog_generator import notify_search_engines, AGENT_PERSONAS
             asyncio.create_task(notify_search_engines(f"https://cosmic-hustle.ai.kr/{data['slug']}"))
+
+            from web_push import broadcast_new_post
+            agent_name = AGENT_PERSONAS.get(data["agent_id"], {}).get("name", data["agent_id"])
+            await broadcast_new_post(
+                db,
+                title=data["title"],
+                url=f"https://cosmic-hustle.ai.kr/{data['slug']}",
+                agent_name=agent_name,
+                thumbnail_url=data.get("thumbnail_url"),
+            )
             return
         except Exception as e:
             db.rollback()
@@ -188,6 +198,7 @@ async def _user_reply_job():
         now   = datetime.utcnow()
         start = now - timedelta(hours=49)
         end   = now - timedelta(hours=23)
+        reply_pushes: list = []
 
         posts = (
             db.query(BlogPost)
@@ -241,8 +252,19 @@ async def _user_reply_job():
                     created_at=datetime.utcnow(),
                 ))
                 logger.info(f"유저 댓글 대댓글 생성: {agent_id} → post={post.id}")
+                reply_pushes.append((uc.client_id, post.title, post.slug, agent_id, reply_text))
 
         db.commit()
+
+        # 답글 받은 익명 구독자에게 웹푸시 (커밋 후)
+        from web_push import notify_comment_reply
+        from blog_generator import AGENT_PERSONAS as _PERSONAS
+        for client_id, title, slug, r_agent_id, r_text in reply_pushes:
+            agent_name = _PERSONAS.get(r_agent_id, {}).get("name", r_agent_id)
+            await notify_comment_reply(
+                db, client_id=client_id, post_title=title, post_slug=slug,
+                agent_name=agent_name, reply_text=r_text, agent_id=r_agent_id,
+            )
     except Exception as e:
         db.rollback()
         logger.error(f"유저 댓글 대댓글 생성 실패: {e}")
