@@ -949,27 +949,32 @@ async def generate_scene_prompt_from_content(agent_id: str, title: str, content:
     return message.content[0].text.strip()
 
 
-async def _generate_content_image(prompt: str) -> str | None:
+async def _generate_content_image(prompt: str, cheap: bool = False) -> str | None:
     """flux/dev 사용 (28 steps, guidance 3.5). 품질 우선 설정.
     비용 절감이 필요하면 flux/schnell(약 8배 저렴, ~4 steps·guidance 미사용)로 교체 가능."""
     if not _fal_available():
         return None
+    model = "fal-ai/flux/schnell" if cheap else "fal-ai/flux/dev"
+    arguments = {
+        "prompt": (
+            f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
+            "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
+            "smooth 3D render, playful and charming, no text, no watermark."
+        ),
+        "image_size": "square_hd",
+    }
+    if cheap:
+        arguments["num_inference_steps"] = 4
+    else:
+        arguments["num_inference_steps"] = 28
+        arguments["guidance_scale"] = 3.5
     try:
         import fal_client
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 fal_client.subscribe,
-                "fal-ai/flux/dev",
-                arguments={
-                    "prompt": (
-                        f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
-                        "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
-                        "smooth 3D render, playful and charming, no text, no watermark."
-                    ),
-                    "num_inference_steps": 28,
-                    "image_size": "square_hd",
-                    "guidance_scale": 3.5,
-                },
+                model,
+                arguments=arguments,
             ),
             timeout=120.0,
         )
@@ -980,15 +985,15 @@ async def _generate_content_image(prompt: str) -> str | None:
         return None
 
 
-async def _process_content_images(content: str, agent_id: str = "", limit: int | None = None) -> str:
+async def _process_content_images(content: str, agent_id: str = "", limit: int | None = None, cheap: bool = False) -> str:
     if limit is None:
         limit = 4 if agent_id == "pixel" else 2
     matches = _IMAGE_RE.findall(content)
-    selected = matches[:limit]
+    selected = matches if limit < 0 else matches[:limit]
     if not selected:
         content = _IMAGE_RE.sub("", content)
         return content
-    urls = await asyncio.gather(*[_generate_content_image(p) for p in selected])
+    urls = await asyncio.gather(*[_generate_content_image(p, cheap=cheap) for p in selected])
     for prompt, url in zip(selected, urls):
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
@@ -1773,7 +1778,8 @@ async def generate_debate_post(
 - 【저작권 규칙】 참고자료에서 '사실·수치·주제'만 추출할 것. 원문의 표현·문장 구조를 그대로 따라 쓰거나 단어만 바꾼 요약은 절대 금지. 반드시 새로운 문장·구조·관점으로 재창작할 것
 - 전체 2500자 이상
 - 인용구 태그 사용 가능: > [happy] / [err] / [working] / [done] / [talk_2]
-- 본문 이미지는 글 전체에서 최대 5장만 삽입. 대화 리듬을 보조하는 장면에만 넣을 것:
+- 본문 이미지는 대화 흐름상 의미 있는 전환점마다 삽입. 작성한 모든 IMAGE 태그는 실제 이미지로 생성될 예정이므로, 장식용으로 남발하지 말고 논점이 보이는 장면만 넣을 것
+- 이미지 프롬프트는 장식용 정물 나열을 피하고, 논점이 보이는 상황·행동·대비를 담을 것:
   {{{{IMAGE: 구체적 씬 (반드시 영어, 캐릭터 없는 오브젝트/풍경, 위트 포함)}}}}
 - 글 맨 끝 썸네일 태그 (반드시 영어):
   {{{{THUMBNAIL: 두 캐릭터가 대결하는 역동적인 씬. 동작·감정·의상·배경 상세하게.}}}}
@@ -1816,11 +1822,11 @@ async def generate_debate_post(
     content = _TAGS_RE.sub("", content).strip()
 
     if preset_thumbnail:
-        content = await _process_content_images(content, agent_a, limit=5)
+        content = await _process_content_images(content, agent_a, limit=-1, cheap=True)
         thumbnail_url = preset_thumbnail
     else:
         content, thumbnail_url = await asyncio.gather(
-            _process_content_images(content, agent_a, limit=5),
+            _process_content_images(content, agent_a, limit=-1, cheap=True),
             _generate_thumbnail(agent_a, scene),
         )
 
