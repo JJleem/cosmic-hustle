@@ -18,8 +18,10 @@ _SITE_HOST = "cosmic-hustle.ai.kr"
 _GSC_SITE_URL = f"https://{_SITE_HOST}"
 
 
-async def request_gsc_indexing(url: str) -> None:
-    """IndexNow로 색인 요청 (Google·Bing·Naver 동시). 실패해도 조용히 넘어감."""
+async def request_indexnow(url: str) -> None:
+    """IndexNow로 색인 요청 (Bing·Yandex·Naver·Seznam). 실패해도 조용히 넘어감.
+    주의: Google은 IndexNow를 지원하지 않으므로 이 호출로는 Google 색인이 트리거되지 않음.
+    Google 색인은 sitemap.xml 또는 GSC Indexing API로 별도 처리 필요."""
     key = os.getenv("INDEXNOW_KEY")
     if not key:
         return
@@ -929,7 +931,8 @@ async def generate_scene_prompt_from_content(agent_id: str, title: str, content:
 
 
 async def _generate_content_image(prompt: str) -> str | None:
-    """flux/schnell 사용 — flux/dev 대비 약 8배 저렴."""
+    """flux/dev 사용 (28 steps, guidance 3.5). 품질 우선 설정.
+    비용 절감이 필요하면 flux/schnell(약 8배 저렴, ~4 steps·guidance 미사용)로 교체 가능."""
     if not _fal_available():
         return None
     try:

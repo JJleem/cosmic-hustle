@@ -103,8 +103,8 @@ async def _daily_blog_job():
                 db.add(BlogComment(**c))
             db.commit()
             logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
-            from blog_generator import request_gsc_indexing
-            asyncio.create_task(request_gsc_indexing(f"https://cosmic-hustle.ai.kr/{data['slug']}"))
+            from blog_generator import request_indexnow
+            asyncio.create_task(request_indexnow(f"https://cosmic-hustle.ai.kr/{data['slug']}"))
             return
         except Exception as e:
             db.rollback()
