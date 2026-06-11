@@ -991,6 +991,7 @@ async def _process_content_images(content: str, agent_id: str = "", limit: int =
     for prompt, url in zip(selected, urls):
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
+    content = _IMAGE_RE.sub("", content)
     return content
 
 
