@@ -21,3 +21,19 @@ async def test_process_content_images_removes_unprocessed_placeholders(monkeypat
     assert "![이미지](https://example.com/scene-2.png)" in result
     assert "{{IMAGE:" not in result
     assert "scene-3" not in result
+
+
+@pytest.mark.asyncio
+async def test_process_content_images_zero_limit_removes_placeholders(monkeypatch):
+    async def fail_if_called(prompt: str):
+        raise AssertionError("image generation should not run")
+
+    monkeypatch.setattr(blog_generator, "_generate_content_image", fail_if_called)
+
+    result = await blog_generator._process_content_images(
+        "intro\n{{IMAGE: expensive scene}}\noutro",
+        "buzz",
+        limit=0,
+    )
+
+    assert result == "intro\n\noutro"
