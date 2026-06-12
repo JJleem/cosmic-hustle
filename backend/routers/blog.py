@@ -88,19 +88,22 @@ def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
 router = APIRouter(prefix="/api/blog", tags=["blog"])
 
 
-# X-Forwarded-For 신뢰 인덱스. Vercel이 실제 클라이언트 IP를 XFF 맨 오른쪽에 append하므로
-# rightmost(-1)가 스푸핑 불가한 실클라이언트 값이어야 함. 단 내부 홉 추가 여부를 _debug/xff로
-# 검증하기 전까지는 현행 동작(leftmost=0)을 유지한다. 검증 후 -1로 전환 예정.
-_XFF_TRUST_INDEX = 0
-
-
 def _client_ip(request: Request) -> str:
-    """프록시(Vercel) 경유 클라이언트 IP를 단일 규칙으로 추출. XFF 없으면 직결 IP, 그것도 없으면 'unknown'."""
+    """클라이언트 IP를 단일 규칙으로 추출.
+
+    Vercel은 x-real-ip를 실제 클라이언트 IP로 '덮어쓰며' 클라이언트가 보낸 위조 값을 무시한다
+    (프로덕션 실측 확인). 반면 x-forwarded-for / x-vercel-forwarded-for는 클라이언트 값을 그대로
+    흘리는 경우가 있어 위조 가능. 따라서 x-real-ip를 우선 신뢰하고, 없을 때만 XFF→직결 IP로 폴백한다.
+    (백엔드 :8000을 Vercel 우회로 직접 때리면 모든 헤더 위조 가능 — 그건 방화벽 영역으로 별개)
+    """
+    real = request.headers.get("x-real-ip")
+    if real and real.strip():
+        return real.strip()
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         parts = [p.strip() for p in forwarded.split(",") if p.strip()]
         if parts:
-            return parts[_XFF_TRUST_INDEX]
+            return parts[0]
     return request.client.host if request.client else "unknown"
 
 
@@ -655,19 +658,6 @@ def get_stats(db: Session = Depends(get_db)):
     return {
         "today": today_row.count if today_row else 0,
         "total": total,
-    }
-
-
-@router.get("/_debug/xff")
-def _debug_xff(request: Request, _=Depends(_require_admin)):
-    """[임시·검증용] Vercel이 backend에 전달하는 클라이언트 IP 관련 헤더 확인. 검증 후 제거."""
-    keys = [
-        "x-forwarded-for", "x-real-ip", "x-vercel-forwarded-for",
-        "x-vercel-ip-country", "x-vercel-id", "forwarded", "x-client-ip",
-    ]
-    return {
-        "ip_headers": {k: request.headers.get(k) for k in keys},
-        "client_host": request.client.host if request.client else None,
     }
 
 
