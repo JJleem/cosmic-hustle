@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 from db.connection import get_db
 from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog, PushSubscription
 from blog_generator import (
+    attach_embedding,
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
     generate_intro_post, generate_intro_comments,
@@ -31,7 +32,8 @@ limiter = Limiter(key_func=get_remote_address)
 _ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 
 def _require_admin(request: Request):
-    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    # 헤더만 허용 — 서버 TLS 미적용이라 쿼리스트링 키는 nginx 로그·브라우저 히스토리에 평문 노출됨
+    key = request.headers.get("X-Admin-Key")
     if not _ADMIN_KEY or key != _ADMIN_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -86,9 +88,24 @@ def _anon_identity(ip: str, post_id: str, db: Session) -> tuple[str, int]:
 router = APIRouter(prefix="/api/blog", tags=["blog"])
 
 
-def _get_ip_hash(request: Request, post_id: str) -> str:
+# X-Forwarded-For 신뢰 인덱스. Vercel이 실제 클라이언트 IP를 XFF 맨 오른쪽에 append하므로
+# rightmost(-1)가 스푸핑 불가한 실클라이언트 값이어야 함. 단 내부 홉 추가 여부를 _debug/xff로
+# 검증하기 전까지는 현행 동작(leftmost=0)을 유지한다. 검증 후 -1로 전환 예정.
+_XFF_TRUST_INDEX = 0
+
+
+def _client_ip(request: Request) -> str:
+    """프록시(Vercel) 경유 클라이언트 IP를 단일 규칙으로 추출. XFF 없으면 직결 IP, 그것도 없으면 'unknown'."""
     forwarded = request.headers.get("x-forwarded-for")
-    ip = forwarded.split(",")[0].strip() if forwarded else request.client.host
+    if forwarded:
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[_XFF_TRUST_INDEX]
+    return request.client.host if request.client else "unknown"
+
+
+def _get_ip_hash(request: Request, post_id: str) -> str:
+    ip = _client_ip(request)
     return hashlib.sha256(f"{ip}{post_id}{_ANON_SALT}".encode()).hexdigest()[:16]
 
 
@@ -118,7 +135,8 @@ def _agent_reply_set(db: Session, post_ids: list) -> set:
 
 
 def _with_comment_count(post, count: int, has_agent_reply: bool = False) -> dict:
-    d = {c.name: getattr(post, c.name) for c in post.__table__.columns}
+    # embedding(768벡터)은 응답에서 제외 — deferred라 접근하지 않으면 로드도 안 됨
+    d = {c.name: getattr(post, c.name) for c in post.__table__.columns if c.name != "embedding"}
     d["comment_count"] = count
     d["has_agent_reply"] = has_agent_reply
     return d
@@ -199,8 +217,7 @@ def get_my_identity(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    forwarded = request.headers.get("x-forwarded-for")
-    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "unknown")
+    ip = _client_ip(request)
     name, avatar = _anon_identity(ip, post.id, db)
     return {"user_name": name, "anon_avatar": avatar}
 
@@ -211,12 +228,13 @@ def get_vote_status(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+    ip = _client_ip(request)
     ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
     return _vote_result(db, post.id, my_voter_key=ip_hash)
 
 
 @router.post("/posts/{slug}/vote")
+@limiter.limit("30/minute", key_func=_client_ip)
 def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(get_db)):
     """배틀 포스트 투표. side=a or b. 같은 side 재투표 시 취소, 다른 side면 변경."""
     if side not in ("a", "b"):
@@ -228,7 +246,7 @@ def vote_debate(slug: str, side: str, request: Request, db: Session = Depends(ge
     if "+" not in (post.agent_id or ""):
         raise HTTPException(status_code=400, detail="배틀 포스트가 아닙니다")
 
-    ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+    ip = _client_ip(request)
     ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
 
     existing = db.query(DebateVote).filter(
@@ -278,7 +296,11 @@ def _recent_post_context(db: Session, agent_id: str | None = None) -> tuple[list
                     tag_counter[t] += 1
             except Exception:
                 pass
-    recent_posts = [{"title": title, "slug": slug} for title, _, _, slug in recent_rows[:15]]
+    # 의미 기반 내부 링크 후보: 최근 90일 전체(≤60)를 topic과 함께 넘기고, 랭킹은 생성 측에서 수행
+    recent_posts = [
+        {"title": title, "slug": slug, "topic": topic or ""}
+        for title, topic, _, slug in recent_rows
+    ]
 
     # 같은 에이전트의 최근 4주 태그 (중복 제거, 순서 유지)
     agent_tags: list[str] = []
@@ -322,7 +344,7 @@ async def trigger_generate(request: Request, agent_id: str | None = None, theme:
             n += 1
         data["slug"] = f"{base_slug}-{n}"
 
-    post = BlogPost(**data)
+    post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()  # post.id 확보
 
@@ -351,7 +373,7 @@ async def trigger_generate_intro(request: Request, db: Session = Depends(get_db)
     if existing:
         raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}. 삭제 후 재시도하거나 날짜가 바뀌면 다시 생성하세요.")
 
-    post = BlogPost(**data)
+    post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()
 
@@ -403,7 +425,7 @@ async def trigger_generate_debate(
     if existing:
         raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}")
 
-    post = BlogPost(**data)
+    post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()
 
@@ -439,7 +461,7 @@ async def trigger_generate_discovery(request: Request, topic: str | None = None,
             n += 1
         data["slug"] = f"{slug_base}-{n}"
 
-    post = BlogPost(**data)
+    post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()
 
@@ -591,7 +613,7 @@ def increment_view(slug: str, request: Request, db: Session = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    ip = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip()
+    ip = _client_ip(request)
     ip_hash = hashlib.sha256(f"{ip}{post.id}{_ANON_SALT}".encode()).hexdigest()[:16]
     today = str(date.today())
 
@@ -636,7 +658,62 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/_debug/xff")
+def _debug_xff(request: Request, _=Depends(_require_admin)):
+    """[임시·검증용] Vercel이 backend에 전달하는 X-Forwarded-For 원본 구조 확인. 검증 후 제거."""
+    raw = request.headers.get("x-forwarded-for")
+    return {
+        "raw_xff": raw,
+        "parts": [p.strip() for p in raw.split(",")] if raw else [],
+        "client_host": request.client.host if request.client else None,
+    }
+
+
+@router.get("/posts/{slug}/related")
+def get_related_posts(slug: str, limit: int = 6, db: Session = Depends(get_db)):
+    """이 글과 의미적으로 가까운 발행글 top-K (pgvector 코사인). 임베딩 없으면 빈 목록."""
+    post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.embedding is None:
+        return {"posts": []}
+    limit = max(1, min(limit, 20))
+    rows = (
+        db.query(BlogPost)
+        .filter(
+            BlogPost.published == True,
+            BlogPost.id != post.id,
+            BlogPost.embedding.isnot(None),
+        )
+        .order_by(BlogPost.embedding.cosine_distance(post.embedding))
+        .limit(limit)
+        .all()
+    )
+    post_ids = [p.id for p in rows]
+    counts = _comment_counts(db, post_ids)
+    agent_replied = _agent_reply_set(db, post_ids)
+    return {"posts": [_with_comment_count(p, counts.get(p.id, 0), p.id in agent_replied) for p in rows]}
+
+
+@router.post("/_backfill-embeddings")
+def backfill_embeddings(request: Request, db: Session = Depends(get_db), _=Depends(_require_admin)):
+    """embedding이 비어있는 발행글을 일괄 임베딩(Option A 도입 시 기존글 백필용, 1회성)."""
+    from db.embedder import embed
+    posts = db.query(BlogPost).filter(BlogPost.embedding.is_(None)).all()
+    done = 0
+    for p in posts:
+        text = "\n".join(str(t) for t in (p.title, p.trending_topic, p.content) if t)
+        if not text:
+            continue
+        p.embedding = embed(text)
+        done += 1
+    db.commit()
+    remaining = db.query(BlogPost).filter(BlogPost.embedding.is_(None)).count()
+    return {"backfilled": done, "remaining_null": remaining}
+
+
 @router.post("/posts/{slug}/like")
+@limiter.limit("30/minute", key_func=_client_ip)
 def like_post(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
@@ -661,6 +738,7 @@ def like_post(slug: str, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/posts/{slug}/unlike")
+@limiter.limit("30/minute", key_func=_client_ip)
 def unlike_post(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
@@ -761,10 +839,8 @@ def add_user_comment(request: Request, slug: str, body: dict, db: Session = Depe
         if parent.parent_id is not None:
             raise HTTPException(status_code=400, detail="대댓글에는 답글을 달 수 없습니다")
 
-    # 이름 미입력 시 익명 정체성 자동 부여
-    # Vercel 프록시 통과 시 X-Forwarded-For에 실제 클라이언트 IP가 담김
-    forwarded_for = request.headers.get("x-forwarded-for")
-    ip = forwarded_for.split(",")[0].strip() if forwarded_for else request.client.host
+    # 이름 미입력 시 익명 정체성 자동 부여 (Vercel 프록시 통과 시 XFF에 실제 클라이언트 IP)
+    ip = _client_ip(request)
     if raw_name:
         user_name, anon_avatar, ip_hash = raw_name, None, None
     else:

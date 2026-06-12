@@ -64,7 +64,7 @@ app.include_router(blog_report.router)
 
 
 async def _daily_blog_job():
-    from blog_generator import generate_blog_post, generate_comments
+    from blog_generator import generate_blog_post, generate_comments, attach_embedding
     from db.models import BlogComment
 
     for attempt in range(1, 4):
@@ -94,7 +94,7 @@ async def _daily_blog_job():
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
                 return
-            post = BlogPost(**data)
+            post = BlogPost(**attach_embedding(data))
             db.add(post)
             db.flush()
             summary = data["content"][:300]

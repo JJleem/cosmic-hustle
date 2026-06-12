@@ -12,7 +12,8 @@ _ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 
 
 def _require_admin(request: Request):
-    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    # 헤더만 허용 — 서버 TLS 미적용이라 쿼리스트링 키는 nginx 로그·브라우저 히스토리에 평문 노출됨
+    key = request.headers.get("X-Admin-Key")
     if not _ADMIN_KEY or key != _ADMIN_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 

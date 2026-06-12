@@ -1074,6 +1074,40 @@ _PIXEL_AI_KEYWORDS = {"AI", "인공지능", "웹디자인", "웹 디자인", "UX
 _PIXEL_EVERYDAY_QUERY = "브랜드 리디자인 패키지 인테리어 카페 일상 디자인"
 
 
+def attach_embedding(data: dict) -> dict:
+    """발행 직전 포스트 data에 의미 임베딩(관련글 추천용)을 주입. 실패해도 발행은 진행(embedding=None)."""
+    if data.get("embedding") is None:
+        try:
+            from db.embedder import embed
+            text = "\n".join(
+                str(p) for p in (data.get("title"), data.get("trending_topic"), data.get("content")) if p
+            )
+            data["embedding"] = embed(text) if text else None
+        except Exception:
+            logging.getLogger(__name__).warning("포스트 임베딩 실패", exc_info=True)
+            data["embedding"] = None
+    return data
+
+
+def _rank_posts_by_relevance(query_text: str, posts: list[dict], top_k: int) -> list[dict]:
+    """query_text와 의미적으로 가까운 순으로 posts(title/topic/slug)를 정렬해 상위 top_k 반환.
+    임베딩 실패·후보 부족 시 입력 순서(=최신순)를 그대로 폴백."""
+    if not posts or len(posts) <= top_k:
+        return posts
+    if not (query_text and query_text.strip()):
+        return posts[:top_k]
+    try:
+        from db.embedder import get_model
+        model = get_model()
+        cand_texts = [f'{p["title"]} {p.get("topic", "")}'.strip() for p in posts]
+        embs = model.encode([query_text] + cand_texts, convert_to_numpy=True, normalize_embeddings=True)
+        sims = embs[1:] @ embs[0]  # 정규화돼 있으므로 내적 = 코사인 유사도
+        order = sorted(range(len(posts)), key=lambda i: float(sims[i]), reverse=True)
+        return [posts[i] for i in order[:top_k]]
+    except Exception:
+        return posts[:top_k]
+
+
 async def generate_blog_post(
     agent_id: str | None = None,
     recent_titles: list[str] | None = None,
@@ -1223,8 +1257,11 @@ async def generate_blog_post(
             + ", ".join(agent_recent_tags) + "\n"
         )
     if recent_posts:
+        # 최신순이 아니라 오늘 글의 주제(테마+트렌드 자료)와 의미적으로 가까운 글을 후보로 랭킹
+        link_query = " ".join(filter(None, [theme, trending_context]))
+        ranked_posts = _rank_posts_by_relevance(link_query, recent_posts, top_k=12)
         links = "\n".join(
-            f'- [{p["title"]}]({_GSC_SITE_URL}/{p["slug"]})' for p in recent_posts[:12]
+            f'- [{p["title"]}]({_GSC_SITE_URL}/{p["slug"]})' for p in ranked_posts
         )
         user_content += f"\n【내부 링크】 아래 글과 주제가 연결되면 본문에 자연스럽게 1~2개만 링크 포함 (억지로 넣지 말 것):\n{links}\n"
 

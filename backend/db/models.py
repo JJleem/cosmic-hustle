@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey, Boolean
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from .connection import Base
@@ -110,6 +111,8 @@ class BlogPost(Base):
     likes = Column(Integer, default=0, server_default="0")
     view_count = Column(Integer, default=0, server_default="0")
     created_at = Column(DateTime, server_default=func.now())
+    # 관련글 의미기반 추천용 임베딩(ko-sroberta 768). deferred — 목록/상세 조회 시 로드 안 됨.
+    embedding = deferred(Column(Vector(768), nullable=True))
 
 
 class BlogComment(Base):
