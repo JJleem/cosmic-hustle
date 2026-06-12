@@ -60,6 +60,10 @@ def notify_search_engines_bg(url: str) -> None:
 
 _CHAR_DIR = Path(__file__).parent / "characters"
 
+# 캐릭터 레퍼런스는 정적 PNG라 fal 업로드 URL을 에이전트별로 캐싱(매 발행 재업로드 제거).
+# 썸네일 생성 실패 시 _generate_thumbnail이 해당 항목을 비워 self-heal 함.
+_CHAR_URL_CACHE: dict[str, str] = {}
+
 # ── 오버 에세이 형식 · 감정 로테이션 ──────────────────────────────────────────
 
 OVER_ESSAY_FORMATS = [
@@ -818,16 +822,21 @@ def _fal_available() -> bool:
 
 
 async def _upload_character(agent_id: str) -> str | None:
+    cached = _CHAR_URL_CACHE.get(agent_id)
+    if cached:
+        return cached
     char_path = _CHAR_DIR / agent_id / "default.png"
     if not char_path.exists():
         logger.warning(f"캐릭터 이미지 없음: {char_path}")
         return None
     try:
         import fal_client
-        return await asyncio.wait_for(
+        url = await asyncio.wait_for(
             asyncio.to_thread(fal_client.upload_file, str(char_path)),
             timeout=30.0,
         )
+        _CHAR_URL_CACHE[agent_id] = url
+        return url
     except Exception as e:
         logger.warning(f"캐릭터 업로드 실패 ({agent_id}): {e}")
         return None
@@ -916,6 +925,8 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         fal_url = result["images"][0]["url"]
         return await _download_image(fal_url)
     except Exception as e:
+        # 캐시된 캐릭터 URL이 만료됐을 수 있으니 비워서 다음 발행 때 재업로드(self-heal)
+        _CHAR_URL_CACHE.pop(agent_id, None)
         logger.warning(f"썸네일 생성 실패: {e}")
         return None
 
