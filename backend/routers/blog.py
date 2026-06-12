@@ -660,11 +660,13 @@ def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/_debug/xff")
 def _debug_xff(request: Request, _=Depends(_require_admin)):
-    """[임시·검증용] Vercel이 backend에 전달하는 X-Forwarded-For 원본 구조 확인. 검증 후 제거."""
-    raw = request.headers.get("x-forwarded-for")
+    """[임시·검증용] Vercel이 backend에 전달하는 클라이언트 IP 관련 헤더 확인. 검증 후 제거."""
+    keys = [
+        "x-forwarded-for", "x-real-ip", "x-vercel-forwarded-for",
+        "x-vercel-ip-country", "x-vercel-id", "forwarded", "x-client-ip",
+    ]
     return {
-        "raw_xff": raw,
-        "parts": [p.strip() for p in raw.split(",")] if raw else [],
+        "ip_headers": {k: request.headers.get(k) for k in keys},
         "client_host": request.client.host if request.client else None,
     }
 
