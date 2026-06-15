@@ -14,6 +14,7 @@ backend/
 ├── blog_generator.py         # 블로그 포스트 생성 + 에이전트 메모리 업데이트
 ├── ga_client.py              # GA4 Data API 클라이언트
 ├── ga_monthly.py             # 월간 GA 분석 파이프라인 (카→버즈→메모리→이메일)
+├── awards.py                 # 사원상 — 글별 지표 수집 + 3축 점수(성과/비용, 품질은 v2)
 ├── requirements.txt
 ├── .env                      # gitignore됨, 직접 생성
 ├── agents/                   # 에이전트별 CLAUDE.md (per-agent 컨텍스트)
@@ -36,8 +37,9 @@ backend/
 │   ├── versions.py           # GET /api/sessions/{id}/versions
 │   ├── export.py             # GET /api/reports/{id}/export?format=pdf|excel
 │   ├── logs.py               # GET/POST /api/logs
-│   └── blog.py               # GET/POST /api/blog/*
-└── tests/                    # pytest 단위 테스트 (52개)
+│   ├── blog.py               # GET/POST /api/blog/*
+│   └── awards.py             # GET /api/awards, POST /api/awards/collect (사원상)
+└── tests/                    # pytest 단위 테스트 (63개)
 ```
 
 ---
@@ -47,7 +49,7 @@ backend/
 | 레이어 | 위치 | 비고 |
 |--------|------|------|
 | 백엔드 | AWS Lightsail `3.36.239.214:8000` | systemd `cosmic-backend.service` |
-| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB, 마이그레이션 021까지 적용 |
+| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB, 마이그레이션 029까지 적용 |
 | 자동배포 | GitHub Actions | `backend/` 변경 push → 자동 rsync + restart |
 | 블로그 프론트 | Vercel | https://cosmic-hustle.ai.kr/ |
 
@@ -56,6 +58,7 @@ backend/
 ssh -i ~/.ssh/LightsailDefaultKey-ap-northeast-2.pem ubuntu@3.36.239.214
 sudo systemctl status|restart|stop cosmic-backend
 ```
+> ⚠️ 수동 API 호출(블로그 생성·`generate-quiz` 등 `X-Admin-Key` 필요한 호출)은 공인 IP(`http://3.36.239.214:8000`) 말고 **SSH 접속 후 `http://localhost:8000`** 으로 칠 것. ADMIN_KEY가 평문 HTTP로 인터넷에 노출되는 걸 막기 위함(서버는 TLS 미적용).
 
 ### .env (로컬 및 서버 공통 키 목록)
 ```
@@ -122,6 +125,7 @@ brew install pango  # weasyprint PDF용
 | `_daily_blog_job` | 매일 09:00 KST | 블로그 포스트 생성 |
 | `_memory_update_job` | 매일 09:05 KST | 어제 포스트 반응 → 에이전트 메모리 업데이트 |
 | `_user_reply_job` | 매일 09:10 KST | 유저 댓글에 에이전트 대댓글 |
+| `_awards_metrics_job` | 매일 06:30 KST | 사원상 — 이번 달 글별 GSC/GA 지표 수집(`blog_post_metrics`) |
 | `_ga_monthly_job` | 매월 1일 06:00 KST | GA4 분석 → 메모리 업데이트 → 이메일 |
 
 GA 수동 실행: `POST /api/ga/run-monthly?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
@@ -202,6 +206,8 @@ GET    /api/blog/posts/{slug}
 POST   /api/blog/generate
 DELETE /api/blog/posts/{id}
 PATCH  /api/blog/posts/{id}
+GET    /api/awards?period=YYYY-MM             # 사원상 3축 점수표 (프론트 대시보드용, 공개)
+POST   /api/awards/collect?period=YYYY-MM     # GSC/GA 지표 수집 (X-Admin-Key)
 ```
 
 ## SSE 이벤트 타입

@@ -175,6 +175,7 @@ def build_awards(db: Session, period: str, weights: dict | None = None) -> dict:
             "slug": post.slug if post else None,
             "title": post.title if post else None,
             "agent_id": r.agent_id,
+            "is_collab": "+" in r.agent_id,  # 토론/인트로 합작 글 — agents 랭킹엔 안 들어감
             "published_at": post.published_at.date().isoformat() if post and post.published_at else None,
             "metrics": {
                 "impressions": r.impressions, "clicks": r.clicks, "ctr": r.ctr,
@@ -197,9 +198,11 @@ def build_awards(db: Session, period: str, weights: dict | None = None) -> dict:
             eff_by_post[p["post_id"]] = eff
         del p["_eff_raw"]
 
-    # 에이전트 집계
+    # 에이전트 집계 (합작 글 'buzz+ping' 등은 개인 시상 대상 아니라 랭킹 제외 — posts 목록엔 남음)
     agents: dict[str, dict] = {}
     for r in rows:
+        if "+" in r.agent_id:
+            continue
         a = agents.setdefault(r.agent_id, {
             "post_ids": [], "res": [], "eng": [], "cost": [], "break": {},
         })
