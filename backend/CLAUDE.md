@@ -16,6 +16,7 @@ backend/
 ├── ga_monthly.py             # 월간 GA 분석 파이프라인 (카→버즈→메모리→이메일)
 ├── awards.py                 # 사원상 — 글별 지표 수집 + 3축 점수(성과/비용/품질)
 ├── quality.py                # 사원상 1축 — 고정앵커 페어와이즈 LLM 판사(Haiku+Sonnet)
+├── dm.py                      # 에이전트 DM — RAG grounding 인격 대화 코어(검색·캐시·비용가드·프롬프트)
 ├── requirements.txt
 ├── .env                      # gitignore됨, 직접 생성
 ├── agents/                   # 에이전트별 CLAUDE.md (per-agent 컨텍스트)
@@ -39,7 +40,8 @@ backend/
 │   ├── export.py             # GET /api/reports/{id}/export?format=pdf|excel
 │   ├── logs.py               # GET/POST /api/logs
 │   ├── blog.py               # GET/POST /api/blog/*
-│   └── awards.py             # GET /api/awards, POST /api/awards/collect (사원상)
+│   ├── awards.py             # GET /api/awards, POST /api/awards/collect (사원상)
+│   └── dm.py                 # POST /api/dm (SSE), GET /api/dm/status|agents (에이전트 DM)
 └── tests/                    # pytest 단위 테스트 (63개)
 ```
 
@@ -81,6 +83,12 @@ SMTP_PORT=587
 SMTP_USER=leemjaejun@gmail.com
 SMTP_PASSWORD=...  # Gmail 앱 비밀번호 (띄어쓰기 없이 16자리)
 REPORT_EMAIL=leemjaejun@gmail.com
+ADMIN_KEY=...           # X-Admin-Key 헤더값. 블로그 수동생성·DM IP제한 우회 등 관리 호출에 필요
+DM_DAILY_BUDGET_KRW=500 # 선택. 에이전트 DM 일일 글로벌 지출 상한(원). 초과 시 기능 자동 OFF
+DM_IP_DAILY_LIMIT=5     # 선택. DM IP당 일일 메시지 수. X-Admin-Key 호출은 무제한
+DM_CACHE_DIST=0.22      # 선택. 시맨틱 캐시 히트 임계 코사인거리(작을수록 엄격). 미설정 시 0.22
+DM_SHOW_DIST=0.55       # 선택. 출처 칩 노출 임계 코사인거리(이보다 가까운 청크만 노출)
+USD_KRW=1400            # 선택. DM 비용 원화 환산 환율(지출 상한 계산용)
 ```
 서버 JSON 경로: `/home/ubuntu/backend/ga_service_account.json`
 
@@ -212,7 +220,23 @@ POST   /api/awards/collect?period=YYYY-MM     # GSC/GA 지표 수집 (X-Admin-Ke
 GET    /api/awards/reference                  # 고정 레퍼런스 세트(앵커) 목록
 POST   /api/awards/reference                  # 앵커 교체 [{slug,note}] (X-Admin-Key)
 POST   /api/awards/judge                      # 품질 페어와이즈 판정 실행 (X-Admin-Key)
+POST   /api/dm                                # 에이전트 DM (SSE). body:{agent_id,message,history[]}
+GET    /api/dm/status                         # 기능 on/off + 남은 예산 + 내 IP 남은 횟수
+GET    /api/dm/agents                         # DM 가능 에이전트 목록(11명)
 ```
+
+### 에이전트 DM (포트폴리오 데모)
+독자가 11명 중 한 명을 골라 DM처럼 대화. RAG grounding(그 에이전트 과거 블로그 글 + wiki 코퍼스)으로
+환각 차단, 출처 칩 노출. 모델 Haiku 고정. 코어 로직 `dm.py`, 라우터 `routers/dm.py`.
+- **비용 가드**: 일일 글로벌 지출 상한(`DM_DAILY_BUDGET_KRW`, 기본 500원) 초과 시 자동 OFF + 안내.
+  IP당 일일 횟수(`DM_IP_DAILY_LIMIT`, 기본 5). `X-Admin-Key`면 IP제한 우회(라이브 시연용).
+- **시맨틱 캐시**: 같은 에이전트 유사질문(코사인거리 < `DM_CACHE_DIST` 0.22) 재사용 → LLM 스킵·비용 0.
+  실측: 패러프레이즈 0.04~0.21 / 무관 0.76+ 라 0.22가 안전.
+- **환각 가드**: 세계관(회사·동료·사건)은 근거 없으면 인격에 맞게 "모른다". 출처 칩은 충분히 가까운
+  청크(거리 < `DM_SHOW_DIST` 0.55)만 노출.
+- 메시지당 ~6원(Haiku, 입력 ~3k토큰=페르소나+청크) → 500원 상한 = 하루 ~80통(캐시 제외).
+- ⚠️ **과거 글 grounding은 `blog_posts.embedding` 필요** — 마이그 027 이후 글은 자동 부여,
+  이전 글은 `POST /api/blog/_backfill-embeddings`(X-Admin-Key) 1회 실행 필요.
 
 ## SSE 이벤트 타입
 

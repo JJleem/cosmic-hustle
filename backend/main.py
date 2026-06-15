@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
 from db.models import BlogPost, AgentMemory
-from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog, blog_report, awards
+from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog, blog_report, awards, dm
 
 Base.metadata.create_all(bind=engine)
 
@@ -62,6 +62,7 @@ app.include_router(thumbnail.router)
 app.include_router(blog.router)
 app.include_router(blog_report.router)
 app.include_router(awards.router)
+app.include_router(dm.router)
 
 
 async def _daily_blog_job():

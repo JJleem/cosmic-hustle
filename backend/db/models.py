@@ -243,6 +243,31 @@ class AgentMemory(Base):
     updated_at = Column(DateTime, server_default=func.now())
 
 
+class DmCache(Base):
+    __tablename__ = "dm_cache"
+
+    id = Column(String, primary_key=True)
+    agent_id = Column(String, nullable=False, index=True)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    sources = Column(Text, nullable=True)                  # JSON [{type,title,slug}]
+    embedding = Column(Vector(768), nullable=True)         # 질문 임베딩(ko-sroberta)
+    hits = Column(Integer, default=0, server_default="0")
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class DmMessageLog(Base):
+    __tablename__ = "dm_message_log"
+
+    id = Column(String, primary_key=True)
+    date = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD KST
+    ip_hash = Column(String(16), nullable=True, index=True)
+    agent_id = Column(String, nullable=False)
+    cost_usd = Column(Float, default=0.0, server_default="0")
+    cached = Column(Boolean, default=False, server_default="false")
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class GaMonthlySnapshot(Base):
     __tablename__ = "ga_monthly_snapshot"
 
