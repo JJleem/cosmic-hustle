@@ -14,7 +14,8 @@ backend/
 ├── blog_generator.py         # 블로그 포스트 생성 + 에이전트 메모리 업데이트
 ├── ga_client.py              # GA4 Data API 클라이언트
 ├── ga_monthly.py             # 월간 GA 분석 파이프라인 (카→버즈→메모리→이메일)
-├── awards.py                 # 사원상 — 글별 지표 수집 + 3축 점수(성과/비용, 품질은 v2)
+├── awards.py                 # 사원상 — 글별 지표 수집 + 3축 점수(성과/비용/품질)
+├── quality.py                # 사원상 1축 — 고정앵커 페어와이즈 LLM 판사(Haiku+Sonnet)
 ├── requirements.txt
 ├── .env                      # gitignore됨, 직접 생성
 ├── agents/                   # 에이전트별 CLAUDE.md (per-agent 컨텍스트)
@@ -49,7 +50,7 @@ backend/
 | 레이어 | 위치 | 비고 |
 |--------|------|------|
 | 백엔드 | AWS Lightsail `3.36.239.214:8000` | systemd `cosmic-backend.service` |
-| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB, 마이그레이션 029까지 적용 |
+| DB | Lightsail 동일 서버 PostgreSQL 16 | `cosmic_hustle` DB, 마이그레이션 030까지 적용 |
 | 자동배포 | GitHub Actions | `backend/` 변경 push → 자동 rsync + restart |
 | 블로그 프론트 | Vercel | https://cosmic-hustle.ai.kr/ |
 
@@ -208,6 +209,9 @@ DELETE /api/blog/posts/{id}
 PATCH  /api/blog/posts/{id}
 GET    /api/awards?period=YYYY-MM             # 사원상 3축 점수표 (프론트 대시보드용, 공개)
 POST   /api/awards/collect?period=YYYY-MM     # GSC/GA 지표 수집 (X-Admin-Key)
+GET    /api/awards/reference                  # 고정 레퍼런스 세트(앵커) 목록
+POST   /api/awards/reference                  # 앵커 교체 [{slug,note}] (X-Admin-Key)
+POST   /api/awards/judge                      # 품질 페어와이즈 판정 실행 (X-Admin-Key)
 ```
 
 ## SSE 이벤트 타입

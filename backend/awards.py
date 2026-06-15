@@ -154,6 +154,10 @@ def build_awards(db: Session, period: str, weights: dict | None = None) -> dict:
 
     residual = _ctr_residual_map(rows)
 
+    # 1축 품질 — 앵커 대비 페어와이즈 승률(0~100). 이미 절대 비교라 정규화 없이 그대로 사용.
+    import quality as quality_mod
+    quality_map = quality_mod.load_quality(db, list(posts.keys()))
+
     # 정규화 범위 (이 period 글 전체 기준)
     res_vals = [residual[r.post_id] for r in rows]
     eng_vals = [r.avg_session_sec for r in rows]
@@ -184,7 +188,12 @@ def build_awards(db: Session, period: str, weights: dict | None = None) -> dict:
             },
             "cost_usd": round(cost, 6) if cost else None,
             "cost_breakdown": cost_break.get(r.post_id),
-            "scores": {"performance": perf, "efficiency": None},  # efficiency는 정규화 후 채움
+            "quality_dims": quality_map.get(r.post_id, {}).get("dims"),
+            "scores": {
+                "performance": perf,
+                "quality": quality_map.get(r.post_id, {}).get("score"),
+                "efficiency": None,  # efficiency는 정규화 후 채움
+            },
             "_eff_raw": eff_raw,
         })
 
@@ -214,19 +223,21 @@ def build_awards(db: Session, period: str, weights: dict | None = None) -> dict:
         for phase, v in (cost_break.get(r.post_id) or {}).items():
             a["break"][phase] = round(a["break"].get(phase, 0.0) + v, 6)
 
-    has_quality = False  # 1축(LLM 판사)은 v2
+    has_quality = bool(quality_map)
     agent_out = []
     for agent_id, a in agents.items():
         perfs = [perf_by_post[pid] for pid in a["post_ids"]]
         effs = [eff_by_post[pid] for pid in a["post_ids"] if pid in eff_by_post]
+        quals = [quality_map[pid]["score"] for pid in a["post_ids"] if pid in quality_map]
         perf = round(sum(perfs) / len(perfs), 1) if perfs else None
         eff = round(sum(effs) / len(effs), 1) if effs else None
-        total = _weighted_total({"performance": perf, "quality": None, "efficiency": eff}, weights)
+        qual = round(sum(quals) / len(quals), 1) if quals else None
+        total = _weighted_total({"performance": perf, "quality": qual, "efficiency": eff}, weights)
         n_cost = len(a["cost"])
         agent_out.append({
             "agent_id": agent_id,
             "post_count": len(a["post_ids"]),
-            "scores": {"performance": perf, "quality": None, "efficiency": eff, "total": total},
+            "scores": {"performance": perf, "quality": qual, "efficiency": eff, "total": total},
             "raw": {
                 "ctr_residual_avg": round(sum(a["res"]) / len(a["res"]), 4) if a["res"] else 0.0,
                 "avg_session_sec": round(sum(a["eng"]) / len(a["eng"])) if a["eng"] else 0,

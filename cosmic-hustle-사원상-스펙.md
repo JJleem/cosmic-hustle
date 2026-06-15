@@ -118,10 +118,14 @@ cosmic-hustle.ai.kr 의 11명 에이전트가 매일 쓰는 글을 **공정하�
 **완료된 것 (백엔드):**
 1. **글당 비용 로깅** — `blog_post_cost` 테이블(마이그 028). 5개 생성함수(`generate_blog_post/discovery/intro/debate/quiz`)의 LLM 토큰 + fal 이미지 추론 비용을 phase별(`content/trend/scene/topic_pick/thumbnail/content_image`)로 기록. `phase='content'`=본문비용, post_id SUM=전체비용. fal `$/image` 단가는 추정치(env 오버라이드 가능, 배포 전 실단가 확인 필요).
 2. **글별 성과 지표 적재** — `blog_post_metrics` 테이블(마이그 029, post_id+period). GSC(CTR·순위)·GA(체류) slug 조인, 매일 06:30 KST 수집 잡. GSC/GA는 16/14개월 보존이라 백필 가능.
-3. **사원상 API** — `GET /api/awards?period=YYYY-MM` (3축 점수 JSON, 프론트 계약 확정) / `POST /api/awards/collect` (admin, 지표 수동 수집). 점수는 API 시점 계산(가중치 튜닝 시 재수집 불필요). CTR 잔차 = 실제 CTR − 동일순위 사이트중앙 CTR(자가보정).
+3. **사원상 API** — `GET /api/awards?period=YYYY-MM` (3축 점수 JSON, 프론트 계약 확정) / `POST /api/awards/collect` (admin, 지표 수동 수집). 점수는 API 시점 계산(가중치 튜닝 시 재수집 불필요). CTR 잔차 = 실제 CTR − 동일순위 사이트중앙 CTR(자가보정). 합작 글(`buzz+ping` 등)은 개인 랭킹 제외(posts엔 `is_collab`로 유지).
+4. **v2 품질 판사(1축) 파이프라인** — `quality.py` 고정앵커 페어와이즈(Haiku 비교 + `confidence=low`만 Sonnet 재판정, 5축: 사실성/논리/보이스/독창성/구조). 승률 0~100, 주제 독립이라 글당 고정. `blog_post_quality`(마이그 030). 엔드포인트: `POST /api/awards/reference`(앵커 등록) → `POST /api/awards/judge`(판정). `build_awards`가 읽어 `quality` 축 + 0.3 가중 채움.
+
+**프론트:** `/awards` 대시보드 — 작업 완료(별도 진행).
 
 **남은 것:**
-1. 서버 배포 후 `POST /api/awards/collect` 1회 실행 → 실데이터 확인 (GA/GSC 자격증명은 서버에 있음)
-2. **프론트 대시보드** (`/awards` 라우트, §5.3) — `/api/awards` JSON 소비. 효율축은 비용로깅 이후 글만, 품질축은 `v2_pending`
-3. **v2:** 1축 LLM 판사 루브릭(§5.1 레퍼런스 세트 + §5.2 2단계 모델) → `quality` 축 채움 + 클릭베이트 드리프트 모니터(§3.4)
-4. **DoD:** 케이스 스터디 글 발행
+1. **레퍼런스 세트 등록(블로커, 사람 판단)** — 품질 범위 spread 되게 상/하 섞어 slug 6~8개 → `POST /api/awards/reference` → `POST /api/awards/judge` 실행하면 품질축 라이브.
+2. **클릭베이트 드리프트 모니터(§3.4)** — 1축 라이브되면 "CTR↑인데 품질↓" 탐지 추가.
+3. **DoD:** 케이스 스터디 글 발행.
+
+> 효율축은 비용로깅(오늘 시작) 이후 발행 글부터 자동 누적 — 추가 작업 없음.

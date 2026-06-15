@@ -204,6 +204,25 @@ class BlogPostMetrics(Base):
     updated_at = Column(DateTime, server_default=func.now())
 
 
+class QualityReference(Base):
+    __tablename__ = "quality_reference"
+
+    post_id = Column(String, ForeignKey("blog_posts.id", ondelete="CASCADE"), primary_key=True)
+    note = Column(String, nullable=True)
+    added_at = Column(DateTime, server_default=func.now())
+
+
+class BlogPostQuality(Base):
+    __tablename__ = "blog_post_quality"
+
+    post_id = Column(String, ForeignKey("blog_posts.id", ondelete="CASCADE"), primary_key=True)
+    score = Column(Float, default=0.0, server_default="0")  # 0~100 앵커 대비 페어와이즈 승률
+    dims = Column(Text, nullable=True)                      # 축별 승률 JSON
+    n_comparisons = Column(Integer, default=0, server_default="0")
+    model = Column(String, nullable=True)
+    judged_at = Column(DateTime, server_default=func.now())
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 
