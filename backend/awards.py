@@ -65,22 +65,10 @@ def collect_post_metrics(db: Session, period: str) -> int:
 
     gsc_by_slug: dict[str, dict] = {}
     try:
-        from gsc_client import fetch_query_page_rows
-        agg: dict[str, dict] = {}
-        for row in fetch_query_page_rows(start, end, row_limit=1000):
-            slug = _slug_from_path(row["page"])
-            item = agg.setdefault(slug, {"clicks": 0, "impressions": 0, "pos_weighted": 0.0})
-            item["clicks"] += row["clicks"]
-            item["impressions"] += row["impressions"]
-            item["pos_weighted"] += row["position"] * row["impressions"]
-        for slug, item in agg.items():
-            impr = item["impressions"]
-            gsc_by_slug[slug] = {
-                "clicks": item["clicks"],
-                "impressions": impr,
-                "ctr": round(item["clicks"] / impr, 4) if impr else 0.0,
-                "position": round(item["pos_weighted"] / impr, 1) if impr else 0.0,
-            }
+        # page 차원만 — 검색어 차원은 GSC 익명성 필터에 걸려 저볼륨 사이트는 행이 사라짐
+        from gsc_client import fetch_page_rows
+        for row in fetch_page_rows(start, end, row_limit=1000):
+            gsc_by_slug[_slug_from_path(row["page"])] = row
     except Exception as e:
         logger.warning(f"GSC 지표 수집 실패 (period={period}): {e}")
 

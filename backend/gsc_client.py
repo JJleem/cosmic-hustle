@@ -92,6 +92,51 @@ def fetch_query_page_rows(start: str, end: str, row_limit: int = 200) -> list[di
     return out
 
 
+def fetch_page_rows(start: str, end: str, row_limit: int = 1000) -> list[dict]:
+    """페이지 단위 성과 행 반환 (검색어 차원 없음).
+
+    사원상 성과축용 — 페이지별 clicks/impressions/ctr/position만 필요하다.
+    query×page로 받으면 검색량이 적은 사이트는 GSC 익명성 필터에 걸려 행이 통째로
+    사라지므로(검색어 노출 적으면 제외), page 차원만으로 받아 손실을 막는다.
+
+    각 행: {"page", "clicks", "impressions", "ctr", "position"}.
+    """
+    creds = _load_credentials()
+    if creds is None:
+        raise RuntimeError("GSC 서비스 계정 자격증명 미설정")
+
+    from google.auth.transport.requests import Request
+    creds.refresh(Request())
+
+    site = quote(_site_url(), safe="")
+    url = f"https://searchconsole.googleapis.com/webmasters/v3/sites/{site}/searchAnalytics/query"
+    body = {
+        "startDate": start,
+        "endDate": end,
+        "dimensions": ["page"],
+        "rowLimit": row_limit,
+        "type": "web",
+    }
+    with httpx.Client(timeout=15.0) as client:
+        resp = client.post(url, headers={"Authorization": f"Bearer {creds.token}"}, json=body)
+    resp.raise_for_status()
+    rows = resp.json().get("rows", [])
+
+    out = []
+    for row in rows:
+        keys = row.get("keys", [])
+        if not keys:
+            continue
+        out.append({
+            "page": keys[0],
+            "clicks": int(row.get("clicks", 0)),
+            "impressions": int(row.get("impressions", 0)),
+            "ctr": round(float(row.get("ctr", 0.0)), 4),
+            "position": round(float(row.get("position", 0.0)), 1),
+        })
+    return out
+
+
 def select_title_fix_candidates(
     rows: list[dict],
     min_impressions: int = 5,
