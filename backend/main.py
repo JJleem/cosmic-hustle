@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
 from db.models import BlogPost, AgentMemory
-from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog, blog_report
+from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog, blog_report, awards
 
 Base.metadata.create_all(bind=engine)
 
@@ -61,10 +61,11 @@ app.include_router(logs.router)
 app.include_router(thumbnail.router)
 app.include_router(blog.router)
 app.include_router(blog_report.router)
+app.include_router(awards.router)
 
 
 async def _daily_blog_job():
-    from blog_generator import generate_blog_post, generate_comments, attach_embedding
+    from blog_generator import generate_blog_post, generate_comments, attach_embedding, record_post_costs
     from db.models import BlogComment
 
     for attempt in range(1, 4):
@@ -94,9 +95,11 @@ async def _daily_blog_job():
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
                 return
+            costs = data.pop("costs", [])
             post = BlogPost(**attach_embedding(data))
             db.add(post)
             db.flush()
+            record_post_costs(db, post.id, post.agent_id, costs)
             summary = data["content"][:300]
             comments = await generate_comments(post.id, post.agent_id, post.title, summary)
             for c in comments:
@@ -318,6 +321,22 @@ async def _weekly_prompt_memory_report_job():
         db.close()
 
 
+async def _awards_metrics_job():
+    """매일 06:30 KST — 이번 달 글별 GSC/GA 지표를 사원상 대시보드용으로 갱신."""
+    import awards
+    from datetime import date
+
+    db = SessionLocal()
+    try:
+        period = date.today().strftime("%Y-%m")
+        count = awards.collect_post_metrics(db, period)
+        logger.info(f"사원상 지표 수집 완료: period={period}, posts={count}")
+    except Exception as e:
+        logger.error(f"사원상 지표 수집 실패: {e}")
+    finally:
+        db.close()
+
+
 @app.post("/api/ga/run-monthly")
 async def run_ga_monthly_now(start_date: str | None = None, end_date: str | None = None):
     """수동 테스트용 — start_date/end_date 미지정 시 전달 기준."""
@@ -364,8 +383,14 @@ async def startup():
         id="weekly_prompt_memory_report",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _awards_metrics_job,
+        CronTrigger(hour=6, minute=30, timezone="Asia/Seoul"),
+        id="awards_metrics",
+        replace_existing=True,
+    )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석")
+    logger.info("APScheduler 시작 — 매일 06:30 사원상 지표 수집, 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석")
 
 
 @app.on_event("shutdown")

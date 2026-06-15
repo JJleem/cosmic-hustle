@@ -18,6 +18,80 @@ _SITE_HOST = "cosmic-hustle.ai.kr"
 _GSC_SITE_URL = f"https://{_SITE_HOST}"
 
 
+# ── 비용 계측 (사원상 3축: 비용 효율) ─────────────────────────────────────────────
+# 글 1편 생성에 든 LLM 토큰 + 이미지 추론 비용을 phase별로 모아 blog_post_cost에 기록한다.
+# 단가는 착수 시점(2026-06) 공개가 기준 — 변경 시 갱신하거나 env로 오버라이드할 것.
+# Anthropic: (input, output, cache_read, cache_write) USD per 1M tokens
+_ANTHROPIC_PRICE = {
+    "claude-sonnet-4-6":         (3.0, 15.0, 0.30, 3.75),
+    "claude-haiku-4-5-20251001": (1.0,  5.0, 0.10, 1.25),
+}
+# fal.ai: USD per image(추론당). ⚠ 정확한 단가는 fal 가격표에서 확인 후 갱신할 것.
+_FAL_PRICE = {
+    "fal-ai/flux-pro/kontext": float(os.environ.get("FAL_KONTEXT_USD_PER_IMG", "0.04")),
+    "fal-ai/flux/dev":         float(os.environ.get("FAL_FLUX_DEV_USD_PER_IMG", "0.025")),
+    "fal-ai/flux/schnell":     float(os.environ.get("FAL_FLUX_SCHNELL_USD_PER_IMG", "0.003")),
+}
+
+
+def _anthropic_cost_usd(model: str | None, usage) -> float:
+    rates = _ANTHROPIC_PRICE.get(model or "")
+    if not rates:
+        return 0.0
+    rin, rout, rcr, rcw = rates
+    cr = getattr(usage, "cache_read_input_tokens", 0) or 0
+    cw = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    return (usage.input_tokens / 1e6 * rin + usage.output_tokens / 1e6 * rout
+            + cr / 1e6 * rcr + cw / 1e6 * rcw)
+
+
+async def _logged_create(client, sink: list | None, phase: str, **kwargs):
+    """client.messages.create 래퍼 — 응답 usage를 sink에 phase별로 기록하고 메시지를 반환."""
+    msg = await client.messages.create(**kwargs)
+    if sink is not None:
+        u = msg.usage
+        sink.append({
+            "phase": phase,
+            "model": kwargs.get("model"),
+            "input_tokens": getattr(u, "input_tokens", 0) or 0,
+            "output_tokens": getattr(u, "output_tokens", 0) or 0,
+            "cache_read_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+            "cache_creation_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+            "cost_usd": _anthropic_cost_usd(kwargs.get("model"), u),
+        })
+    return msg
+
+
+def _log_image_cost(sink: list | None, phase: str, model: str) -> None:
+    """fal 이미지 추론 1건 비용을 sink에 기록(토큰 없음, USD 고정 단가)."""
+    if sink is None:
+        return
+    sink.append({
+        "phase": phase, "model": model,
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_read_tokens": 0, "cache_creation_tokens": 0,
+        "cost_usd": _FAL_PRICE.get(model, 0.0),
+    })
+
+
+def record_post_costs(db, post_id: str, agent_id: str, costs: list | None) -> None:
+    """생성 단계에서 모은 cost 항목들을 blog_post_cost 행으로 기록. db.commit은 호출부 책임."""
+    from db.models import BlogPostCost
+    for c in costs or []:
+        db.add(BlogPostCost(
+            id=str(uuid.uuid4()),
+            post_id=post_id,
+            agent_id=agent_id,
+            phase=c["phase"],
+            model=c.get("model"),
+            input_tokens=c.get("input_tokens", 0),
+            output_tokens=c.get("output_tokens", 0),
+            cache_read_tokens=c.get("cache_read_tokens", 0),
+            cache_creation_tokens=c.get("cache_creation_tokens", 0),
+            cost_usd=c.get("cost_usd", 0.0),
+        ))
+
+
 async def request_indexnow(url: str) -> None:
     """IndexNow로 색인 요청 (Bing·Yandex·Naver·Seznam). 실패해도 조용히 넘어감.
     주의: Google은 IndexNow 미지원 → Google은 자체 크롤링에 의존(별도 통보 없음)."""
@@ -677,12 +751,13 @@ def _is_rss_stale(feed, max_age_days: int = 14) -> bool:
     return True
 
 
-async def _fetch_websearch(agent_id: str) -> str:
+async def _fetch_websearch(agent_id: str, sink: list | None = None) -> str:
     """WebSearch로 트렌드 수집. 실패 시 빈 문자열."""
     try:
         import anthropic as _anthropic
         client = _anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        resp = await client.messages.create(
+        resp = await _logged_create(
+            client, sink, "trend",
             model="claude-haiku-4-5-20251001",
             max_tokens=1500,
             tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
@@ -694,7 +769,7 @@ async def _fetch_websearch(agent_id: str) -> str:
         return ""
 
 
-async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None, agent_recent_tags: list[str] | None = None, recent_titles: list[str] | None = None) -> str:
+async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags: list[str] | None = None, agent_recent_tags: list[str] | None = None, recent_titles: list[str] | None = None, sink: list | None = None) -> str:
     """에이전트별 트렌드 수집 폭포수 로직.
     1. WebSearch 전용 에이전트(ping·pocke): WebSearch → 실패 시 RSS
     2. 나머지: RSS → (stale·비어있음·frequent_tags 겹침·recent_titles 겹침) 중 하나라도 해당하면 WebSearch → WebSearch도 없으면 자유 작성("")
@@ -702,7 +777,7 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
 
     # 1. WebSearch 전용 에이전트
     if agent_id in _WEBSEARCH_AGENTS:
-        result = await _fetch_websearch(agent_id)
+        result = await _fetch_websearch(agent_id, sink=sink)
         if result:
             return result
         # 실패 시 RSS 폴백
@@ -743,7 +818,7 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
     if (stale or not rss_result or overlap or title_overlap) and agent_id in _WEBSEARCH_PROMPTS:
         reason = "stale" if stale else ("empty" if not rss_result else ("tag_overlap" if overlap else "title_overlap"))
         logger.info(f"RSS {reason} ({agent_id}) → WebSearch 시도")
-        ws_result = await _fetch_websearch(agent_id)
+        ws_result = await _fetch_websearch(agent_id, sink=sink)
         if ws_result:
             logger.info(f"WebSearch 성공 ({agent_id})")
             return ws_result
@@ -882,7 +957,7 @@ _THUMBNAIL_STYLE_MAP["tcg"] = {
 }
 
 
-async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str | None = None) -> str | None:
+async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str | None = None, sink: list | None = None) -> str | None:
     """Flux Kontext로 씬 생성.
     - 레퍼런스 이미지에서 캐릭터 외형(정체성)만 추출
     - 구도·씬은 텍스트 프롬프트가 완전히 담당
@@ -923,6 +998,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
             timeout=120.0,
         )
         fal_url = result["images"][0]["url"]
+        _log_image_cost(sink, "thumbnail", "fal-ai/flux-pro/kontext")
         return await _download_image(fal_url)
     except Exception as e:
         # 캐시된 캐릭터 URL이 만료됐을 수 있으니 비워서 다음 발행 때 재업로드(self-heal)
@@ -931,11 +1007,12 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         return None
 
 
-async def generate_scene_prompt_from_content(agent_id: str, title: str, content: str) -> str:
+async def generate_scene_prompt_from_content(agent_id: str, title: str, content: str, sink: list | None = None) -> str:
     """블로그 본문을 읽고 Flux Kontext용 씬 프롬프트를 Haiku로 생성."""
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     truncated = content[:1500]
-    message = await client.messages.create(
+    message = await _logged_create(
+        client, sink, "scene",
         model="claude-haiku-4-5-20251001",
         max_tokens=150,
         messages=[{
@@ -960,7 +1037,7 @@ async def generate_scene_prompt_from_content(agent_id: str, title: str, content:
     return message.content[0].text.strip()
 
 
-async def _generate_content_image(prompt: str, cheap: bool = False) -> str | None:
+async def _generate_content_image(prompt: str, cheap: bool = False, sink: list | None = None) -> str | None:
     """flux/dev 사용 (28 steps, guidance 3.5). 품질 우선 설정.
     비용 절감이 필요하면 flux/schnell(약 8배 저렴, ~4 steps·guidance 미사용)로 교체 가능."""
     if not _fal_available():
@@ -993,6 +1070,7 @@ async def _generate_content_image(prompt: str, cheap: bool = False) -> str | Non
             timeout=120.0,
         )
         fal_url = result["images"][0]["url"]
+        _log_image_cost(sink, "content_image", model)
         return await _download_image(fal_url)
 
     try:
@@ -1009,7 +1087,7 @@ async def _generate_content_image(prompt: str, cheap: bool = False) -> str | Non
         return None
 
 
-async def _process_content_images(content: str, agent_id: str = "", limit: int | None = None, cheap: bool = False) -> str:
+async def _process_content_images(content: str, agent_id: str = "", limit: int | None = None, cheap: bool = False, sink: list | None = None) -> str:
     if limit is None:
         limit = 4 if agent_id == "pixel" else 2
     matches = _IMAGE_RE.findall(content)
@@ -1017,7 +1095,7 @@ async def _process_content_images(content: str, agent_id: str = "", limit: int |
     if not selected:
         content = _IMAGE_RE.sub("", content)
         return content
-    urls = await asyncio.gather(*[_generate_content_image(p, cheap=cheap) for p in selected])
+    urls = await asyncio.gather(*[_generate_content_image(p, cheap=cheap, sink=sink) for p in selected])
     for prompt, url in zip(selected, urls):
         marker = f"{{{{IMAGE: {prompt}}}}}"
         content = content.replace(marker, f"\n![이미지]({url})\n" if url else "", 1)
@@ -1121,6 +1199,7 @@ async def generate_blog_post(
     agent_recent_tags: list[str] | None = None,
 ) -> dict:
     today = datetime.now(KST).date()
+    costs: list = []
 
     _AGENT_THEMES = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}
 
@@ -1147,7 +1226,7 @@ async def generate_blog_post(
         if any(kw in last_agent_title for kw in _PIXEL_AI_KEYWORDS):
             trending_query = _PIXEL_EVERYDAY_QUERY
 
-    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags, recent_titles=recent_titles)
+    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags, recent_titles=recent_titles, sink=costs)
 
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     system_text = persona["system"]
@@ -1272,7 +1351,8 @@ async def generate_blog_post(
             user_content += "\n당신의 관점에서 가장 흥미로운 내용을 골라 블로그 포스트를 작성해주세요."
         user_content += "\n\n포스트 전체를 다 작성한 뒤, 맨 끝에 {{THUMBNAIL: ...}} 태그를 붙이세요. 글 내용을 충분히 읽고 그 내용을 직접 반영한 씬을 묘사해야 합니다."
 
-    message = await client.messages.create(
+    message = await _logged_create(
+        client, costs, "content",
         model="claude-sonnet-4-6",
         max_tokens=8000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
@@ -1288,8 +1368,8 @@ async def generate_blog_post(
     content = _TAGS_RE.sub("", content).strip()
 
     content, thumbnail_url = await asyncio.gather(
-        _process_content_images(content, agent_id),
-        _generate_thumbnail(agent_id, scene, force_style=thumbnail_style),
+        _process_content_images(content, agent_id, sink=costs),
+        _generate_thumbnail(agent_id, scene, force_style=thumbnail_style, sink=costs),
     )
 
     lines = content.split("\n")
@@ -1311,6 +1391,7 @@ async def generate_blog_post(
         "published":     published,
         "trending_topic": default_theme,
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
+        "costs":         costs,
     }
 
 
@@ -1404,6 +1485,7 @@ async def _classify_discovery_topic(topic: str) -> tuple[str, str]:
 async def generate_discovery_post(topic: str | None = None, recent_titles: list[str] | None = None) -> dict:
     """디스커버리 채널 포스트 생성. topic 없으면 RSS에서 자동 선정."""
     today = datetime.now(KST).date()
+    costs: list = []
 
     # 1. 토픽 없으면 RSS에서 자동 선정
     if not topic:
@@ -1424,7 +1506,8 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
             recent_block = "\n\n【최근 발행된 포스트 (이와 유사한 주제는 피할 것)】\n" + "\n".join(f"- {t}" for t in recent_titles[:10])
 
         tmp_client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        pick = await tmp_client.messages.create(
+        pick = await _logged_create(
+            tmp_client, costs, "topic_pick",
             model="claude-haiku-4-5-20251001",
             max_tokens=60,
             messages=[{"role": "user", "content": (
@@ -1439,7 +1522,7 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
     persona = AGENT_PERSONAS[agent_id]
 
     # 3. 카테고리별 뉴스 컨텍스트 (선택적)
-    trending_context = await _fetch_trending(agent_id) if agent_id in AGENT_SEARCH_QUERIES else ""
+    trending_context = await _fetch_trending(agent_id, sink=costs) if agent_id in AGENT_SEARCH_QUERIES else ""
 
     # 4. 글 생성
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -1473,7 +1556,8 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
     if trending_context:
         user_content += f"\n\n【참고 뉴스】\n{trending_context}"
 
-    message = await client.messages.create(
+    message = await _logged_create(
+        client, costs, "content",
         model="claude-sonnet-4-6",
         max_tokens=6000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
@@ -1499,7 +1583,7 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
     inline_keywords = _WIKIMEDIA_RE.findall(content)
 
     thumbnail_url, photos = await asyncio.gather(
-        _generate_thumbnail(agent_id, scene),
+        _generate_thumbnail(agent_id, scene, sink=costs),
         asyncio.gather(*[_search_wikimedia(kw) for kw in inline_keywords]),
     )
 
@@ -1548,6 +1632,7 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
         "published":      True,
         "trending_topic": f"Discovery: {topic}",
         "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
+        "costs":          costs,
     }
 
 
@@ -1558,6 +1643,7 @@ async def generate_intro_post() -> dict:
     트렌드 수집 없이 프로젝트 내부 컨텍스트로 생성.
     """
     today  = datetime.now(KST).date()
+    costs: list = []
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     system_text = """당신은 Cosmic Hustle의 버즈 대리(마케터)와 핑 인턴(아이디어 수집가)이 번갈아가며 쓰는 특별 콜라보 포스트를 작성합니다.
@@ -1681,7 +1767,8 @@ async def generate_intro_post() -> dict:
 오늘 날짜: {today.strftime('%Y년 %m월 %d일')}
 """
 
-    message = await client.messages.create(
+    message = await _logged_create(
+        client, costs, "content",
         model="claude-sonnet-4-6",
         max_tokens=8000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
@@ -1699,7 +1786,7 @@ async def generate_intro_post() -> dict:
     content = _THUMBNAIL_RE.sub("", raw).strip()
     content = _TAGS_RE.sub("", content).strip()
 
-    content = await _process_content_images(content, "buzz")
+    content = await _process_content_images(content, "buzz", sink=costs)
     thumbnail_url = "https://cosmic-hustle.ai.kr/intro/buzz-ping-collab.png"
 
     lines = content.split("\n")
@@ -1721,6 +1808,7 @@ async def generate_intro_post() -> dict:
         "published":      True,
         "trending_topic": "Cosmic Hustle 소개",
         "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
+        "costs":          costs,
     }
 
 
@@ -1802,6 +1890,7 @@ async def generate_debate_post(
 ) -> dict:
     """두 에이전트가 한 주제로 정면 대결하는 이벤트 포스트."""
     today  = datetime.now(KST).date()
+    costs: list = []
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     pa = AGENT_PERSONAS[agent_a]
@@ -1866,7 +1955,8 @@ async def generate_debate_post(
         "포스트 전체를 다 작성한 뒤 맨 끝에 {{THUMBNAIL: ...}} 태그, 그 다음 줄에 {{TAGS: 태그1, 태그2, 태그3, 태그4}} 태그를 반드시 붙이세요."
     )
 
-    message = await client.messages.create(
+    message = await _logged_create(
+        client, costs, "content",
         model="claude-sonnet-4-6",
         max_tokens=7000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
@@ -1884,12 +1974,12 @@ async def generate_debate_post(
     content = _TAGS_RE.sub("", content).strip()
 
     if preset_thumbnail:
-        content = await _process_content_images(content, agent_a, limit=-1, cheap=True)
+        content = await _process_content_images(content, agent_a, limit=-1, cheap=True, sink=costs)
         thumbnail_url = preset_thumbnail
     else:
         content, thumbnail_url = await asyncio.gather(
-            _process_content_images(content, agent_a, limit=-1, cheap=True),
-            _generate_thumbnail(agent_a, scene),
+            _process_content_images(content, agent_a, limit=-1, cheap=True, sink=costs),
+            _generate_thumbnail(agent_a, scene, sink=costs),
         )
 
     lines = content.split("\n")
@@ -1911,6 +2001,7 @@ async def generate_debate_post(
         "published":     True,
         "trending_topic": f"AI 토론 시리즈: {topic}",
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
+        "costs":         costs,
     }
 
 
@@ -2101,6 +2192,7 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
 
 async def generate_quiz_post(quiz_title: str) -> dict:
     """플랜 차장이 쓰는 퀴즈 소개 글. 짧고 구조적이되 개성 있게."""
+    costs: list = []
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     plan_persona = AGENT_PERSONAS["plan"]
 
@@ -2122,7 +2214,8 @@ async def generate_quiz_post(quiz_title: str) -> dict:
         "맞춤법을 정확히 지키고 '누와' 같은 오타 없이 작성하세요.\n"
     )
 
-    message = await client.messages.create(
+    message = await _logged_create(
+        client, costs, "content",
         model="claude-haiku-4-5-20251001",
         max_tokens=1200,
         system=plan_persona["system"],
@@ -2133,6 +2226,7 @@ async def generate_quiz_post(quiz_title: str) -> dict:
         "content":        message.content[0].text.strip(),
         "tags":           '["성격 테스트", "퀴즈", "quiz", "Cosmic Hustle", "에이전트", "AI"]',
         "trending_topic": "AI 테스트",
+        "costs":          costs,
     }
 
 

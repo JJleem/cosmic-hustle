@@ -173,6 +173,37 @@ class QuizResultLog(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class BlogPostCost(Base):
+    __tablename__ = "blog_post_cost"
+
+    id = Column(String, primary_key=True)
+    post_id = Column(String, ForeignKey("blog_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    phase = Column(String, nullable=False)  # content | trend | scene | topic_pick | thumbnail | content_image
+    model = Column(String, nullable=True)
+    input_tokens = Column(Integer, default=0, server_default="0")
+    output_tokens = Column(Integer, default=0, server_default="0")
+    cache_read_tokens = Column(Integer, default=0, server_default="0")
+    cache_creation_tokens = Column(Integer, default=0, server_default="0")
+    cost_usd = Column(Float, default=0.0, server_default="0")
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class BlogPostMetrics(Base):
+    __tablename__ = "blog_post_metrics"
+
+    post_id = Column(String, ForeignKey("blog_posts.id", ondelete="CASCADE"), primary_key=True)
+    period = Column(String(7), primary_key=True)  # YYYY-MM
+    agent_id = Column(String, nullable=False)
+    impressions = Column(Integer, default=0, server_default="0")
+    clicks = Column(Integer, default=0, server_default="0")
+    ctr = Column(Float, default=0.0, server_default="0")
+    position = Column(Float, default=0.0, server_default="0")
+    sessions = Column(Integer, default=0, server_default="0")
+    avg_session_sec = Column(Integer, default=0, server_default="0")
+    updated_at = Column(DateTime, server_default=func.now())
+
+
 class WikiEntry(Base):
     __tablename__ = "wiki_entries"
 

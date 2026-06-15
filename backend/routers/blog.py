@@ -16,7 +16,7 @@ from slowapi.util import get_remote_address
 from db.connection import get_db
 from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog, PushSubscription
 from blog_generator import (
-    attach_embedding,
+    attach_embedding, record_post_costs,
     generate_blog_post, generate_comments,
     generate_scene_prompt_from_content,
     generate_intro_post, generate_intro_comments,
@@ -347,9 +347,11 @@ async def trigger_generate(request: Request, agent_id: str | None = None, theme:
             n += 1
         data["slug"] = f"{base_slug}-{n}"
 
+    costs = data.pop("costs", [])
     post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()  # post.id 확보
+    record_post_costs(db, post.id, post.agent_id, costs)
 
     # AI 댓글 생성
     summary = data["content"][:300]
@@ -376,9 +378,11 @@ async def trigger_generate_intro(request: Request, db: Session = Depends(get_db)
     if existing:
         raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}. 삭제 후 재시도하거나 날짜가 바뀌면 다시 생성하세요.")
 
+    costs = data.pop("costs", [])
     post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()
+    record_post_costs(db, post.id, post.agent_id, costs)
 
     summary  = data["content"][:300]
     comments = await generate_intro_comments(post.id, post.title, summary)
@@ -428,9 +432,11 @@ async def trigger_generate_debate(
     if existing:
         raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}")
 
+    costs = data.pop("costs", [])
     post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()
+    record_post_costs(db, post.id, post.agent_id, costs)
 
     summary = data["content"][:300]
     result  = await generate_debate_comments(post.id, post.title, summary, agent_a, agent_b)
@@ -464,9 +470,11 @@ async def trigger_generate_discovery(request: Request, topic: str | None = None,
             n += 1
         data["slug"] = f"{slug_base}-{n}"
 
+    costs = data.pop("costs", [])
     post = BlogPost(**attach_embedding(data))
     db.add(post)
     db.flush()
+    record_post_costs(db, post.id, post.agent_id, costs)
 
     summary = data["content"][:300]
     comments = await generate_comments(post.id, post.agent_id, post.title, summary)
@@ -492,6 +500,7 @@ async def trigger_generate_quiz(
         raise HTTPException(status_code=404, detail=f"포스트 없음: {slug}")
 
     data = await generate_quiz_post(post.title)
+    costs = data.pop("costs", [])
     post.content        = data["content"]
     post.tags           = data["tags"]
     post.trending_topic = data["trending_topic"]
@@ -516,11 +525,12 @@ async def trigger_generate_quiz(
 
     # 썸네일 생성 (기존 썸네일 없을 때만)
     if not post.thumbnail_url:
-        scene_prompt = await generate_scene_prompt_from_content("plan", post.title, data["content"])
-        thumbnail_url = await _generate_thumbnail("plan", scene_prompt)
+        scene_prompt = await generate_scene_prompt_from_content("plan", post.title, data["content"], sink=costs)
+        thumbnail_url = await _generate_thumbnail("plan", scene_prompt, sink=costs)
         if thumbnail_url:
             post.thumbnail_url = thumbnail_url
 
+    record_post_costs(db, post.id, "plan", costs)
     db.commit()
     db.refresh(post)
     return {

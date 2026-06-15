@@ -5,7 +5,7 @@ import blog_generator
 
 @pytest.mark.asyncio
 async def test_process_content_images_removes_unprocessed_placeholders(monkeypatch):
-    async def fake_generate_content_image(prompt: str, cheap: bool = False):
+    async def fake_generate_content_image(prompt: str, cheap: bool = False, sink=None):
         return f"https://example.com/{prompt}.png"
 
     monkeypatch.setattr(blog_generator, "_generate_content_image", fake_generate_content_image)
@@ -41,7 +41,7 @@ async def test_process_content_images_zero_limit_removes_placeholders(monkeypatc
 
 @pytest.mark.asyncio
 async def test_process_content_images_negative_limit_processes_all(monkeypatch):
-    async def fake_generate_content_image(prompt: str, cheap: bool = False):
+    async def fake_generate_content_image(prompt: str, cheap: bool = False, sink=None):
         return f"https://example.com/{prompt}-{cheap}.png"
 
     monkeypatch.setattr(blog_generator, "_generate_content_image", fake_generate_content_image)
