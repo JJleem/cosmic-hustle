@@ -2057,6 +2057,8 @@ async def generate_comments(post_id: str, author_id: str, post_title: str, post_
         f"【댓글 작성자 {total}명】\n{personas_desc}"
         f"{reply_instruction}\n\n"
         "각 캐릭터의 말투와 개성이 뚜렷하게 드러나게 1~2문장으로 작성하세요.\n"
+        "content에는 댓글 본문만 1인칭으로 쓰세요. 작성자는 agent_id로 이미 표시되므로 "
+        "자기 이름·직함을 앞에 붙이거나('포케 대리:') 자기를 3인칭으로 부르지('포케 대리가…') 마세요.\n"
         "다른 에이전트를 부를 때는 반드시 위에 명시된 정확한 이름+직함을 사용하세요 (예: '플랜 차장', '위키 대리').\n"
         f"총 {total}개 작성."
     )
