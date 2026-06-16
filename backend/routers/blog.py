@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import smtplib
 import uuid
 from collections import Counter
@@ -122,6 +123,63 @@ def _comment_counts(db: Session, post_ids: list) -> dict:
     return {post_id: count for post_id, count in rows}
 
 
+_MD_IMG_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")   # ![alt](url) 이미지
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")  # [text](url) → text
+_TAG_RE = re.compile(r"<[^>]+>")                    # HTML 태그
+_WS_RE = re.compile(r"\s+")
+
+
+def _clean_preview(text: str, limit: int = 120) -> str:
+    """마크다운/HTML을 평문 한 줄로 정리하고 limit자로 자른다(말줄임표는 프론트가 처리)."""
+    if not text:
+        return ""
+    t = _MD_IMG_RE.sub("", text)
+    t = _MD_LINK_RE.sub(r"\1", t)
+    t = _TAG_RE.sub("", t)
+    t = t.translate({ord(c): None for c in "*_`~#"})  # 인라인 마크다운 마커 제거
+    t = _WS_RE.sub(" ", t).strip()
+    return t[:limit]
+
+
+def _preview_comments(db: Session, post_ids: list) -> dict:
+    """글당 에이전트 최상위 댓글 상위 3개(created_at 오름차순)를 한 번의 윈도우 쿼리로 반환.
+
+    {post_id: [{"agent_id", "content"(≤120자 평문)}, ...]} (N+1 없음).
+    """
+    if not post_ids:
+        return {}
+    rn = func.row_number().over(
+        partition_by=BlogComment.post_id,
+        order_by=BlogComment.created_at.asc(),
+    ).label("rn")
+    sub = (
+        db.query(
+            BlogComment.post_id.label("post_id"),
+            BlogComment.agent_id.label("agent_id"),
+            BlogComment.content.label("content"),
+            rn,
+        )
+        .filter(
+            BlogComment.post_id.in_(post_ids),
+            BlogComment.agent_id.isnot(None),   # 에이전트 댓글만 (사람/익명 제외)
+            BlogComment.parent_id.is_(None),    # 최상위 댓글만
+        )
+        .subquery()
+    )
+    rows = (
+        db.query(sub.c.post_id, sub.c.agent_id, sub.c.content)
+        .filter(sub.c.rn <= 3)
+        .order_by(sub.c.post_id, sub.c.rn)
+        .all()
+    )
+    result: dict = {}
+    for post_id, agent_id, content in rows:
+        result.setdefault(post_id, []).append(
+            {"agent_id": agent_id, "content": _clean_preview(content)}
+        )
+    return result
+
+
 def _agent_reply_set(db: Session, post_ids: list) -> set:
     """에이전트가 유저 댓글에 대댓글 단 post_id 집합."""
     rows = (
@@ -156,8 +214,15 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     post_ids = [p.id for p in posts]
     counts = _comment_counts(db, post_ids)
     agent_replied = _agent_reply_set(db, post_ids)
+    previews = _preview_comments(db, post_ids)
     return {
-        "posts": [_with_comment_count(p, counts.get(p.id, 0), p.id in agent_replied) for p in posts],
+        "posts": [
+            {
+                **_with_comment_count(p, counts.get(p.id, 0), p.id in agent_replied),
+                "preview_comments": previews.get(p.id, []),
+            }
+            for p in posts
+        ],
         "total": total,
         "page": page,
         "limit": limit,
