@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
 from db.models import BlogPost, AgentMemory
-from routers import health, research, wiki, memos, versions, export, logs, thumbnail, blog, blog_report, awards, dm
+from routers import health, wiki, blog, blog_report, awards, dm
 
 Base.metadata.create_all(bind=engine)
 
@@ -52,13 +52,7 @@ async def cache_static(request: Request, call_next):
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 app.include_router(health.router)
-app.include_router(research.router)
 app.include_router(wiki.router)
-app.include_router(memos.router)
-app.include_router(versions.router)
-app.include_router(export.router)
-app.include_router(logs.router)
-app.include_router(thumbnail.router)
 app.include_router(blog.router)
 app.include_router(blog_report.router)
 app.include_router(awards.router)
