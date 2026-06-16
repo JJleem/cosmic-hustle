@@ -135,6 +135,7 @@ brew install pango  # weasyprint PDF용
 | `_memory_update_job` | 매일 09:05 KST | 어제 포스트 반응 → 에이전트 메모리 업데이트 |
 | `_user_reply_job` | 매일 09:10 KST | 유저 댓글에 에이전트 대댓글 |
 | `_awards_metrics_job` | 매일 06:30 KST | 사원상 — 이번 달 글별 GSC/GA 지표 수집(`blog_post_metrics`) |
+| `_awards_judge_job` | 매일 09:25 KST | 사원상 — 새 글 품질 판정(앵커 대비 페어와이즈, `only_missing`이라 기존 글 스킵) |
 | `_ga_monthly_job` | 매월 1일 06:00 KST | GA4 분석 → 메모리 업데이트 → 이메일 |
 
 GA 수동 실행: `POST /api/ga/run-monthly?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
