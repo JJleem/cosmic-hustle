@@ -277,6 +277,37 @@ def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool 
     d["has_agent_reply"] = has_agent_reply
     if activity:
         d.update(activity)
+
+    # When content is not included in list responses, provide a small excerpt and reading time
+    def _get_excerpt_from_post(p, length: int = 300) -> str:
+        try:
+            content = getattr(p, "content", None)
+        except Exception:
+            content = None
+        if not content:
+            return ""
+        text = _MD_IMG_RE.sub("", content)
+        text = _MD_LINK_RE.sub(r"\1", text)
+        text = _TAG_RE.sub("", text)
+        text = _WS_RE.sub(" ", text).strip()
+        if len(text) > length:
+            return text[:length].rstrip() + "..."
+        return text
+
+    def _reading_time_from_post(p) -> int:
+        try:
+            content = getattr(p, "content", None)
+        except Exception:
+            content = None
+        if not content:
+            return 0
+        words = len(_WS_RE.split(content))
+        return max(1, words // 200)
+
+    if not include_content:
+        d["excerpt"] = _get_excerpt_from_post(post)
+        d["reading_time_minutes"] = _reading_time_from_post(post)
+
     return d
 
 
