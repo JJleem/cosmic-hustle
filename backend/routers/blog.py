@@ -216,9 +216,13 @@ def _agent_reply_set(db: Session, post_ids: list) -> set:
     return {row[0] for row in rows}
 
 
-def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool = False) -> dict:
+def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool = False, include_content: bool = True) -> dict:
     # embedding(768벡터)은 응답에서 제외 — deferred라 접근하지 않으면 로드도 안 됨
-    d = {c.name: getattr(post, c.name) for c in post.__table__.columns if c.name != "embedding"}
+    # include_content=False일 때 content도 제외 (리스트 API 최적화용)
+    exclude_cols = {"embedding"}
+    if not include_content:
+        exclude_cols.add("content")
+    d = {c.name: getattr(post, c.name) for c in post.__table__.columns if c.name not in exclude_cols}
     d.update(counts or {
         "comment_count": 0,
         "human_comment_count": 0,
@@ -256,7 +260,7 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     return {
         "posts": [
             {
-                **_with_comment_count(p, counts.get(p.id), p.id in agent_replied),
+                **_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False),
                 "preview_comments": previews.get(p.id, []),
             }
             for p in posts
@@ -318,7 +322,7 @@ def list_popular_posts(days: int = 7, limit: int = 3, db: Session = Depends(get_
         recent_likes = likes.get(post.id, 0)
         recent_comments = comments.get(post.id, 0)
         ranked.append({
-            **_with_comment_count(post, all_comment_counts.get(post.id), post.id in agent_replied),
+            **_with_comment_count(post, all_comment_counts.get(post.id), post.id in agent_replied, include_content=False),
             "recent_unique_views": recent_views,
             "recent_human_likes": recent_likes,
             "recent_human_comments": recent_comments,
@@ -338,6 +342,35 @@ def list_popular_posts(days: int = 7, limit: int = 3, db: Session = Depends(get_
         "start_date": start_day.isoformat(),
         "end_date": end_day.isoformat(),
         "posts": ranked[:limit],
+    }
+
+
+@router.get("/compact/sidebar")
+def get_sidebar_data(db: Session = Depends(get_db)):
+    """홈/사이드바용 컴팩트 데이터: 인기 태그 + 최근 인기글. content 제외."""
+    # 1. 최근 90일 글의 태그 분포 (top 10)
+    cutoff = datetime.now() - timedelta(days=90)
+    tag_rows = (
+        db.query(BlogPost.tags)
+        .filter(BlogPost.published == True, BlogPost.published_at >= cutoff)
+        .all()
+    )
+    tag_counter: Counter = Counter()
+    for (tags_raw,) in tag_rows:
+        if tags_raw:
+            try:
+                for t in json.loads(tags_raw):
+                    tag_counter[t] += 1
+            except Exception:
+                pass
+    popular_tags = [{"tag": tag, "count": count} for tag, count in tag_counter.most_common(10)]
+
+    # 2. 최근 인기글 (최근 7일 기준)
+    popular = list_popular_posts(days=7, limit=5, db=db)
+    
+    return {
+        "popular_tags": popular_tags,
+        "popular_posts": popular.get("posts", []),
     }
 
 
@@ -896,7 +929,7 @@ def get_related_posts(slug: str, limit: int = 6, db: Session = Depends(get_db)):
     post_ids = [p.id for p in rows]
     counts = _comment_counts(db, post_ids)
     agent_replied = _agent_reply_set(db, post_ids)
-    return {"posts": [_with_comment_count(p, counts.get(p.id), p.id in agent_replied) for p in rows]}
+    return {"posts": [_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False) for p in rows]}
 
 
 @router.post("/_backfill-embeddings")
