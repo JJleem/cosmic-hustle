@@ -216,7 +216,53 @@ def _agent_reply_set(db: Session, post_ids: list) -> set:
     return {row[0] for row in rows}
 
 
-def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool = False, include_content: bool = True) -> dict:
+def _activity_times(db: Session, post_ids: list) -> dict:
+    """각 post별 최신 활동 시간 (댓글/투표/좋아요)."""
+    if not post_ids:
+        return {post_id: {"last_comment_at": None, "last_vote_at": None, "last_like_at": None} for post_id in post_ids}
+    
+    # 최신 댓글 시간
+    comment_rows = (
+        db.query(BlogComment.post_id, func.max(BlogComment.created_at).label('last_comment_at'))
+        .filter(BlogComment.post_id.in_(post_ids))
+        .group_by(BlogComment.post_id)
+        .all()
+    )
+    
+    # 최신 투표 시간
+    vote_rows = (
+        db.query(DebateVote.post_id, func.max(DebateVote.created_at).label('last_vote_at'))
+        .filter(DebateVote.post_id.in_(post_ids))
+        .group_by(DebateVote.post_id)
+        .all()
+    )
+    
+    # 최신 좋아요 시간
+    like_rows = (
+        db.query(BlogPostLike.post_id, func.max(BlogPostLike.created_at).label('last_like_at'))
+        .filter(BlogPostLike.post_id.in_(post_ids))
+        .group_by(BlogPostLike.post_id)
+        .all()
+    )
+    
+    result = {post_id: {"last_comment_at": None, "last_vote_at": None, "last_like_at": None} for post_id in post_ids}
+    
+    for post_id, ts in comment_rows:
+        if post_id in result and ts:
+            result[post_id]['last_comment_at'] = ts.isoformat()
+    
+    for post_id, ts in vote_rows:
+        if post_id in result and ts:
+            result[post_id]['last_vote_at'] = ts.isoformat()
+    
+    for post_id, ts in like_rows:
+        if post_id in result and ts:
+            result[post_id]['last_like_at'] = ts.isoformat()
+    
+    return result
+
+
+def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool = False, include_content: bool = True, activity: dict | None = None) -> dict:
     # embedding(768벡터)은 응답에서 제외 — deferred라 접근하지 않으면 로드도 안 됨
     # include_content=False일 때 content도 제외 (리스트 API 최적화용)
     exclude_cols = {"embedding"}
@@ -229,6 +275,8 @@ def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool 
         "agent_comment_count": 0,
     })
     d["has_agent_reply"] = has_agent_reply
+    if activity:
+        d.update(activity)
     return d
 
 
@@ -257,10 +305,11 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     counts = _comment_counts(db, post_ids)
     agent_replied = _agent_reply_set(db, post_ids)
     previews = _preview_comments(db, post_ids)
+    activities = _activity_times(db, post_ids)
     return {
         "posts": [
             {
-                **_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False),
+                **_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False, activity=activities.get(p.id)),
                 "preview_comments": previews.get(p.id, []),
             }
             for p in posts
@@ -316,13 +365,14 @@ def list_popular_posts(days: int = 7, limit: int = 3, db: Session = Depends(get_
     )
     all_comment_counts = _comment_counts(db, [post.id for post in posts])
     agent_replied = _agent_reply_set(db, [post.id for post in posts])
+    all_activities = _activity_times(db, [post.id for post in posts])
     ranked = []
     for post in posts:
         recent_views = views.get(post.id, 0)
         recent_likes = likes.get(post.id, 0)
         recent_comments = comments.get(post.id, 0)
         ranked.append({
-            **_with_comment_count(post, all_comment_counts.get(post.id), post.id in agent_replied, include_content=False),
+            **_with_comment_count(post, all_comment_counts.get(post.id), post.id in agent_replied, include_content=False, activity=all_activities.get(post.id)),
             "recent_unique_views": recent_views,
             "recent_human_likes": recent_likes,
             "recent_human_comments": recent_comments,
@@ -435,7 +485,8 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
         BlogComment.agent_id.isnot(None),
         BlogComment.parent_id.isnot(None),
     ).first() is not None
-    result = _with_comment_count(post, counts, has_agent_reply)
+    activities = _activity_times(db, [post.id]).get(post.id)
+    result = _with_comment_count(post, counts, has_agent_reply, activity=activities)
 
     ip_hash = _get_ip_hash(request, post.id)
     result["liked"] = db.query(BlogPostLike).filter(
@@ -929,7 +980,8 @@ def get_related_posts(slug: str, limit: int = 6, db: Session = Depends(get_db)):
     post_ids = [p.id for p in rows]
     counts = _comment_counts(db, post_ids)
     agent_replied = _agent_reply_set(db, post_ids)
-    return {"posts": [_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False) for p in rows]}
+    activities = _activity_times(db, post_ids)
+    return {"posts": [_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False, activity=activities.get(p.id)) for p in rows]}
 
 
 @router.post("/_backfill-embeddings")
