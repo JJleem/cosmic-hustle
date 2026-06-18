@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -13,7 +13,7 @@ import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import AgentMemory, BlogComment, BlogDailyVisit, BlogPost, BlogViewLog
+from db.models import AgentMemory, BlogComment, BlogDailyVisit, BlogPost, BlogPostLike, BlogViewLog
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +48,50 @@ def _default_report_date() -> date:
     return datetime.now(ZoneInfo("Asia/Seoul")).date() - timedelta(days=1)
 
 
+def _kst_day_bounds_utc(day: date) -> tuple[datetime, datetime]:
+    start_kst = datetime.combine(day, time.min, tzinfo=ZoneInfo("Asia/Seoul"))
+    end_kst = start_kst + timedelta(days=1)
+    return (
+        start_kst.astimezone(timezone.utc).replace(tzinfo=None),
+        end_kst.astimezone(timezone.utc).replace(tzinfo=None),
+    )
+
+
+def _rank_daily_posts(
+    posts: list,
+    daily_views: dict[str, int],
+    human_comments: dict[str, int],
+    human_likes: dict[str, int],
+) -> list[dict]:
+    ranked = []
+    for post in posts:
+        views = int(daily_views.get(post.id, 0))
+        comments = int(human_comments.get(post.id, 0))
+        likes = int(human_likes.get(post.id, 0))
+        if not (views or comments or likes):
+            continue
+        ranked.append({
+            "title": post.title,
+            "slug": post.slug,
+            "agent_id": post.agent_id,
+            "views": views,
+            "likes": likes,
+            "comments": comments,
+            "score": views + likes * 5 + comments * 3,
+            "tags": _parse_tags(post.tags),
+        })
+    return sorted(
+        ranked,
+        key=lambda item: (item["score"], item["views"], item["comments"], item["likes"]),
+        reverse=True,
+    )
+
+
 def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict:
     today = today or _default_report_date()
     compare_day = today - timedelta(days=1)
     week_start = today - timedelta(days=6)
+    day_start_utc, day_end_utc = _kst_day_bounds_utc(today)
 
     daily_rows = (
         db.query(BlogDailyVisit)
@@ -68,39 +108,59 @@ def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict
         .limit(30)
         .all()
     )
-    post_ids = [post.id for post in recent_posts]
-    comment_counts = {}
-    if post_ids:
-        rows = (
+    trend_counter: Counter[str] = Counter()
+    for post in recent_posts:
+        if post.trending_topic:
+            trend_counter.update([post.trending_topic])
+
+    daily_view_rows = (
+        db.query(BlogViewLog.post_id, func.count(BlogViewLog.ip_hash))
+        .filter(BlogViewLog.date == today.isoformat())
+        .group_by(BlogViewLog.post_id)
+        .all()
+    )
+    daily_views = {post_id: int(count) for post_id, count in daily_view_rows}
+    active_post_ids = list(daily_views)
+    active_posts = (
+        db.query(BlogPost)
+        .filter(BlogPost.id.in_(active_post_ids), BlogPost.published == True)
+        .all()
+        if active_post_ids else []
+    )
+
+    human_comments = {}
+    human_likes = {}
+    if active_post_ids:
+        comment_rows = (
             db.query(BlogComment.post_id, func.count(BlogComment.id))
-            .filter(BlogComment.post_id.in_(post_ids))
+            .filter(
+                BlogComment.post_id.in_(active_post_ids),
+                BlogComment.agent_id.is_(None),
+                BlogComment.created_at >= day_start_utc,
+                BlogComment.created_at < day_end_utc,
+            )
             .group_by(BlogComment.post_id)
             .all()
         )
-        comment_counts = {post_id: int(count) for post_id, count in rows}
+        human_comments = {post_id: int(count) for post_id, count in comment_rows}
+        like_rows = (
+            db.query(BlogPostLike.post_id, func.count(BlogPostLike.ip_hash))
+            .filter(
+                BlogPostLike.post_id.in_(active_post_ids),
+                BlogPostLike.created_at >= day_start_utc,
+                BlogPostLike.created_at < day_end_utc,
+            )
+            .group_by(BlogPostLike.post_id)
+            .all()
+        )
+        human_likes = {post_id: int(count) for post_id, count in like_rows}
 
+    scored_posts = _rank_daily_posts(active_posts, daily_views, human_comments, human_likes)
     tag_counter: Counter[str] = Counter()
-    trend_counter: Counter[str] = Counter()
-    scored_posts = []
-    for post in recent_posts:
-        tags = _parse_tags(post.tags)
-        tag_counter.update(tags)
-        if post.trending_topic:
-            trend_counter.update([post.trending_topic])
-        comments = comment_counts.get(post.id, 0)
-        score = int(post.view_count or 0) + int(post.likes or 0) * 5 + comments * 3
-        scored_posts.append({
-            "title": post.title,
-            "slug": post.slug,
-            "agent_id": post.agent_id,
-            "views": int(post.view_count or 0),
-            "likes": int(post.likes or 0),
-            "comments": comments,
-            "score": score,
-            "tags": tags,
-        })
+    for post in scored_posts:
+        for tag in post["tags"]:
+            tag_counter[tag] += post["views"]
 
-    scored_posts.sort(key=lambda item: item["score"], reverse=True)
     total_visits = db.query(func.coalesce(func.sum(BlogDailyVisit.count), 0)).scalar() or 0
     unique_post_views_today = (
         db.query(func.count(BlogViewLog.post_id))
@@ -425,13 +485,13 @@ def render_buzz_report(
 
     lines.extend([
         "",
-        "상위 포스트",
+        "대상일 반응 상위 포스트 (일일 순방문·사람 반응만)",
     ])
 
     if snapshot["top_posts"]:
         for idx, post in enumerate(snapshot["top_posts"][:3], start=1):
             lines.append(
-                f"{idx}. {post['title']} - 조회 {post['views']}, 좋아요 {post['likes']}, 댓글 {post['comments']}"
+                f"{idx}. {post['title']} - 일일 조회 {post['views']}, 사람 좋아요 {post['likes']}, 사람 댓글 {post['comments']}"
             )
     else:
         lines.append("아직 발행/반응 데이터가 부족함")
@@ -527,7 +587,7 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
             "week": snapshot["week_visits"],
             "post_views": snapshot["unique_post_views_today"],
             "top_tags": snapshot["top_tags"][:5],
-            "top_posts": snapshot["top_posts"][:3],
+            "daily_top_posts": snapshot["top_posts"][:3],
         },
         "ga": {
             "sessions": overview.get("sessions"),
@@ -569,7 +629,10 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
 
 주의:
 - GSC 검색어는 제목 표현 교정용이지, 그 주제를 반복하라는 뜻이 아님.
-- 최근 상위 글/태그는 참고하되 같은 장르만 반복하지 말 것.
+- daily_top_posts의 조회·좋아요·댓글은 대상일 하루 데이터이며 사람 반응만 포함한다.
+- 에이전트 자동 댓글·에이전트 토론 투표·글의 누적 조회수는 성과 근거에 포함되지 않는다.
+- 대상일 상위 글/태그는 참고하되 같은 장르를 연속 추천하지 말 것.
+- 데이터가 적으면 성공을 단정하지 말고 새 포맷 실험을 추천할 것.
 - 봇/저품질 유입 주의가 필요하면 이유나 피할 것에 짧게 반영.
 
 데이터:
@@ -644,8 +707,8 @@ def render_buzz_growth_memory(
         f"- 자체 조회: 대상일 {snapshot['today_visits']}, 전일 {snapshot['yesterday_visits']}, 대상 7일 {snapshot['week_visits']}, 포스트뷰 {snapshot['unique_post_views_today']}",
         f"- GA: 세션 {overview.get('sessions', 'N/A')}, 페이지뷰 {overview.get('page_views', 'N/A')}, 이탈률 {overview.get('bounce_rate', 'N/A')}%, 체류 {overview.get('avg_session_sec', 'N/A')}초",
         f"- 유입 채널: {channels}",
-        f"- 잘 먹힌 태그: {top_tags}",
-        f"- 반응 상위 글: {top_posts}",
+        f"- 대상일 조회 기반 태그: {top_tags}",
+        f"- 대상일 반응 상위 글(사람 반응만): {top_posts}",
         f"- 봇/저품질 신호: {bot_text}",
         f"- 현재 트렌드 힌트: {hot_signals}",
         _gsc_title_lesson(gsc),
