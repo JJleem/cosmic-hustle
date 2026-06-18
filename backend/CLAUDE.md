@@ -212,6 +212,7 @@ GET    /api/logs?level=&source=&session_id=
 POST   /api/logs
 POST   /api/ga/run-monthly                  # GA 분석 수동 트리거
 GET    /api/blog/posts
+GET    /api/blog/posts/popular?days=7&limit=3  # 최근 고유조회+사람 좋아요/댓글 기반 인기글
 GET    /api/blog/posts/{slug}
 POST   /api/blog/generate
 DELETE /api/blog/posts/{id}

@@ -7,13 +7,14 @@ import re
 import smtplib
 import uuid
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from zoneinfo import ZoneInfo
 from db.connection import get_db
 from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog, PushSubscription
 from blog_generator import (
@@ -114,13 +115,33 @@ def _get_ip_hash(request: Request, post_id: str) -> str:
 
 
 def _comment_counts(db: Session, post_ids: list) -> dict:
-    rows = (
+    if not post_ids:
+        return {}
+    total_rows = (
         db.query(BlogComment.post_id, func.count(BlogComment.id))
         .filter(BlogComment.post_id.in_(post_ids))
         .group_by(BlogComment.post_id)
         .all()
     )
-    return {post_id: count for post_id, count in rows}
+    human_rows = (
+        db.query(BlogComment.post_id, func.count(BlogComment.id))
+        .filter(
+            BlogComment.post_id.in_(post_ids),
+            BlogComment.agent_id.is_(None),
+        )
+        .group_by(BlogComment.post_id)
+        .all()
+    )
+    total = {post_id: int(count) for post_id, count in total_rows}
+    human = {post_id: int(count) for post_id, count in human_rows}
+    return {
+        post_id: {
+            "comment_count": count,
+            "human_comment_count": human.get(post_id, 0),
+            "agent_comment_count": count - human.get(post_id, 0),
+        }
+        for post_id, count in total.items()
+    }
 
 
 _MD_IMG_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")   # ![alt](url) 이미지
@@ -195,12 +216,29 @@ def _agent_reply_set(db: Session, post_ids: list) -> set:
     return {row[0] for row in rows}
 
 
-def _with_comment_count(post, count: int, has_agent_reply: bool = False) -> dict:
+def _with_comment_count(post, counts: dict | None = None, has_agent_reply: bool = False) -> dict:
     # embedding(768벡터)은 응답에서 제외 — deferred라 접근하지 않으면 로드도 안 됨
     d = {c.name: getattr(post, c.name) for c in post.__table__.columns if c.name != "embedding"}
-    d["comment_count"] = count
+    d.update(counts or {
+        "comment_count": 0,
+        "human_comment_count": 0,
+        "agent_comment_count": 0,
+    })
     d["has_agent_reply"] = has_agent_reply
     return d
+
+
+def _popularity_score(unique_views: int, human_likes: int, human_comments: int) -> int:
+    return int(unique_views) + int(human_likes) * 5 + int(human_comments) * 3
+
+
+def _kst_day_bounds_utc(day: date) -> tuple[datetime, datetime]:
+    start_kst = datetime.combine(day, time.min, tzinfo=ZoneInfo("Asia/Seoul"))
+    end_kst = start_kst + timedelta(days=1)
+    return (
+        start_kst.astimezone(timezone.utc).replace(tzinfo=None),
+        end_kst.astimezone(timezone.utc).replace(tzinfo=None),
+    )
 
 
 @router.get("/posts")
@@ -218,7 +256,7 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     return {
         "posts": [
             {
-                **_with_comment_count(p, counts.get(p.id, 0), p.id in agent_replied),
+                **_with_comment_count(p, counts.get(p.id), p.id in agent_replied),
                 "preview_comments": previews.get(p.id, []),
             }
             for p in posts
@@ -230,9 +268,84 @@ def list_posts(page: int = 1, limit: int = 12, published_only: bool = True, db: 
     }
 
 
-def _vote_result(db: Session, post_id: str, my_voter_key: str | None = None) -> dict:
-    rows = db.query(DebateVote).filter(DebateVote.post_id == post_id).all()
-    vote_a, vote_b, voters_a, voters_b = 0, 0, [], []
+@router.get("/posts/popular")
+def list_popular_posts(days: int = 7, limit: int = 3, db: Session = Depends(get_db)):
+    """최근 사람 반응 기반 인기글. 에이전트 댓글/투표와 누적 조회수는 점수에서 제외."""
+    days = max(1, min(days, 30))
+    limit = max(1, min(limit, 20))
+    end_day = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    start_day = end_day - timedelta(days=days - 1)
+    start_utc, _ = _kst_day_bounds_utc(start_day)
+    _, end_utc = _kst_day_bounds_utc(end_day)
+
+    view_rows = (
+        db.query(BlogViewLog.post_id, func.count(BlogViewLog.ip_hash))
+        .filter(BlogViewLog.date >= start_day.isoformat(), BlogViewLog.date <= end_day.isoformat())
+        .group_by(BlogViewLog.post_id)
+        .all()
+    )
+    like_rows = (
+        db.query(BlogPostLike.post_id, func.count(BlogPostLike.ip_hash))
+        .filter(BlogPostLike.created_at >= start_utc, BlogPostLike.created_at < end_utc)
+        .group_by(BlogPostLike.post_id)
+        .all()
+    )
+    comment_rows = (
+        db.query(BlogComment.post_id, func.count(BlogComment.id))
+        .filter(
+            BlogComment.agent_id.is_(None),
+            BlogComment.created_at >= start_utc,
+            BlogComment.created_at < end_utc,
+        )
+        .group_by(BlogComment.post_id)
+        .all()
+    )
+    views = {post_id: int(count) for post_id, count in view_rows}
+    likes = {post_id: int(count) for post_id, count in like_rows}
+    comments = {post_id: int(count) for post_id, count in comment_rows}
+    post_ids = set(views) | set(likes) | set(comments)
+    posts = (
+        db.query(BlogPost)
+        .filter(BlogPost.id.in_(post_ids), BlogPost.published == True)
+        .all()
+        if post_ids else []
+    )
+    all_comment_counts = _comment_counts(db, [post.id for post in posts])
+    agent_replied = _agent_reply_set(db, [post.id for post in posts])
+    ranked = []
+    for post in posts:
+        recent_views = views.get(post.id, 0)
+        recent_likes = likes.get(post.id, 0)
+        recent_comments = comments.get(post.id, 0)
+        ranked.append({
+            **_with_comment_count(post, all_comment_counts.get(post.id), post.id in agent_replied),
+            "recent_unique_views": recent_views,
+            "recent_human_likes": recent_likes,
+            "recent_human_comments": recent_comments,
+            "popularity_score": _popularity_score(recent_views, recent_likes, recent_comments),
+        })
+    ranked.sort(
+        key=lambda item: (
+            item["popularity_score"],
+            item["recent_unique_views"],
+            item["recent_human_comments"],
+            item["recent_human_likes"],
+        ),
+        reverse=True,
+    )
+    return {
+        "days": days,
+        "start_date": start_day.isoformat(),
+        "end_date": end_day.isoformat(),
+        "posts": ranked[:limit],
+    }
+
+
+def _split_vote_rows(rows: list, my_voter_key: str | None = None) -> dict:
+    vote_a, vote_b = 0, 0
+    human_vote_a, human_vote_b = 0, 0
+    agent_vote_a, agent_vote_b = 0, 0
+    voters_a, voters_b = [], []
     my_vote = None
     for v in rows:
         is_agent = v.voter_key.startswith("agent:")
@@ -244,14 +357,38 @@ def _vote_result(db: Session, post_id: str, my_voter_key: str | None = None) -> 
         }
         if v.side == "a":
             vote_a += 1
+            if is_agent:
+                agent_vote_a += 1
+            else:
+                human_vote_a += 1
             voters_a.append(entry)
         else:
             vote_b += 1
+            if is_agent:
+                agent_vote_b += 1
+            else:
+                human_vote_b += 1
             voters_b.append(entry)
         if my_voter_key and v.voter_key == my_voter_key:
             my_vote = v.side
-    return {"vote_a": vote_a, "vote_b": vote_b,
-            "voters_a": voters_a, "voters_b": voters_b, "my_vote": my_vote}
+    return {
+        "vote_a": vote_a,
+        "vote_b": vote_b,
+        "human_vote_a": human_vote_a,
+        "human_vote_b": human_vote_b,
+        "human_vote_count": human_vote_a + human_vote_b,
+        "agent_vote_a": agent_vote_a,
+        "agent_vote_b": agent_vote_b,
+        "agent_vote_count": agent_vote_a + agent_vote_b,
+        "voters_a": voters_a,
+        "voters_b": voters_b,
+        "my_vote": my_vote,
+    }
+
+
+def _vote_result(db: Session, post_id: str, my_voter_key: str | None = None) -> dict:
+    rows = db.query(DebateVote).filter(DebateVote.post_id == post_id).all()
+    return _split_vote_rows(rows, my_voter_key)
 
 
 @router.get("/posts/{slug}")
@@ -259,13 +396,13 @@ def get_post(slug: str, request: Request, db: Session = Depends(get_db)):
     post = db.query(BlogPost).filter(BlogPost.slug == slug).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    count = db.query(func.count(BlogComment.id)).filter(BlogComment.post_id == post.id).scalar()
+    counts = _comment_counts(db, [post.id]).get(post.id)
     has_agent_reply = db.query(BlogComment).filter(
         BlogComment.post_id == post.id,
         BlogComment.agent_id.isnot(None),
         BlogComment.parent_id.isnot(None),
     ).first() is not None
-    result = _with_comment_count(post, count or 0, has_agent_reply)
+    result = _with_comment_count(post, counts, has_agent_reply)
 
     ip_hash = _get_ip_hash(request, post.id)
     result["liked"] = db.query(BlogPostLike).filter(
@@ -759,7 +896,7 @@ def get_related_posts(slug: str, limit: int = 6, db: Session = Depends(get_db)):
     post_ids = [p.id for p in rows]
     counts = _comment_counts(db, post_ids)
     agent_replied = _agent_reply_set(db, post_ids)
-    return {"posts": [_with_comment_count(p, counts.get(p.id, 0), p.id in agent_replied) for p in rows]}
+    return {"posts": [_with_comment_count(p, counts.get(p.id), p.id in agent_replied) for p in rows]}
 
 
 @router.post("/_backfill-embeddings")
