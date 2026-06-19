@@ -475,13 +475,15 @@ AI와 테크 뉴스를 보면 어디서든 연관 정보를 찾아냅니다.
 - 아름다운 것에 감탄하고, 못생긴 것에 괴로워합니다
 
 【글 구조】
-1. 독자가 오늘 실제로 봤거나 썼을 앱·브랜드·공간의 디자인으로 시작
-2. "사실 이건 의도된 거예요" — 그 디자인 뒤에 숨은 의도와 이유 해부
+글 구조는 그 날 주어진 '서브테마'와 '글쓰기 각도'에 맞춰 매번 다르게 짭니다. 아래는 출발점 예시일 뿐, 모든 글을 같은 틀에 넣지 말 것:
+1. 독자가 오늘 실제로 봤거나 썼을 장면·사물·색·공간으로 시작 (반드시 브랜드 로고·앱 아이콘일 필요 없음)
+2. 그 안에 숨은 디자인 원리·심리·역사·감각을 풀어내기 — "사실 이건 의도된 거예요"는 어울릴 때만 쓰는 표현이지, 매번 쓰는 공식이 아님
 3. 이 원리를 내 일상 어디서 또 발견할 수 있는지 — 독자가 직접 찾아볼 수 있게
 4. 철학적 마무리는 한 문장으로 — 길게 늘이지 말 것
 
 【주제 접근법】
-디자인과 일상문화를 함께 봅니다. 카페 인테리어, 유명 브랜드 리브랜딩, 앱 아이콘, 영화 포스터, 포장지 — 독자가 오늘 실제로 봤을 법한 것들이 소재입니다.
+디자인과 일상문화를 함께 봅니다. 카페 인테리어, 색채 심리, 폰트, 여백, 패키지, 디자인 역사, SNS 비주얼, 브랜드 리브랜딩 — 소재의 폭이 넓습니다.
+⚠️ 매주 '브랜드 X가 디자인을 왜 바꿨나(전후 비교+의도 해부)' 같은 한 가지 틀로 수렴하지 말 것. 그 날의 서브테마가 색·폰트·여백·공간·역사면 리브랜딩 해부가 아니라 그 주제 자체를 다룰 것.
 
 【이미지】
 시각적 글인 만큼 본문 중간에 {{IMAGE: ...}} 태그를 최소 3개 이상 삽입하세요.
@@ -755,8 +757,18 @@ def _is_rss_stale(feed, max_age_days: int = 14) -> bool:
     return True
 
 
-async def _fetch_websearch(agent_id: str, sink: list | None = None) -> str:
-    """WebSearch로 트렌드 수집. 실패 시 빈 문자열."""
+async def _fetch_websearch(agent_id: str, sink: list | None = None, query: str | None = None) -> str:
+    """WebSearch로 트렌드 수집. query가 주어지고 풀 기반 에이전트면 그 서브테마에 맞춰 검색
+    (고정 프롬프트가 매번 같은 소재로 수렴하는 것 방지). 실패 시 빈 문자열."""
+    prompt = _WEBSEARCH_PROMPTS.get(agent_id)
+    if query and agent_id in _AGENT_POOLS:
+        prompt = (
+            f"최근 한 달 내 '{query}' 관련 새 소식·트렌드·사례를 찾아줘. 정치·연예인 제외. "
+            "반드시 아래 형식으로 5개만 출력:\n"
+            "- [핵심 소재명]: [어떤 내용인지 한 줄] (출처: 매체명)"
+        )
+    if not prompt:
+        return ""
     try:
         import anthropic as _anthropic
         client = _anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -765,7 +777,7 @@ async def _fetch_websearch(agent_id: str, sink: list | None = None) -> str:
             model="claude-haiku-4-5-20251001",
             max_tokens=1500,
             tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
-            messages=[{"role": "user", "content": _WEBSEARCH_PROMPTS[agent_id]}],
+            messages=[{"role": "user", "content": prompt}],
         )
         return "\n".join(b.text for b in resp.content if hasattr(b, "text")).strip()
     except Exception as e:
@@ -781,7 +793,7 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
 
     # 1. WebSearch 전용 에이전트
     if agent_id in _WEBSEARCH_AGENTS:
-        result = await _fetch_websearch(agent_id, sink=sink)
+        result = await _fetch_websearch(agent_id, sink=sink, query=query)
         if result:
             return result
         # 실패 시 RSS 폴백
@@ -822,7 +834,7 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
     if (stale or not rss_result or overlap or title_overlap) and agent_id in _WEBSEARCH_PROMPTS:
         reason = "stale" if stale else ("empty" if not rss_result else ("tag_overlap" if overlap else "title_overlap"))
         logger.info(f"RSS {reason} ({agent_id}) → WebSearch 시도")
-        ws_result = await _fetch_websearch(agent_id, sink=sink)
+        ws_result = await _fetch_websearch(agent_id, sink=sink, query=query)
         if ws_result:
             logger.info(f"WebSearch 성공 ({agent_id})")
             return ws_result
@@ -844,6 +856,34 @@ _THUMBNAIL_RE       = re.compile(r"\{\{THUMBNAIL:\s*([^}]+?)\s*\}\}")
 _TAGS_RE            = re.compile(r"\{\{TAGS:\s*([^}]+?)\s*\}\}")
 _WIKIMEDIA_THUMB_RE = re.compile(r"\{\{WIKIMEDIA_THUMB:\s*([^}]+?)\s*\}\}")
 _WIKIMEDIA_RE       = re.compile(r"\{\{WIKIMEDIA:\s*([^}]+?)\s*\}\}")
+
+# 본문 인라인 색(color:#xxxxxx) 대비 보정용
+import colorsys
+_SPAN_COLOR_RE = re.compile(r"(color\s*:\s*)#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b")
+# 블로그는 라이트(밝은 배경)·다크(어두운 배경) 모드를 모두 지원한다. 인라인 색은 고정값이라
+# 양쪽에서 다 읽혀야 하므로 명도(HSL L)를 중간 밴드로 클램프한다. 팔레트 강조색
+# (#F97316·#A78BFA 등 L≈0.53~0.70)은 밴드 안이라 손대지 않고, 거의 검정(#1a1a1a)·
+# 거의 흰색만 보정된다.
+_SPAN_L_MIN = 0.45
+_SPAN_L_MAX = 0.70
+
+
+def _clamp_span_colors(content: str) -> str:
+    """본문 <span style="color:#..."> 의 너무 어둡거나 밝은 색을 색상(hue) 유지한 채
+    읽히는 명도로 보정. 다크모드에서 #1a1a1a 같은 글자가 배경에 묻히는 것 방지."""
+    def _fix(m: re.Match) -> str:
+        prefix, hex_str = m.group(1), m.group(2)
+        if len(hex_str) == 3:
+            hex_str = "".join(c * 2 for c in hex_str)
+        r, g, b = (int(hex_str[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        new_l = min(max(l, _SPAN_L_MIN), _SPAN_L_MAX)
+        if abs(new_l - l) < 1e-3:
+            return m.group(0)  # 이미 안전 범위 → 원본 유지
+        nr, ng, nb = colorsys.hls_to_rgb(h, new_l, s)
+        return f"{prefix}#{int(nr * 255):02x}{int(ng * 255):02x}{int(nb * 255):02x}"
+
+    return _SPAN_COLOR_RE.sub(_fix, content)
 
 # ── 디스커버리 채널 설정 ──────────────────────────────────────────────────────────
 
@@ -1248,6 +1288,7 @@ async def generate_blog_post(
 - 【말버릇 규칙】 각 에이전트의 시그니처 문장은 본문 대화 중 자연스럽게 사용할 것. 소제목(##)으로 사용하는 것은 절대 금지
 - 【수치 규칙】 구체적인 수치를 쓸 때는 트렌드 참고자료에 있는 것만 인용할 것. 참고자료에 없는 수치는 발명하지 말 것 — "대략", "~정도" 표현으로 대체 가능. 수치를 쓸 때는 출처 맥락(기관명·보고서명)을 함께 명시할 것
 - 【출처 규칙】 트렌드 참고자료에 "(출처: 매체명)" 형식으로 출처가 명시된 내용만 사실로 사용할 것. 출처가 없는 내용은 "~라고 알려져 있다", "~는 주장이 있다" 수준으로만 언급할 것
+- 【전후 비교 가드】 어떤 브랜드·앱·제품의 '과거 모습'(예전 로고 색·캐릭터·아이콘·UI 외형)을 구체적으로 묘사하려면 그 과거 외형이 참고자료에 명시돼 있어야 함. 자료에 없으면 과거 외형을 상상해서 단정하지 말 것 — "예전엔 노란 캐릭터였는데" 같은 확인 안 된 전후 비교를 지어내는 것은 금지. 확실치 않으면 현재 디자인 자체의 의미·원리에 집중할 것
 - 【저작권 규칙】 참고자료에서 '사실·수치·주제'만 추출할 것. 원문의 표현·문장 구조를 그대로 따라 쓰거나 단어만 바꾼 요약은 절대 금지. 반드시 새로운 문장·구조·관점으로 재창작할 것. 독자가 원문을 읽으러 갈 이유가 사라질 정도로 원문을 대체하는 글은 쓰지 말 것
 - 【참고자료 신뢰도 규칙】 트렌드 참고자료는 RSS 또는 웹 검색으로 자동 수집된 것으로, 날짜가 오래됐거나 내용이 부정확할 수 있습니다. 참고자료의 내용이 현재 상황과 맞지 않거나 1년 이상 된 것으로 보이면 해당 소재는 사용하지 말고 자신이 알고 있는 최신 지식으로 자유롭게 작성하세요. 참고자료를 억지로 사용할 필요 없습니다
 - 【제목 규칙】 독자가 "어? 이거 뭔데?" 또는 "나 이거 해당되는데?" 하고 클릭하고 싶은 제목. 숫자·반전·질문을 활용할 것. 단, 낚시성·과장은 금지 — 본문이 제목을 배신하지 않을 것
@@ -1371,6 +1412,7 @@ async def generate_blog_post(
     tags    = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
     content = _THUMBNAIL_RE.sub("", raw).strip()
     content = _TAGS_RE.sub("", content).strip()
+    content = _clamp_span_colors(content)
 
     content, thumbnail_url = await asyncio.gather(
         _process_content_images(content, agent_id, sink=costs),
@@ -1790,6 +1832,7 @@ async def generate_intro_post() -> dict:
     tags    = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
     content = _THUMBNAIL_RE.sub("", raw).strip()
     content = _TAGS_RE.sub("", content).strip()
+    content = _clamp_span_colors(content)
 
     content = await _process_content_images(content, "buzz", sink=costs)
     thumbnail_url = "https://cosmic-hustle.ai.kr/intro/buzz-ping-collab.png"
@@ -1977,6 +2020,7 @@ async def generate_debate_post(
     tags    = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
     content = _THUMBNAIL_RE.sub("", raw).strip()
     content = _TAGS_RE.sub("", content).strip()
+    content = _clamp_span_colors(content)
 
     if preset_thumbnail:
         content = await _process_content_images(content, agent_a, limit=-1, cheap=True, sink=costs)
