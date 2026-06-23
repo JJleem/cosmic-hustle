@@ -1443,6 +1443,63 @@ async def generate_blog_post(
     }
 
 
+async def generate_draft_post(
+    agent_id: str,
+    draft_content: str,
+    theme: str | None = None,
+    thumbnail_style: str | None = None,
+    published: bool = True,
+) -> dict:
+    """CEO가 직접 작성한 완성 원고를 받아 발행용 dict로 변환.
+    LLM 집필 단계만 건너뛰고, generate_blog_post 후반부와 동일하게
+    {{THUMBNAIL}}·{{TAGS}}·{{IMAGE}} 마커 파싱 → 본문 이미지/썸네일 생성 → 조립한다."""
+    if agent_id not in AGENT_PERSONAS:
+        raise ValueError(f"알 수 없는 agent_id: {agent_id}")
+    today   = datetime.now(KST).date()
+    costs: list = []
+    persona = AGENT_PERSONAS[agent_id]
+    if theme is None:
+        theme = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}.get(
+            agent_id, "자유 주제 (게스트 칼럼)"
+        )
+
+    raw      = draft_content.strip()
+    thumb_m  = _THUMBNAIL_RE.search(raw)
+    scene    = thumb_m.group(1).strip() if thumb_m else f"{persona['role']} working on {theme}"
+    tags_m   = _TAGS_RE.search(raw)
+    tags     = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
+    content  = _THUMBNAIL_RE.sub("", raw).strip()
+    content  = _TAGS_RE.sub("", content).strip()
+    content  = _clamp_span_colors(content)
+
+    content, thumbnail_url = await asyncio.gather(
+        _process_content_images(content, agent_id, sink=costs),
+        _generate_thumbnail(agent_id, scene, force_style=thumbnail_style, sink=costs),
+    )
+
+    lines = content.split("\n")
+    if lines and lines[0].startswith("#"):
+        raw_title = lines[0].lstrip("#").strip()
+        title     = re.sub(r"\*+([^*]+)\*+", r"\1", raw_title)
+        content   = "\n".join(lines[1:]).strip()
+    else:
+        title = f"{persona['name']}의 오늘의 생각"
+
+    return {
+        "id":             str(uuid.uuid4()),
+        "agent_id":       agent_id,
+        "title":          title,
+        "slug":           _make_slug(agent_id, today),
+        "content":        content,
+        "thumbnail_url":  thumbnail_url,
+        "tags":           tags,
+        "published":      published,
+        "trending_topic": theme,
+        "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
+        "costs":          costs,
+    }
+
+
 # ── 디스커버리 채널 ────────────────────────────────────────────────────────────────
 
 

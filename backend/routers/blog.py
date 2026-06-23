@@ -10,6 +10,7 @@ from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from slowapi import Limiter
@@ -19,7 +20,7 @@ from db.connection import get_db
 from db.models import BlogPost, BlogComment, BlogDailyVisit, BlogPostLike, DebateVote, BlogViewLog, QuizResultLog, PushSubscription
 from blog_generator import (
     attach_embedding, record_post_costs,
-    generate_blog_post, generate_comments,
+    generate_blog_post, generate_draft_post, generate_comments,
     generate_scene_prompt_from_content,
     generate_intro_post, generate_intro_comments,
     generate_debate_post, generate_debate_comments,
@@ -682,6 +683,54 @@ async def trigger_generate(request: Request, agent_id: str | None = None, theme:
     if post.published:
         post_url = f"https://cosmic-hustle.ai.kr/{post.slug}"
         notify_search_engines_bg(post_url)
+
+    return post
+
+
+class _DraftPostBody(BaseModel):
+    content: str
+    agent_id: str = "buzz"
+    theme: str | None = None
+    thumbnail_style: str | None = None
+    published: bool = True
+    force: bool = False
+
+
+@router.post("/generate-draft")
+async def trigger_generate_draft(request: Request, body: _DraftPostBody, db: Session = Depends(get_db), _=Depends(_require_admin)):
+    """CEO가 직접 작성한 완성 원고를 기존 파이프라인으로 발행.
+    본문 이미지({{IMAGE}})·썸네일({{THUMBNAIL}})·태그({{TAGS}})·임베딩·댓글·검색엔진 통보까지 /generate와 동일."""
+    data = await generate_draft_post(
+        body.agent_id, body.content,
+        theme=body.theme, thumbnail_style=body.thumbnail_style, published=body.published,
+    )
+
+    existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
+    if existing:
+        if not body.force:
+            raise HTTPException(status_code=409, detail=f"이미 존재: {data['slug']}")
+        n = 2
+        base_slug = data["slug"]
+        while db.query(BlogPost).filter(BlogPost.slug == f"{base_slug}-{n}").first():
+            n += 1
+        data["slug"] = f"{base_slug}-{n}"
+
+    costs = data.pop("costs", [])
+    post = BlogPost(**attach_embedding(data))
+    db.add(post)
+    db.flush()
+    record_post_costs(db, post.id, post.agent_id, costs)
+
+    summary  = data["content"][:300]
+    comments = await generate_comments(post.id, post.agent_id, post.title, summary)
+    for c in comments:
+        db.add(BlogComment(**c))
+
+    db.commit()
+    db.refresh(post)
+
+    if post.published:
+        notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{post.slug}")
 
     return post
 
