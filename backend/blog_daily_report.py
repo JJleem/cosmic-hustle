@@ -754,11 +754,33 @@ def update_buzz_growth_memory(
     return {"ok": True, "agent_id": "buzz", "chars": len(row.memory or "")}
 
 
-def _memory_excerpt(text: str | None, limit: int = 650) -> str:
+def _memory_excerpt(text: str | None, limit: int = 650, max_lines: int | None = None) -> str:
     if not text:
         return "없음"
-    compact = "\n".join(line.rstrip() for line in text.strip().splitlines() if line.strip())
-    return compact[:limit] + ("..." if len(compact) > limit else "")
+    lines = [
+        line.rstrip()
+        for line in text.strip().splitlines()
+        if line.strip() and line.strip() not in {GROWTH_MEMORY_START, GROWTH_MEMORY_END}
+    ]
+    selected: list[str] = []
+    omitted = False
+    for line in lines:
+        if max_lines is not None and len(selected) >= max_lines:
+            omitted = True
+            break
+        candidate = "\n".join([*selected, line])
+        if len(candidate) > limit:
+            omitted = True
+            break
+        selected.append(line)
+
+    if len(selected) < len(lines):
+        omitted = True
+    if not selected:
+        return "요약 생략 (첫 줄이 너무 김)"
+    if omitted:
+        selected.append("… (이하 생략)")
+    return "\n".join(selected)
 
 
 def _growth_memory_section(text: str | None) -> str | None:
@@ -787,7 +809,8 @@ def render_weekly_prompt_memory_report(db: Session) -> dict:
         row = rows.get(agent_id)
         memory = row.memory if row else None
         growth = _growth_memory_section(memory) if agent_id == "buzz" else None
-        excerpt = _memory_excerpt(memory)
+        excerpt = _memory_excerpt(memory, limit=360, max_lines=4)
+        report_excerpt = _memory_excerpt(growth or memory, limit=360, max_lines=4)
         payload[agent_id] = {
             "chars": len(memory or ""),
             "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
@@ -796,8 +819,8 @@ def render_weekly_prompt_memory_report(db: Session) -> dict:
         }
         lines.extend([
             "",
-            f"[{agent_id}] chars={payload[agent_id]['chars']} updated={payload[agent_id]['updated_at'] or 'unknown'}",
-            _memory_excerpt(growth, 500) if growth else excerpt,
+            f"[{agent_id}] {payload[agent_id]['chars']:,}자 · 갱신 {(payload[agent_id]['updated_at'] or 'unknown')[:10]}",
+            report_excerpt,
         ])
 
     return {"date": today, "agents": payload, "text": "\n".join(lines)}
