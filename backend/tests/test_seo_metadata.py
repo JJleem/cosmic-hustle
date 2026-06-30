@@ -6,6 +6,8 @@ import os
 import types
 import asyncio
 import inspect
+import ast
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -402,6 +404,69 @@ def test_manual_generate_published_default_unchanged():
     from routers import blog as blog_router
     rsig = inspect.signature(blog_router.trigger_generate)
     assert rsig.parameters["published"].default is True
+
+
+# ── 5H scheduled discovery SEO ON (AST/source 검사, scheduler·DB import 없음) ──
+
+def _main_tree():
+    return ast.parse((Path(__file__).parents[1] / "main.py").read_text())
+
+
+def _daily_blog_job_node():
+    for node in _main_tree().body:
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_daily_blog_job":
+            return node
+    raise AssertionError("_daily_blog_job not found")
+
+
+def _calls_in_daily_job(func_name: str):
+    return [
+        node for node in ast.walk(_daily_blog_job_node())
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == func_name
+    ]
+
+
+def test_scheduled_discovery_enables_seo_without_published_override():
+    calls = _calls_in_daily_job("generate_discovery_post")
+    assert len(calls) == 1
+    keywords = {kw.arg: kw.value for kw in calls[0].keywords}
+    assert set(keywords) == {"recent_titles", "seo_markers"}
+    assert isinstance(keywords["seo_markers"], ast.Constant)
+    assert keywords["seo_markers"].value is True
+    assert "published" not in keywords
+
+
+def test_scheduled_general_generation_keeps_seo_off():
+    calls = _calls_in_daily_job("generate_blog_post")
+    assert len(calls) == 1
+    keywords = {kw.arg: kw.value for kw in calls[0].keywords}
+    assert "seo_markers" not in keywords
+
+
+def test_daily_blog_schedule_stays_at_9am_kst():
+    tree = _main_tree()
+    for call in ast.walk(tree):
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "add_job"
+            and call.args
+            and isinstance(call.args[0], ast.Name)
+            and call.args[0].id == "_daily_blog_job"
+        ):
+            continue
+        trigger = call.args[1]
+        assert isinstance(trigger, ast.Call)
+        assert isinstance(trigger.func, ast.Name)
+        assert trigger.func.id == "CronTrigger"
+        keywords = {kw.arg: kw.value for kw in trigger.keywords}
+        assert keywords["hour"].value == 9
+        assert keywords["minute"].value == 0
+        assert keywords["timezone"].value == "Asia/Seoul"
+        return
+    raise AssertionError("daily_blog scheduler registration not found")
 
 
 # ── 5D-2 discovery 라우터 언팩 회귀 (외부 호출 전부 mock) ─────────────────────
