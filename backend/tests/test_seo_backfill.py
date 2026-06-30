@@ -393,3 +393,32 @@ def test_cli_argument_error_for_multiple_modes():
 
     code = backfill_blog_seo.main(["--inspect", "--apply", "--post-id", "post-1"])
     assert code == seo_backfill.EXIT_ARGUMENT
+
+
+def test_cli_help_does_not_open_session(monkeypatch, capsys):
+    from scripts import backfill_blog_seo
+
+    session_mock = MagicMock(side_effect=AssertionError("SessionLocal should not be called"))
+    monkeypatch.setattr(backfill_blog_seo, "SessionLocal", session_mock)
+    code = backfill_blog_seo.main(["--help"])
+    out = capsys.readouterr().out
+    assert code == seo_backfill.EXIT_SUCCESS
+    assert "usage:" in out
+    session_mock.assert_not_called()
+
+
+def test_apply_seo_backfill_commit_failure_rolls_back():
+    db = FakeDB()
+
+    def fail_commit():
+        raise RuntimeError("commit failed")
+
+    db.commit = fail_commit
+    with pytest.raises(seo_backfill.SEOBackfillError) as exc:
+        seo_backfill.apply_seo_backfill(
+            db,
+            post=_post(),
+            metadata={"seo_title": "t", "summary": "s", "seo_description": "d", "content_type": "MARKETING"},
+        )
+    assert exc.value.exit_code == seo_backfill.EXIT_TRANSACTION
+    assert db.rollbacks == 1

@@ -14,8 +14,6 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent))
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from db.connection import SessionLocal
-from db.models import BlogPost
 from seo_backfill import (
     EXIT_ARGUMENT,
     EXIT_CONCURRENT_UPDATE,
@@ -29,6 +27,19 @@ from seo_backfill import (
     generate_seo_metadata_for_existing_post,
     inspect_backfill_candidate,
 )
+
+SessionLocal = None
+BlogPost = None
+
+
+def _load_db_dependencies():
+    global SessionLocal, BlogPost
+    if SessionLocal is None or BlogPost is None:
+        from db.connection import SessionLocal as _SessionLocal
+        from db.models import BlogPost as _BlogPost
+
+        SessionLocal = _SessionLocal
+        BlogPost = _BlogPost
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -82,6 +93,7 @@ def _post_payload(post, inspection, *, mode: str, saved: bool = False, metadata:
 
 
 async def _run(args: argparse.Namespace) -> int:
+    _load_db_dependencies()
     db = SessionLocal()
     try:
         post = db.query(BlogPost).filter(BlogPost.id == args.post_id).first()
