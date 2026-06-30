@@ -648,12 +648,13 @@ def _recent_post_context(db: Session, agent_id: str | None = None) -> tuple[list
 
 
 @router.post("/generate")
-async def trigger_generate(request: Request, agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, db: Session = Depends(get_db), _=Depends(_require_admin)):
-    """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회."""
+async def trigger_generate(request: Request, agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, seo: bool = False, db: Session = Depends(get_db), _=Depends(_require_admin)):
+    """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회.
+    seo=True(4B-2 파일럿)면 SEO 마커 프롬프트 적용 + summary/seo_title/seo_description/content_type 저장. 기본 False."""
     from blog_generator import get_today_agent as _get_today_agent
     _effective_agent = agent_id or _get_today_agent()[0]
     recent_titles, frequent_tags, recent_posts, agent_recent_tags = _recent_post_context(db, agent_id=_effective_agent)
-    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags)
+    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags, seo_markers=seo)
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:
@@ -694,6 +695,7 @@ class _DraftPostBody(BaseModel):
     thumbnail_style: str | None = None
     published: bool = True
     force: bool = False
+    content_type: str | None = None  # CONTENT_TYPES 중 하나(검증은 생성기에서). 잘못되면 null 저장
 
 
 @router.post("/generate-draft")
@@ -703,6 +705,7 @@ async def trigger_generate_draft(request: Request, body: _DraftPostBody, db: Ses
     data = await generate_draft_post(
         body.agent_id, body.content,
         theme=body.theme, thumbnail_style=body.thumbnail_style, published=body.published,
+        content_type=body.content_type,
     )
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
@@ -824,10 +827,12 @@ async def trigger_generate_debate(
 
 
 @router.post("/generate-discovery")
-async def trigger_generate_discovery(request: Request, topic: str | None = None, db: Session = Depends(get_db), _=Depends(_require_admin)):
-    """디스커버리 채널 포스트 생성. topic 없으면 자연/과학 RSS에서 자동 선정."""
-    recent_titles, _, _ = _recent_post_context(db)
-    data = await generate_discovery_post(topic, recent_titles=recent_titles)
+async def trigger_generate_discovery(request: Request, topic: str | None = None, seo: bool = False, published: bool = True, db: Session = Depends(get_db), _=Depends(_require_admin)):
+    """디스커버리 채널 포스트 생성. topic 없으면 자연/과학 RSS에서 자동 선정.
+    seo=True(4B-1 파일럿)면 SEO 마커 프롬프트 적용 + summary/seo_title/seo_description/content_type 저장.
+    기본 False — 기존 동작 유지."""
+    recent_titles, _, _, _ = _recent_post_context(db)
+    data = await generate_discovery_post(topic, recent_titles=recent_titles, seo_markers=seo, published=published)
 
     slug_base = data["slug"]
     if db.query(BlogPost).filter(BlogPost.slug == slug_base).first():
