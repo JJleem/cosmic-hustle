@@ -856,6 +856,85 @@ _TAGS_RE            = re.compile(r"\{\{TAGS:\s*([^}]+?)\s*\}\}")
 _WIKIMEDIA_THUMB_RE = re.compile(r"\{\{WIKIMEDIA_THUMB:\s*([^}]+?)\s*\}\}")
 _WIKIMEDIA_RE       = re.compile(r"\{\{WIKIMEDIA:\s*([^}]+?)\s*\}\}")
 
+# ── SEO 메타 마커 파서 (4A) ───────────────────────────────────────────────────
+# 기존 {{THUMBNAIL: ...}} / {{TAGS: ...}}(콜론·단일값) 방식과 달리, SEO 값은 길고
+# 여러 줄일 수 있어 open/close 블록 형태로 받는다. 두 방식은 정규식이 겹치지 않는다.
+#   {{SEO_TITLE}} ... {{/SEO_TITLE}}
+#   {{SUMMARY}} ... {{/SUMMARY}}
+#   {{SEO_DESCRIPTION}} ... {{/SEO_DESCRIPTION}}
+_SEO_BLOCK_RES = {
+    "seo_title":       re.compile(r"\{\{\s*SEO_TITLE\s*\}\}(.*?)\{\{\s*/\s*SEO_TITLE\s*\}\}", re.S | re.I),
+    "summary":         re.compile(r"\{\{\s*SUMMARY\s*\}\}(.*?)\{\{\s*/\s*SUMMARY\s*\}\}", re.S | re.I),
+    "seo_description": re.compile(r"\{\{\s*SEO_DESCRIPTION\s*\}\}(.*?)\{\{\s*/\s*SEO_DESCRIPTION\s*\}\}", re.S | re.I),
+}
+# 짝이 안 맞는(닫히지 않은) SEO 태그가 본문에 남지 않도록 제거하는 보조 패턴
+_SEO_ORPHAN_RE = re.compile(r"\{\{\s*/?\s*(?:SEO_TITLE|SUMMARY|SEO_DESCRIPTION)\s*\}\}", re.I)
+# 권장 길이(저장은 막지 않고 경고만) / 하드 캡(초과 시 폴백)
+_SEO_LEN = {
+    "seo_title":       {"min": 25, "max": 60,  "hard": 70},
+    "summary":         {"min": 50, "max": 180, "hard": 220},
+    "seo_description": {"min": 80, "max": 160, "hard": 200},
+}
+
+
+def parse_seo_metadata(raw_content: str) -> dict:
+    """본문 끝의 SEO 마커 블록을 추출하고 본문에서 제거한다.
+    반환: {clean_content, seo_title, summary, seo_description}.
+    파싱 실패·마커 누락은 예외를 던지지 않고 해당 값을 None으로 둔다(발행 중단 방지).
+    로그에는 필드명·개수·길이만 남기고 본문/값 전문은 출력하지 않는다."""
+    log = logging.getLogger(__name__)
+    result = {"clean_content": raw_content or "", "seo_title": None, "summary": None, "seo_description": None}
+    content = raw_content or ""
+    for field, rx in _SEO_BLOCK_RES.items():
+        matches = rx.findall(content)
+        if matches:
+            if len(matches) > 1:
+                log.warning("SEO 마커 중복: %s (%d개) → 첫 값 사용", field, len(matches))
+            value = matches[0].strip() or None  # 빈 문자열 → None
+            if value:
+                n = len(value)
+                lim = _SEO_LEN[field]
+                if n < lim["min"] or n > lim["max"]:
+                    log.warning("SEO 길이 권장범위 벗어남: %s len=%d (권장 %d~%d)", field, n, lim["min"], lim["max"])
+            result[field] = value
+        content = rx.sub("", content)  # 값 유무와 무관하게 블록 마커 제거
+    content = _SEO_ORPHAN_RE.sub("", content)  # 짝 안 맞는 잔여 태그 제거
+    result["clean_content"] = content.strip()
+    return result
+
+
+def resolve_seo_fields(parsed: dict, title: str) -> dict:
+    """파싱 결과에 폴백을 적용해 저장용 최종 SEO 값을 만든다.
+      seo_title       → 파싱값 → title
+      summary         → 파싱값 → None
+      seo_description → 파싱값 → summary → None
+    하드 캡을 넘는 값은 한글 문장을 어색하게 자르지 않고 폴백으로 대체(경고)."""
+    log = logging.getLogger(__name__)
+
+    def _capped(field: str, value: str | None) -> str | None:
+        if value and len(value) > _SEO_LEN[field]["hard"]:
+            log.warning("SEO 하드캡 초과로 폴백: %s len=%d (>%d)", field, len(value), _SEO_LEN[field]["hard"])
+            return None
+        return value
+
+    seo_title = _capped("seo_title", parsed.get("seo_title")) or (title or None)
+    summary = _capped("summary", parsed.get("summary"))
+    seo_description = _capped("seo_description", parsed.get("seo_description")) or summary
+    return {"seo_title": seo_title, "summary": summary, "seo_description": seo_description}
+
+
+def validate_content_type(value: str | None) -> str | None:
+    """CONTENT_TYPES 화이트리스트로 검증. 허용되지 않은 값은 저장하지 않고 경고 후 None."""
+    if value is None:
+        return None
+    from db.models import CONTENT_TYPES
+    v = value.strip().upper()
+    if v in CONTENT_TYPES:
+        return v
+    logging.getLogger(__name__).warning("허용되지 않은 content_type='%s' → None 처리", value)
+    return None
+
+
 # 본문 인라인 색(color:#xxxxxx) 대비 보정용
 import colorsys
 _SPAN_COLOR_RE = re.compile(r"(color\s*:\s*)#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b")
@@ -1197,7 +1276,12 @@ _PIXEL_EVERYDAY_QUERY = "브랜드 리디자인 패키지 인테리어 카페 �
 
 
 def attach_embedding(data: dict) -> dict:
-    """발행 직전 포스트 data에 의미 임베딩(관련글 추천용)을 주입. 실패해도 발행은 진행(embedding=None)."""
+    """발행 직전 포스트 data에 의미 임베딩(관련글 추천용)을 주입. 실패해도 발행은 진행(embedding=None).
+    또한 신규 글의 updated_at을 published_at으로 맞춘다(최초 발행은 생성=수정 시점).
+    onupdate는 UPDATE에만 발화하고 INSERT에는 안 걸리므로 여기서 명시. 모든 insert 경로가
+    이 함수를 거치므로 공통 적용이 안전하고, 값이 이미 있으면 덮어쓰지 않는다."""
+    if data.get("updated_at") is None and data.get("published_at") is not None:
+        data["updated_at"] = data["published_at"]
     if data.get("embedding") is None:
         try:
             from db.embedder import embed
@@ -1230,6 +1314,55 @@ def _rank_posts_by_relevance(query_text: str, posts: list[dict], top_k: int) -> 
         return posts[:top_k]
 
 
+# 4B-2: 일반 게시글 에이전트 → content_type (LLM이 아니라 코드가 지정). pocke는 discovery 경로라 제외.
+_GENERAL_CONTENT_TYPE_BY_AGENT = {
+    "buzz":  "MARKETING",
+    "over":  "ESSAY",
+    "ka":    "DATA",
+    "pixel": "DESIGN",
+    "ping":  "IDEA",
+    "wiki":  "WIKI",
+}
+
+# 4B-2: 일반 게시글용 SEO 메타 규칙. discovery(과학 전용)와 분리 — 문구 중립.
+_GENERAL_SEO_RULES = """
+
+【SEO 메타 — 글의 가장 마지막에만 출력 (위 {{THUMBNAIL}}·{{TAGS}} 마커 뒤)】
+본문·참고자료·{{THUMBNAIL}}·{{TAGS}}까지 모두 끝난 뒤, 맨 마지막에 아래 세 블록을 정확히 이 형식으로 출력하세요.
+마커 바깥에 SEO 관련 설명·코드블록·기타 텍스트를 덧붙이지 마세요. 본문 중간에 넣지 마세요.
+
+{{SEO_TITLE}}
+글의 핵심 대상·개념·주제를 구체적으로 담은 검색용 제목. 검색 결과만 보고도 무슨 내용인지 알 수 있게.
+원래 제목의 말투를 그대로 복사할 필요는 없음. 과도한 클릭베이트 금지, 본문에 없는 숫자·성과·사실 추가 금지. 25~60자 권장.
+{{/SEO_TITLE}}
+
+{{SUMMARY}}
+글의 핵심 내용·주장·결론을 1~2문장으로 요약. 도입부 문장을 그대로 복사하지 말 것.
+감탄사·홍보 문구보다 실제 핵심 정보를 우선. 본문·참고자료에 없는 내용 추가 금지. 50~180자 권장.
+{{/SUMMARY}}
+
+{{SEO_DESCRIPTION}}
+글에서 다루는 대상과 내용, 독자가 알게 될 것을 설명하는 검색용 설명문. SEO_TITLE을 그대로 반복하지 말 것.
+본문에 없는 사실·수치·결론 추가 금지. 80~160자 권장.
+{{/SEO_DESCRIPTION}}
+
+【사실·출처 제한 — 본문과 SEO 블록 모두 적용】
+입력·트렌드 자료·제공된 참고자료에 없는 구체적인 인명·연도·기관·법률·규정·조사명·통계 수치·전문가 발언·출처를 사실처럼 새로 만들지 마세요.
+확인할 자료가 없으면 구체적인 고유명사나 수치를 지어내지 말고, 일반적인 설명으로 표현하거나 생략하세요.
+존재하지 않는 기사·논문·기관 자료·참고 링크를 만들어 '참고한 자료'에 넣지 마세요.
+추론·해석은 가능하지만 확인된 사실처럼 단정하지 말고, 추론·가능성·예시라는 성격을 분명히 하세요. (배경지식 수준의 일반적 설명은 허용)"""
+
+# 4B-2: content_type별 1문장 보충 지시. SEO 블록 작성에만 적용 — 본문 스타일·캐릭터 말투는 불변.
+_GENERAL_SEO_GUIDANCE_BY_TYPE = {
+    "MARKETING": "광고 문구나 과장된 성과 표현보다, 실제로 분석하는 마케팅 현상·전략·사례를 명시하라. 본문에 없는 성과 수치나 효과를 추가하지 마라. 본문 입력에 없는 구체적인 효과 배수·전환율·매출 수치·실험 결과를 일반적으로 알려진 사실처럼 추가하지 마라.",
+    "ESSAY":     "summary는 감정적인 한 문장만 쓰지 말고, 글이 다루는 상황·생각·핵심 메시지를 구체적으로 요약하라. seo_description은 추상적 문장보다 독자가 읽게 될 주제를 설명하라.",
+    "DATA":      "본문에 등장하지 않은 통계·숫자를 추가하지 마라. 기준 시점이 불명확한 수치를 최신 수치처럼 표현하지 마라.",
+    "DESIGN":    "디자인 대상·작품·스타일·기법·문화 현상 중 실제 글의 핵심 검색어를 포함하라. 감성 표현만으로 제목과 설명을 구성하지 마라.",
+    "IDEA":      "제안·상상을 실제 존재하는 제품·서비스·사실처럼 단정하지 마라. 아이디어·가정·제안이라는 성격을 필요할 때 명확히 표시하라.",
+    "WIKI":      "핵심 개념이나 사건명을 제목에 명확히 포함하라. '이것의 모든 것'처럼 대상이 불분명한 표현을 피하라. 입력·제공된 참고자료에 없는 명명자·최초 사용 연도·정부기관·법률 개정·규제 내용·논문·출처를 새로 만들어 본문이나 참고자료에 넣지 마라.",
+}
+
+
 async def generate_blog_post(
     agent_id: str | None = None,
     recent_titles: list[str] | None = None,
@@ -1241,6 +1374,7 @@ async def generate_blog_post(
     published: bool = True,
     recent_posts: list[dict] | None = None,
     agent_recent_tags: list[str] | None = None,
+    seo_markers: bool = False,
 ) -> dict:
     today = datetime.now(KST).date()
     costs: list = []
@@ -1332,6 +1466,14 @@ async def generate_blog_post(
 - 출처 섹션 다음 마지막 줄에 반드시 태그 삽입 (5~8개, 쉼표 구분). 사람들이 실제 검색창에 입력할 법한 키워드 위주로 — 주제어, 관련 인물·브랜드·현상, 영어 키워드 1~2개 포함:
   {{TAGS: 태그1, 태그2, 태그3, 태그4, 태그5}}"""
 
+    # 4B-2: SEO 마커 모드(기본 OFF). True일 때만 일반 SEO 규칙 + 유형별 보충 지시를 system에 추가.
+    seo_content_type = _GENERAL_CONTENT_TYPE_BY_AGENT.get(agent_id) if seo_markers else None
+    if seo_markers:
+        system_text += _GENERAL_SEO_RULES
+        guidance = _GENERAL_SEO_GUIDANCE_BY_TYPE.get(seo_content_type) if seo_content_type else None
+        if guidance:
+            system_text += f"\n\n【SEO 블록 보충 지시 (SEO 메타에만 적용, 본문 스타일·말투는 그대로)】\n{guidance}"
+
     user_content = (
         f"오늘({today.strftime('%Y년 %m월 %d일')}, {_weekday_kr(today.weekday())}) 주제: **{theme}**\n"
     )
@@ -1407,6 +1549,10 @@ async def generate_blog_post(
     )
 
     raw = "\n".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
+    # 4B-2 SEO 마커 추출(본문에서 제거) — 활성화된 경우에만, THUMBNAIL/TAGS 파싱보다 먼저.
+    seo = parse_seo_metadata(raw) if seo_markers else None
+    if seo is not None:
+        raw = seo["clean_content"]
     thumb_m = _THUMBNAIL_RE.search(raw)
     scene   = thumb_m.group(1).strip() if thumb_m else f"{persona['role']} working on {theme}"
     tags_m  = _TAGS_RE.search(raw)
@@ -1428,7 +1574,7 @@ async def generate_blog_post(
     else:
         title   = f"{persona['name']}의 오늘의 생각"
 
-    return {
+    data = {
         "id":            str(uuid.uuid4()),
         "agent_id":      agent_id,
         "title":         title,
@@ -1441,6 +1587,13 @@ async def generate_blog_post(
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
         "costs":         costs,
     }
+    if seo is not None:
+        seo_fields = resolve_seo_fields(seo, title)  # 폴백 적용
+        data["summary"]         = seo_fields["summary"]
+        data["seo_title"]       = seo_fields["seo_title"]
+        data["seo_description"] = seo_fields["seo_description"]
+        data["content_type"]    = validate_content_type(seo_content_type)
+    return data
 
 
 async def generate_draft_post(
@@ -1449,10 +1602,13 @@ async def generate_draft_post(
     theme: str | None = None,
     thumbnail_style: str | None = None,
     published: bool = True,
+    content_type: str | None = None,
 ) -> dict:
     """CEO가 직접 작성한 완성 원고를 받아 발행용 dict로 변환.
     LLM 집필 단계만 건너뛰고, generate_blog_post 후반부와 동일하게
-    {{THUMBNAIL}}·{{TAGS}}·{{IMAGE}} 마커 파싱 → 본문 이미지/썸네일 생성 → 조립한다."""
+    {{THUMBNAIL}}·{{TAGS}}·{{IMAGE}} 마커 파싱 → 본문 이미지/썸네일 생성 → 조립한다.
+    4A: SEO 마커({{SEO_TITLE}}·{{SUMMARY}}·{{SEO_DESCRIPTION}})도 파싱한다.
+    content_type은 LLM이 아니라 호출부가 지정(허용값 검증 후 저장, 잘못되면 None)."""
     if agent_id not in AGENT_PERSONAS:
         raise ValueError(f"알 수 없는 agent_id: {agent_id}")
     today   = datetime.now(KST).date()
@@ -1464,11 +1620,12 @@ async def generate_draft_post(
         )
 
     raw      = draft_content.strip()
+    seo      = parse_seo_metadata(raw)          # SEO 블록 추출 + 본문에서 제거
     thumb_m  = _THUMBNAIL_RE.search(raw)
     scene    = thumb_m.group(1).strip() if thumb_m else f"{persona['role']} working on {theme}"
     tags_m   = _TAGS_RE.search(raw)
     tags     = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
-    content  = _THUMBNAIL_RE.sub("", raw).strip()
+    content  = _THUMBNAIL_RE.sub("", seo["clean_content"]).strip()
     content  = _TAGS_RE.sub("", content).strip()
     content  = _clamp_span_colors(content)
 
@@ -1485,18 +1642,24 @@ async def generate_draft_post(
     else:
         title = f"{persona['name']}의 오늘의 생각"
 
+    seo_fields = resolve_seo_fields(seo, title)  # 폴백 적용한 최종 SEO 값
+
     return {
-        "id":             str(uuid.uuid4()),
-        "agent_id":       agent_id,
-        "title":          title,
-        "slug":           _make_slug(agent_id, today),
-        "content":        content,
-        "thumbnail_url":  thumbnail_url,
-        "tags":           tags,
-        "published":      published,
-        "trending_topic": theme,
-        "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
-        "costs":          costs,
+        "id":              str(uuid.uuid4()),
+        "agent_id":        agent_id,
+        "title":           title,
+        "slug":            _make_slug(agent_id, today),
+        "content":         content,
+        "thumbnail_url":   thumbnail_url,
+        "tags":            tags,
+        "published":       published,
+        "trending_topic":  theme,
+        "published_at":    datetime.now(timezone.utc).replace(tzinfo=None),
+        "summary":         seo_fields["summary"],
+        "seo_title":       seo_fields["seo_title"],
+        "seo_description": seo_fields["seo_description"],
+        "content_type":    validate_content_type(content_type),
+        "costs":           costs,
     }
 
 
@@ -1587,8 +1750,38 @@ async def _classify_discovery_topic(topic: str) -> tuple[str, str]:
     return category, DISCOVERY_AGENT_MAP[category]
 
 
-async def generate_discovery_post(topic: str | None = None, recent_titles: list[str] | None = None) -> dict:
-    """디스커버리 채널 포스트 생성. topic 없으면 RSS에서 자동 선정."""
+_DISCOVERY_SEO_RULES = """
+
+【SEO 메타 — 글의 가장 마지막에만 출력 (위 {{THUMBNAIL}}·{{TAGS}} 마커 뒤)】
+본문과 이미지 출처(참고자료)까지 모두 끝난 뒤, 맨 마지막에 아래 세 블록을 정확히 이 형식으로 출력하세요.
+마커 바깥에 SEO 관련 설명·코드블록·기타 텍스트를 덧붙이지 마세요.
+
+{{SEO_TITLE}}
+글의 핵심 과학 개념·현상·천체·생물·기술을 명시한 검색용 제목. 제목만 읽어도 무엇에 관한 글인지 알 수 있게.
+과장·사실 왜곡 금지, 본문에 없는 정보 추가 금지. 25~60자 권장.
+{{/SEO_TITLE}}
+
+{{SUMMARY}}
+글이 설명하는 핵심 현상과 결론을 1~2문장으로 요약. 도입부 분위기 문장을 그대로 복사하지 말 것.
+본문에 실제로 포함된 내용만 사용. 50~180자 권장.
+{{/SUMMARY}}
+
+{{SEO_DESCRIPTION}}
+핵심 개념·글에서 다루는 내용·독자가 알게 될 정보를 담은 검색 설명문. SEO_TITLE을 그대로 반복하지 말 것.
+본문과 참고자료에 없는 사실 추가 금지. 80~160자 권장.
+{{/SEO_DESCRIPTION}}"""
+
+
+async def generate_discovery_post(
+    topic: str | None = None,
+    recent_titles: list[str] | None = None,
+    seo_markers: bool = False,
+    published: bool = True,
+) -> dict:
+    """디스커버리 채널 포스트 생성. topic 없으면 RSS에서 자동 선정.
+    seo_markers=True(4B-1 파일럿 전용)일 때만 SEO 마커 프롬프트를 추가하고
+    summary/seo_title/seo_description/content_type(SCIENCE)을 반환 dict에 채운다.
+    기본 False — 운영 스케줄러·기존 호출은 기존 동작 그대로 유지."""
     today = datetime.now(KST).date()
     costs: list = []
 
@@ -1659,7 +1852,7 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
   {{THUMBNAIL: ...}}
   {{TAGS: discovery, 태그2, 태그3, 태그4, 태그5}} (5~8개, 사람들이 실제 검색할 법한 키워드 위주, 영어 1~2개 포함)"""
 
-    system_text = persona["system"] + discovery_rules
+    system_text = persona["system"] + discovery_rules + (_DISCOVERY_SEO_RULES if seo_markers else "")
     user_content = f"주제: **{topic}**\n\n위 주제로 디스커버리 채널 포스트를 작성하세요."
     if trending_context:
         user_content += f"\n\n【참고 뉴스】\n{trending_context}"
@@ -1672,6 +1865,11 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
         messages=[{"role": "user", "content": user_content}],
     )
     raw = message.content[0].text.strip()
+
+    # 4B-1 SEO 마커 추출 (본문에서 제거) — 활성화된 경우에만, 가장 먼저
+    seo = parse_seo_metadata(raw) if seo_markers else None
+    if seo is not None:
+        raw = seo["clean_content"]
 
     # 5. 태그 추출
     tags_m = _TAGS_RE.search(raw)
@@ -1729,7 +1927,7 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
     # slug 중복 방지용 suffix는 라우터에서 처리
     slug_base = f"discovery-{today.isoformat()}"
 
-    return {
+    data = {
         "id":             str(uuid.uuid4()),
         "agent_id":       agent_id,
         "title":          title,
@@ -1737,11 +1935,18 @@ async def generate_discovery_post(topic: str | None = None, recent_titles: list[
         "content":        content,
         "thumbnail_url":  thumbnail_url,
         "tags":           tags,
-        "published":      True,
+        "published":      published,
         "trending_topic": f"Discovery: {topic}",
         "published_at":   datetime.now(timezone.utc).replace(tzinfo=None),
         "costs":          costs,
     }
+    if seo is not None:
+        seo_fields = resolve_seo_fields(seo, title)  # 폴백 적용
+        data["summary"]         = seo_fields["summary"]
+        data["seo_title"]       = seo_fields["seo_title"]
+        data["seo_description"] = seo_fields["seo_description"]
+        data["content_type"]    = validate_content_type("SCIENCE")
+    return data
 
 
 # ── 자기소개 포스트 생성 (버즈+핑 콜라보) ────────────────────────────────────────

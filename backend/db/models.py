@@ -95,6 +95,22 @@ class TokenUsage(Base):
     ts = Column(DateTime, server_default=func.now())
 
 
+# content_type 허용값 — DB에는 제약(ENUM/CHECK)을 두지 않고 app 레이어에서만 검증.
+# 분류 체계가 진화 중이라(피벗 이력) 마이그레이션이 번거로운 PG ENUM 대신 nullable 문자열 사용.
+CONTENT_TYPES = (
+    "MARKETING",  # buzz — 마케팅/바이럴
+    "WIKI",       # wiki — 이번 주 키워드 해설
+    "DATA",       # ka — 데이터·숫자 인사이트
+    "DESIGN",     # pixel — 디자인/문화 감상
+    "IDEA",       # ping — 엉뚱한 아이디어
+    "SCIENCE",    # pocke·ka — Discovery(과학·우주)
+    "ESSAY",      # over — 감성 에세이
+    "DEBATE",     # *+fact — AI 토론 시리즈
+    "QUIZ",       # plan — AI 테스트
+    "INTRO",      # buzz+ping — 소개/공지
+)
+
+
 class BlogPost(Base):
     __tablename__ = "blog_posts"
 
@@ -111,6 +127,15 @@ class BlogPost(Base):
     likes = Column(Integer, default=0, server_default="0")
     view_count = Column(Integer, default=0, server_default="0")
     created_at = Column(DateTime, server_default=func.now())
+    # 글 수정 시각 — ORM 수정(PATCH /posts/{id}) 시 onupdate로 자동 갱신.
+    # server_default는 두지 않음: 기존 글이 "마이그 실행 시각에 수정됨"으로 찍히는 것 방지.
+    # 기존 글은 마이그 032에서 published_at(없으면 created_at)으로 백필.
+    updated_at = Column(DateTime, nullable=True, onupdate=func.now())
+    # SEO·요약 메타 (마이그 032 추가). 전부 nullable — 채우기는 후속 단계(생성기·백필).
+    summary = Column(Text, nullable=True)            # 독자용 핵심 요약 1~2문장
+    seo_title = Column(String, nullable=True)         # 검색·공유용 제목
+    seo_description = Column(Text, nullable=True)     # 검색용 고유 설명
+    content_type = Column(String, nullable=True)      # CONTENT_TYPES 중 하나(app 검증, DB 제약 없음)
     # 관련글 의미기반 추천용 임베딩(ko-sroberta 768). deferred — 목록/상세 조회 시 로드 안 됨.
     embedding = deferred(Column(Vector(768), nullable=True))
 
