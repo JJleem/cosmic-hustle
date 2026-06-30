@@ -132,6 +132,37 @@ def notify_search_engines_bg(url: str) -> None:
     task.add_done_callback(_notify_tasks.discard)
 
 
+async def revalidate_frontend(slugs: list[str]) -> None:
+    """프론트(Next.js)에 on-demand 재검증을 요청 — ISR 캐시를 즉시 무효화해
+    예약/자동 발행 글이 새로고침 없이 바로 노출되게 한다. 예외는 내부에서 삼킴.
+    REVALIDATE_SECRET 미설정 시 no-op(로컬·미설정 환경 보호)."""
+    secret = os.getenv("REVALIDATE_SECRET")
+    if not secret or not slugs:
+        return
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{_GSC_SITE_URL}/api/revalidate",
+                headers={"X-Revalidate-Secret": secret},
+                json={"slugs": slugs},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                logger.info(f"프론트 재검증 완료: {slugs}")
+            else:
+                logger.warning(f"프론트 재검증 실패 {slugs}: {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"프론트 재검증 오류: {e}")
+
+
+def revalidate_frontend_bg(slugs: list[str]) -> None:
+    """revalidate_frontend를 안전한 fire-and-forget으로 실행(발행 블로킹·실패 무시).
+    notify_search_engines_bg와 동일하게 task 참조를 보관해 조기 GC를 막는다."""
+    task = asyncio.create_task(revalidate_frontend(slugs))
+    _notify_tasks.add(task)
+    task.add_done_callback(_notify_tasks.discard)
+
+
 _CHAR_DIR = Path(__file__).parent / "characters"
 
 # 캐릭터 레퍼런스는 정적 PNG라 fal 업로드 URL을 에이전트별로 캐싱(매 발행 재업로드 제거).

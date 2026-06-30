@@ -26,7 +26,7 @@ from blog_generator import (
     generate_debate_post, generate_debate_comments,
     generate_discovery_post,
     generate_quiz_post, _generate_thumbnail,
-    notify_search_engines_bg,
+    notify_search_engines_bg, revalidate_frontend_bg,
     AGENT_PERSONAS, DAY_SCHEDULE,
 )
 
@@ -684,6 +684,7 @@ async def trigger_generate(request: Request, agent_id: str | None = None, theme:
     if post.published:
         post_url = f"https://cosmic-hustle.ai.kr/{post.slug}"
         notify_search_engines_bg(post_url)
+        revalidate_frontend_bg([post.slug])
 
     return post
 
@@ -734,6 +735,7 @@ async def trigger_generate_draft(request: Request, body: _DraftPostBody, db: Ses
 
     if post.published:
         notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{post.slug}")
+        revalidate_frontend_bg([post.slug])
 
     return post
 
@@ -760,6 +762,9 @@ async def trigger_generate_intro(request: Request, db: Session = Depends(get_db)
 
     db.commit()
     db.refresh(post)
+    if post.published:
+        notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{post.slug}")
+        revalidate_frontend_bg([post.slug])
     return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url}
 
 
@@ -823,6 +828,9 @@ async def trigger_generate_debate(
 
     db.commit()
     db.refresh(post)
+    if post.published:
+        notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{post.slug}")
+        revalidate_frontend_bg([post.slug])
     return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url}
 
 
@@ -854,6 +862,9 @@ async def trigger_generate_discovery(request: Request, topic: str | None = None,
 
     db.commit()
     db.refresh(post)
+    if post.published:
+        notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{post.slug}")
+        revalidate_frontend_bg([post.slug])
     return {"post_id": post.id, "slug": post.slug, "title": post.title, "thumbnail_url": post.thumbnail_url, "agent_id": post.agent_id}
 
 
@@ -904,6 +915,9 @@ async def trigger_generate_quiz(
     record_post_costs(db, post.id, "plan", costs)
     db.commit()
     db.refresh(post)
+    if post.published:
+        notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{post.slug}")
+        revalidate_frontend_bg([post.slug])
     return {
         "slug": post.slug,
         "title": post.title,
