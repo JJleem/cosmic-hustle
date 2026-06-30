@@ -365,6 +365,7 @@ def test_cli_generate_without_save_calls_llm_but_not_apply(monkeypatch, capsys):
 def test_cli_apply_single_post(monkeypatch, capsys):
     from scripts import backfill_blog_seo
 
+    post_id = "00000000-0000-0000-0000-000000000001"
     fake_db = SimpleNamespace(close=lambda: None)
     fake_query = SimpleNamespace(filter=lambda *a, **k: SimpleNamespace(first=lambda: _post()))
     fake_db.query = lambda model: fake_query
@@ -378,14 +379,121 @@ def test_cli_apply_single_post(monkeypatch, capsys):
     apply_mock = MagicMock()
     monkeypatch.setattr(backfill_blog_seo, "SessionLocal", lambda: fake_db)
     monkeypatch.setattr(backfill_blog_seo, "BlogPost", SimpleNamespace(id="id"))
+    monkeypatch.setattr(backfill_blog_seo, "_read_database_identity", lambda db: {"database": "test_db", "revision": "032"})
     monkeypatch.setattr(backfill_blog_seo, "generate_seo_metadata_for_existing_post", AsyncMock(return_value=metadata))
     monkeypatch.setattr(backfill_blog_seo, "apply_seo_backfill", apply_mock)
-    code = backfill_blog_seo.main(["--apply", "--post-id", "post-1"])
+    code = backfill_blog_seo.main([
+        "--apply",
+        "--post-id", post_id,
+        "--confirm-post-id", post_id,
+        "--confirm-slug", "buzz-2026-06-29",
+        "--confirm-database", "test_db",
+        "--yes",
+    ])
     out = capsys.readouterr().out
     assert code == 0
+    assert '"confirmation": "passed"' in out
     assert '"mode": "apply"' in out
     assert '"saved": true' in out
     assert apply_mock.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "args,error",
+    [
+        (["--apply", "--post-id", "00000000-0000-0000-0000-000000000001", "--confirm-slug", "buzz-2026-06-29", "--confirm-database", "test_db", "--yes"], "missing_apply_confirmation:confirm-post-id"),
+        (["--apply", "--post-id", "00000000-0000-0000-0000-000000000001", "--confirm-post-id", "00000000-0000-0000-0000-000000000001", "--confirm-database", "test_db", "--yes"], "missing_apply_confirmation:confirm-slug"),
+        (["--apply", "--post-id", "00000000-0000-0000-0000-000000000001", "--confirm-post-id", "00000000-0000-0000-0000-000000000001", "--confirm-slug", "buzz-2026-06-29", "--yes"], "missing_apply_confirmation:confirm-database"),
+        (["--apply", "--post-id", "00000000-0000-0000-0000-000000000001", "--confirm-post-id", "00000000-0000-0000-0000-000000000001", "--confirm-slug", "buzz-2026-06-29", "--confirm-database", "test_db"], "missing_apply_confirmation:yes"),
+    ],
+)
+def test_cli_apply_requires_confirmation_before_session(monkeypatch, capsys, args, error):
+    from scripts import backfill_blog_seo
+
+    session_mock = MagicMock(side_effect=AssertionError("SessionLocal should not be called"))
+    monkeypatch.setattr(backfill_blog_seo, "SessionLocal", session_mock)
+    monkeypatch.setattr(backfill_blog_seo, "generate_seo_metadata_for_existing_post", AsyncMock())
+    code = backfill_blog_seo.main(args)
+    out = capsys.readouterr().out
+    assert code == seo_backfill.EXIT_ARGUMENT
+    assert error in out
+    session_mock.assert_not_called()
+    backfill_blog_seo.generate_seo_metadata_for_existing_post.assert_not_called()
+
+
+def test_cli_apply_post_id_mismatch_before_session(monkeypatch, capsys):
+    from scripts import backfill_blog_seo
+
+    session_mock = MagicMock(side_effect=AssertionError("SessionLocal should not be called"))
+    monkeypatch.setattr(backfill_blog_seo, "SessionLocal", session_mock)
+    code = backfill_blog_seo.main([
+        "--apply",
+        "--post-id", "00000000-0000-0000-0000-000000000001",
+        "--confirm-post-id", "00000000-0000-0000-0000-000000000002",
+        "--confirm-slug", "buzz-2026-06-29",
+        "--confirm-database", "test_db",
+        "--yes",
+    ])
+    out = capsys.readouterr().out
+    assert code == seo_backfill.EXIT_ARGUMENT
+    assert "post_id_confirmation_mismatch" in out
+    session_mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "identity,error",
+    [
+        ({"database": "wrong_db", "revision": "032"}, "database_confirmation_mismatch"),
+        ({"database": "test_db", "revision": "031"}, "revision_mismatch"),
+    ],
+)
+def test_cli_apply_database_identity_mismatch_before_llm(monkeypatch, capsys, identity, error):
+    from scripts import backfill_blog_seo
+
+    post_id = "00000000-0000-0000-0000-000000000001"
+    fake_db = SimpleNamespace(close=lambda: None)
+    fake_db.query = MagicMock()
+    monkeypatch.setattr(backfill_blog_seo, "SessionLocal", lambda: fake_db)
+    monkeypatch.setattr(backfill_blog_seo, "_read_database_identity", lambda db: identity)
+    monkeypatch.setattr(backfill_blog_seo, "generate_seo_metadata_for_existing_post", AsyncMock())
+    code = backfill_blog_seo.main([
+        "--apply",
+        "--post-id", post_id,
+        "--confirm-post-id", post_id,
+        "--confirm-slug", "buzz-2026-06-29",
+        "--confirm-database", "test_db",
+        "--yes",
+    ])
+    out = capsys.readouterr().out
+    assert code == seo_backfill.EXIT_ARGUMENT
+    assert error in out
+    fake_db.query.assert_not_called()
+    backfill_blog_seo.generate_seo_metadata_for_existing_post.assert_not_called()
+
+
+def test_cli_apply_slug_mismatch_before_llm(monkeypatch, capsys):
+    from scripts import backfill_blog_seo
+
+    post_id = "00000000-0000-0000-0000-000000000001"
+    fake_db = SimpleNamespace(close=lambda: None)
+    fake_query = SimpleNamespace(filter=lambda *a, **k: SimpleNamespace(first=lambda: _post()))
+    fake_db.query = lambda model: fake_query
+    monkeypatch.setattr(backfill_blog_seo, "SessionLocal", lambda: fake_db)
+    monkeypatch.setattr(backfill_blog_seo, "BlogPost", SimpleNamespace(id="id"))
+    monkeypatch.setattr(backfill_blog_seo, "_read_database_identity", lambda db: {"database": "test_db", "revision": "032"})
+    monkeypatch.setattr(backfill_blog_seo, "generate_seo_metadata_for_existing_post", AsyncMock())
+    code = backfill_blog_seo.main([
+        "--apply",
+        "--post-id", post_id,
+        "--confirm-post-id", post_id,
+        "--confirm-slug", "wrong-slug",
+        "--confirm-database", "test_db",
+        "--yes",
+    ])
+    out = capsys.readouterr().out
+    assert code == seo_backfill.EXIT_ARGUMENT
+    assert "slug_confirmation_mismatch" in out
+    backfill_blog_seo.generate_seo_metadata_for_existing_post.assert_not_called()
 
 
 def test_cli_argument_error_for_multiple_modes():

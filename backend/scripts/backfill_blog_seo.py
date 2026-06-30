@@ -7,8 +7,10 @@ import argparse
 import asyncio
 import json
 import sys
+import uuid
 from pathlib import Path
 
+from sqlalchemy import text
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -30,6 +32,7 @@ from seo_backfill import (
 
 SessionLocal = None
 BlogPost = None
+EXPECTED_ALEMBIC_REVISION = "032"
 
 
 def _load_db_dependencies():
@@ -53,6 +56,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     modes.add_argument("--apply", action="store_true", help="Generate and save SEO metadata for one eligible post.")
     parser.add_argument("--post-id", required=True, help="blog_posts.id to inspect or backfill.")
+    parser.add_argument("--confirm-post-id", help="Required for --apply. Must match --post-id.")
+    parser.add_argument("--confirm-slug", help="Required for --apply. Must exactly match the DB slug.")
+    parser.add_argument("--confirm-database", help="Required for --apply. Must exactly match current_database().")
+    parser.add_argument("--yes", action="store_true", help="Required for --apply. Non-interactive confirmation.")
     return parser
 
 
@@ -92,14 +99,87 @@ def _post_payload(post, inspection, *, mode: str, saved: bool = False, metadata:
     return payload
 
 
+def _json_error(error: str, **extra) -> str:
+    return json.dumps({"error": error, **extra}, ensure_ascii=False)
+
+
+def _uuid_matches(left: str, right: str) -> bool:
+    return uuid.UUID(left) == uuid.UUID(right)
+
+
+def _validate_apply_confirmation_args(args: argparse.Namespace) -> str | None:
+    if not args.apply:
+        return None
+
+    missing = [
+        name
+        for name, value in (
+            ("confirm-post-id", args.confirm_post_id),
+            ("confirm-slug", args.confirm_slug),
+            ("confirm-database", args.confirm_database),
+        )
+        if not value
+    ]
+    if not args.yes:
+        missing.append("yes")
+    if missing:
+        return f"missing_apply_confirmation:{','.join(missing)}"
+
+    try:
+        if not _uuid_matches(args.post_id, args.confirm_post_id):
+            return "post_id_confirmation_mismatch"
+    except ValueError:
+        return "invalid_post_id"
+    return None
+
+
+def _read_database_identity(db) -> dict:
+    row = db.execute(
+        text(
+            """
+            SELECT
+                current_database() AS database_name,
+                (SELECT version_num FROM alembic_version LIMIT 1) AS revision
+            """
+        )
+    ).mappings().first()
+    return {"database": row["database_name"], "revision": row["revision"]}
+
+
 async def _run(args: argparse.Namespace) -> int:
     _load_db_dependencies()
     db = SessionLocal()
     try:
+        identity = None
+        if args.apply:
+            identity = _read_database_identity(db)
+            if identity["database"] != args.confirm_database:
+                print(_json_error(
+                    "database_confirmation_mismatch",
+                    database=identity["database"],
+                    revision=identity["revision"],
+                ))
+                return EXIT_ARGUMENT
+            if identity["revision"] != EXPECTED_ALEMBIC_REVISION:
+                print(_json_error(
+                    "revision_mismatch",
+                    database=identity["database"],
+                    revision=identity["revision"],
+                    expected_revision=EXPECTED_ALEMBIC_REVISION,
+                ))
+                return EXIT_ARGUMENT
+
         post = db.query(BlogPost).filter(BlogPost.id == args.post_id).first()
         if not post:
-            print(json.dumps({"error": "post_not_found", "post_id": args.post_id}, ensure_ascii=False))
+            print(_json_error("post_not_found", post_id=args.post_id))
             return EXIT_SKIPPED
+        if args.apply and post.slug != args.confirm_slug:
+            print(_json_error(
+                "slug_confirmation_mismatch",
+                post_id=post.id,
+                slug=post.slug,
+            ))
+            return EXIT_ARGUMENT
 
         inspection = inspect_backfill_candidate(post)
         if args.inspect:
@@ -110,6 +190,20 @@ async def _run(args: argparse.Namespace) -> int:
             print(json.dumps(_post_payload(post, inspection, mode="skip"), ensure_ascii=False, indent=2))
             return EXIT_SKIPPED
 
+        if args.apply:
+            print(json.dumps({
+                "mode": "apply",
+                "database": identity["database"],
+                "revision": identity["revision"],
+                "post_id": post.id,
+                "slug": post.slug,
+                "agent_id": post.agent_id,
+                "content_type": inspection.content_type,
+                "published": post.published,
+                "seo_state": "all_null",
+                "confirmation": "passed",
+            }, ensure_ascii=False, indent=2))
+
         try:
             metadata = await generate_seo_metadata_for_existing_post(
                 title=post.title,
@@ -118,10 +212,10 @@ async def _run(args: argparse.Namespace) -> int:
                 content_type=inspection.content_type,
             )
         except SEOBackfillError as exc:
-            print(json.dumps({"error": exc.reason, "post_id": post.id, "slug": post.slug}, ensure_ascii=False))
+            print(_json_error(exc.reason, post_id=post.id, slug=post.slug))
             return exc.exit_code
         except Exception as exc:
-            print(json.dumps({"error": f"generation_failed: {exc}", "post_id": post.id}, ensure_ascii=False))
+            print(_json_error(f"generation_failed: {exc}", post_id=post.id))
             return EXIT_GENERATION
 
         if args.generate_without_save:
@@ -131,7 +225,7 @@ async def _run(args: argparse.Namespace) -> int:
         try:
             apply_seo_backfill(db, post=post, metadata=metadata)
         except SEOBackfillError as exc:
-            print(json.dumps({"error": exc.reason, "post_id": post.id, "slug": post.slug}, ensure_ascii=False))
+            print(_json_error(exc.reason, post_id=post.id, slug=post.slug))
             return exc.exit_code
 
         print(json.dumps(_post_payload(post, inspection, mode="apply", saved=True, metadata=metadata), ensure_ascii=False, indent=2))
@@ -146,6 +240,10 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return EXIT_ARGUMENT if exc.code else EXIT_SUCCESS
+    confirmation_error = _validate_apply_confirmation_args(args)
+    if confirmation_error:
+        print(_json_error(confirmation_error))
+        return EXIT_ARGUMENT
     return asyncio.run(_run(args))
 
 
