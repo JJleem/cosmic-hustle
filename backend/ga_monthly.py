@@ -4,9 +4,10 @@ import json
 import os
 import smtplib
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
 
 import anthropic
 
@@ -28,8 +29,53 @@ BUZZ_SYSTEM = """당신은 Cosmic Hustle의 버즈 대리, 마케터입니다.
 한국어로, 에이전트별로 맞춤 조언을 주세요."""
 
 
+def _default_month_range(today: date | None = None) -> tuple[str, str]:
+    today = today or datetime.now(ZoneInfo("Asia/Seoul")).date()
+    first_this_month = today.replace(day=1)
+    last_month_end = first_this_month - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    return last_month_start.isoformat(), last_month_end.isoformat()
+
+
 def _date_range_label(start: str, end: str) -> str:
     return f"{start} ~ {end}"
+
+
+def _has_ga_metrics(overview: dict, pages: list, channels: list, devices: list) -> bool:
+    expected = {"sessions", "total_users", "new_users", "bounce_rate", "avg_session_sec", "page_views"}
+    return bool(expected.intersection(overview) or pages or channels or devices)
+
+
+def _trim_complete_lines(text: str | None, limit: int = 900, max_lines: int = 10) -> str:
+    lines = [line.rstrip() for line in (text or "").strip().splitlines() if line.strip()]
+    selected: list[str] = []
+    omitted = False
+    for line in lines:
+        if len(selected) >= max_lines:
+            omitted = True
+            break
+        candidate = "\n".join([*selected, line])
+        if len(candidate) > limit:
+            omitted = True
+            break
+        selected.append(line)
+    if len(selected) < len(lines):
+        omitted = True
+    if not selected:
+        return "요약 생략"
+    if omitted:
+        selected.append("... (이하 생략)")
+    return "\n".join(selected)
+
+
+def _no_ga_data_analysis(period: str) -> str:
+    return "\n".join([
+        f"GA 데이터 수집 확인 필요 — {period}",
+        "",
+        "이번 기간은 GA API 응답에 요약 지표, 페이지, 채널, 기기 데이터가 모두 없습니다.",
+        "콘텐츠 성과 판단이나 다음 달 전략 추천을 만들지 않습니다.",
+        "확인할 것: GA4_PROPERTY_ID, GA4_TOKEN_JSON 또는 GA4_SERVICE_ACCOUNT_JSON, 속성 권한, 날짜 범위.",
+    ])
 
 
 async def _analyze_with_ka(overview: dict, pages: list, channels: list, devices: list, period: str) -> str:
@@ -72,15 +118,17 @@ async def _analyze_with_ka(overview: dict, pages: list, channels: list, devices:
 1. 전체 블로그 현황 총평 (2~3문장)
 2. 핵심 문제점 3가지 (수치 근거 포함)
 3. 주목할 긍정적 신호 1~2가지
-4. 에이전트(글쓴이)별 개선 방향 힌트 (buzz/over/pixel 각 1줄)"""
+4. 에이전트(글쓴이)별 개선 방향 힌트 (buzz/over/pixel 각 1줄)
+
+전체 900자 이하. 표, 긴 서론, 마크다운 장식은 쓰지 마세요."""
 
     msg = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2000,
+        max_tokens=700,
         system=KA_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
-    return msg.content[0].text.strip()
+    return _trim_complete_lines(msg.content[0].text.strip(), limit=900, max_lines=12)
 
 
 async def _suggest_with_buzz(ka_analysis: str, overview: dict, period: str) -> str:
@@ -96,15 +144,17 @@ async def _suggest_with_buzz(ka_analysis: str, overview: dict, period: str) -> s
 1. 글 구조 개선 (서론 길이, 소제목 배치, 요약 위치 등)
 2. 주제 방향 (잘 되는 카테고리·형식 강화, 피해야 할 패턴)
 3. 에이전트별 맞춤 조언 (buzz / over / pixel 각 1~2문장)
-4. 이번 달 최우선 실험 1가지 (A/B 테스트 가능한 수준으로 구체적으로)"""
+4. 이번 달 최우선 실험 1가지 (A/B 테스트 가능한 수준으로 구체적으로)
+
+전체 800자 이하. 표, 긴 서론, 마크다운 장식은 쓰지 마세요."""
 
     msg = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=600,
         system=BUZZ_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
-    return msg.content[0].text.strip()
+    return _trim_complete_lines(msg.content[0].text.strip(), limit=800, max_lines=10)
 
 
 def _delta_str(curr: dict, prev: dict) -> str:
@@ -269,7 +319,15 @@ async def _update_agent_memories(
         db.close()
 
 
-def _send_email(period: str, overview: dict, problem_pages: list, ka_analysis: str, buzz_suggestions: str):
+def _send_email(
+    period: str,
+    overview: dict,
+    problem_pages: list,
+    ka_analysis: str,
+    buzz_suggestions: str,
+    *,
+    memory_updated: bool = True,
+):
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER", "")
@@ -287,12 +345,29 @@ def _send_email(period: str, overview: dict, problem_pages: list, ka_analysis: s
         for p in problem_pages
     )
 
+    ka_excerpt = _trim_complete_lines(ka_analysis, limit=900, max_lines=12)
+    buzz_excerpt = _trim_complete_lines(buzz_suggestions, limit=800, max_lines=10)
+    memory_status = "에이전트 메모리 업데이트 완료 (buzz / over / pixel / ka)" if memory_updated else "GA 데이터 없음: 에이전트 메모리 업데이트 건너뜀"
+
+    text_body = "\n\n".join([
+        f"Cosmic Hustle GA 월간 리포트 — {period}",
+        (
+            f"전체 요약: 세션 {overview.get('sessions','N/A')}, 사용자 {overview.get('total_users','N/A')}, "
+            f"페이지뷰 {overview.get('page_views','N/A')}, 이탈률 {overview.get('bounce_rate','N/A')}%, "
+            f"체류 {overview.get('avg_session_sec','N/A')}초"
+        ),
+        f"주의 페이지 TOP {len(problem_pages)}",
+        "카의 분석\n" + ka_excerpt,
+        "버즈의 개선안\n" + buzz_excerpt,
+        memory_status,
+    ])
+
     html_body = f"""
 <html><body style="font-family:sans-serif;max-width:680px;margin:0 auto;color:#1a1a1a">
-<h2 style="color:#6d28d9">🚀 Cosmic Hustle — GA 월간 리포트</h2>
+<h2 style="color:#6d28d9">Cosmic Hustle — GA 월간 리포트</h2>
 <p style="color:#666">{period}</p>
 
-<h3>📊 전체 요약</h3>
+<h3>전체 요약</h3>
 <table style="border-collapse:collapse;width:100%">
 <tr style="background:#f3f4f6">
   <td style="padding:8px;border:1px solid #e5e7eb">총 세션</td>
@@ -314,7 +389,7 @@ def _send_email(period: str, overview: dict, problem_pages: list, ka_analysis: s
 </tr>
 </table>
 
-<h3>⚠️ 주의 페이지 TOP {len(problem_pages)}</h3>
+<h3>주의 페이지 TOP {len(problem_pages)}</h3>
 <table style="border-collapse:collapse;width:100%">
 <tr style="background:#f3f4f6;font-weight:bold">
   <td style="padding:8px;border:1px solid #e5e7eb">페이지</td>
@@ -325,13 +400,13 @@ def _send_email(period: str, overview: dict, problem_pages: list, ka_analysis: s
 {page_rows}
 </table>
 
-<h3>🔍 카의 분석</h3>
-<div style="background:#faf5ff;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(ka_analysis)}</div>
+<h3>카의 분석</h3>
+<div style="background:#faf5ff;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(ka_excerpt)}</div>
 
-<h3>💡 버즈의 개선안</h3>
-<div style="background:#fff7ed;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(buzz_suggestions)}</div>
+<h3>버즈의 개선안</h3>
+<div style="background:#fff7ed;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(buzz_excerpt)}</div>
 
-<p style="color:#999;font-size:12px;margin-top:32px">🧠 에이전트 메모리 업데이트 완료 (buzz / over / pixel / ka)<br>
+<p style="color:#999;font-size:12px;margin-top:32px">{html.escape(memory_status)}<br>
 Cosmic Hustle 자동 발송</p>
 </body></html>"""
 
@@ -339,7 +414,8 @@ Cosmic Hustle 자동 발송</p>
     msg["Subject"] = f"[Cosmic Hustle] GA 월간 리포트 — {period}"
     msg["From"] = smtp_user
     msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
+    msg.attach(MIMEText(text_body, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
         server.starttls()
@@ -354,12 +430,7 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
     import ga_client
 
     if not start_date or not end_date:
-        today = date.today()
-        first_this_month = today.replace(day=1)
-        last_month_end = first_this_month - timedelta(days=1)
-        last_month_start = last_month_end.replace(day=1)
-        start_date = last_month_start.isoformat()
-        end_date = last_month_end.isoformat()
+        start_date, end_date = _default_month_range()
 
     period = _date_range_label(start_date, end_date)
     logger.info(f"GA 월간 분석 시작 — {period}")
@@ -374,14 +445,19 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
         return {"ok": False, "error": str(e)}
 
     problem_pages = [p for p in pages if p["sessions"] >= 5][:5]
+    has_ga_metrics = _has_ga_metrics(overview, pages, channels, devices)
 
-    ka_analysis = await _analyze_with_ka(overview, problem_pages, channels, devices, period)
-    buzz_suggestions = await _suggest_with_buzz(ka_analysis, overview, period)
-
-    await _update_agent_memories(ka_analysis, buzz_suggestions, period, overview)
+    if has_ga_metrics:
+        ka_analysis = await _analyze_with_ka(overview, problem_pages, channels, devices, period)
+        buzz_suggestions = await _suggest_with_buzz(ka_analysis, overview, period)
+        await _update_agent_memories(ka_analysis, buzz_suggestions, period, overview)
+    else:
+        ka_analysis = _no_ga_data_analysis(period)
+        buzz_suggestions = "GA 데이터가 없어 개선안을 생성하지 않았습니다. 먼저 측정 설정을 복구한 뒤 다음 월간 리포트에서 전략을 만듭니다."
+        logger.warning("GA 월간 데이터 없음 — AI 분석과 메모리 업데이트를 건너뜀: %s", period)
 
     try:
-        _send_email(period, overview, problem_pages, ka_analysis, buzz_suggestions)
+        _send_email(period, overview, problem_pages, ka_analysis, buzz_suggestions, memory_updated=has_ga_metrics)
     except Exception as e:
         logger.error(f"이메일 발송 실패: {e}")
 
@@ -393,4 +469,5 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
         "problem_pages": problem_pages,
         "ka_analysis": ka_analysis,
         "buzz_suggestions": buzz_suggestions,
+        "memory_updated": has_ga_metrics,
     }

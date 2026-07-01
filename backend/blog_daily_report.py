@@ -74,6 +74,7 @@ def _rank_daily_posts(
             "title": post.title,
             "slug": post.slug,
             "agent_id": post.agent_id,
+            "content_type": getattr(post, "content_type", None),
             "views": views,
             "likes": likes,
             "comments": comments,
@@ -85,6 +86,22 @@ def _rank_daily_posts(
         key=lambda item: (item["score"], item["views"], item["comments"], item["likes"]),
         reverse=True,
     )
+
+
+def _merge_engaged_post_ids(
+    daily_views: dict[str, int],
+    human_comments: dict[str, int],
+    human_likes: dict[str, int],
+) -> list[str]:
+    post_ids: list[str] = []
+    seen: set[str] = set()
+    for source in (daily_views, human_comments, human_likes):
+        for post_id, count in source.items():
+            if int(count or 0) <= 0 or post_id in seen:
+                continue
+            seen.add(post_id)
+            post_ids.append(post_id)
+    return post_ids
 
 
 def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict:
@@ -120,40 +137,36 @@ def collect_blog_report_snapshot(db: Session, today: date | None = None) -> dict
         .all()
     )
     daily_views = {post_id: int(count) for post_id, count in daily_view_rows}
-    active_post_ids = list(daily_views)
+
+    comment_rows = (
+        db.query(BlogComment.post_id, func.count(BlogComment.id))
+        .filter(
+            BlogComment.agent_id.is_(None),
+            BlogComment.created_at >= day_start_utc,
+            BlogComment.created_at < day_end_utc,
+        )
+        .group_by(BlogComment.post_id)
+        .all()
+    )
+    human_comments = {post_id: int(count) for post_id, count in comment_rows}
+    like_rows = (
+        db.query(BlogPostLike.post_id, func.count(BlogPostLike.ip_hash))
+        .filter(
+            BlogPostLike.created_at >= day_start_utc,
+            BlogPostLike.created_at < day_end_utc,
+        )
+        .group_by(BlogPostLike.post_id)
+        .all()
+    )
+    human_likes = {post_id: int(count) for post_id, count in like_rows}
+
+    active_post_ids = _merge_engaged_post_ids(daily_views, human_comments, human_likes)
     active_posts = (
         db.query(BlogPost)
         .filter(BlogPost.id.in_(active_post_ids), BlogPost.published == True)
         .all()
         if active_post_ids else []
     )
-
-    human_comments = {}
-    human_likes = {}
-    if active_post_ids:
-        comment_rows = (
-            db.query(BlogComment.post_id, func.count(BlogComment.id))
-            .filter(
-                BlogComment.post_id.in_(active_post_ids),
-                BlogComment.agent_id.is_(None),
-                BlogComment.created_at >= day_start_utc,
-                BlogComment.created_at < day_end_utc,
-            )
-            .group_by(BlogComment.post_id)
-            .all()
-        )
-        human_comments = {post_id: int(count) for post_id, count in comment_rows}
-        like_rows = (
-            db.query(BlogPostLike.post_id, func.count(BlogPostLike.ip_hash))
-            .filter(
-                BlogPostLike.post_id.in_(active_post_ids),
-                BlogPostLike.created_at >= day_start_utc,
-                BlogPostLike.created_at < day_end_utc,
-            )
-            .group_by(BlogPostLike.post_id)
-            .all()
-        )
-        human_likes = {post_id: int(count) for post_id, count in like_rows}
 
     scored_posts = _rank_daily_posts(active_posts, daily_views, human_comments, human_likes)
     tag_counter: Counter[str] = Counter()
@@ -394,6 +407,44 @@ def assess_bot_signals(snapshot: dict, ga: dict, access_logs: dict) -> list[str]
     return signals
 
 
+def _truncate_complete_lines(text: str, limit: int, max_lines: int | None = None) -> str:
+    lines = [line.rstrip() for line in (text or "").strip().splitlines() if line.strip()]
+    selected: list[str] = []
+    omitted = False
+    for line in lines:
+        if max_lines is not None and len(selected) >= max_lines:
+            omitted = True
+            break
+        candidate = "\n".join([*selected, line])
+        if len(candidate) > limit:
+            omitted = True
+            break
+        selected.append(line)
+    if len(selected) < len(lines):
+        omitted = True
+    if not selected:
+        return "요약 생략 (첫 줄이 너무 김)"
+    if omitted:
+        selected.append("… (이하 생략)")
+    return "\n".join(selected)
+
+
+def _daily_human_comment_total(snapshot: dict) -> int:
+    return sum(int(post.get("comments") or 0) for post in snapshot.get("top_posts", []))
+
+
+def _ai_debate_is_supported(snapshot: dict) -> bool:
+    if _daily_human_comment_total(snapshot) >= 2:
+        return True
+    return any((post.get("content_type") or "").upper() == "DEBATE" for post in snapshot.get("top_posts", []))
+
+
+def _guard_buzz_judgement(text: str, snapshot: dict, bot_signals: list[str]) -> str:
+    if re.search(r"추천\s*슬롯\s*:\s*ai_debate\b", text or "", re.I) and not _ai_debate_is_supported(snapshot):
+        return _fallback_buzz_judgement(snapshot, bot_signals)
+    return text
+
+
 async def fetch_trend_headlines(queries: tuple[str, ...] = TREND_QUERIES, limit: int = 6) -> list[dict]:
     headlines: list[dict] = []
     timeout = httpx.Timeout(8.0)
@@ -498,30 +549,24 @@ def render_buzz_report(
 
     lines.extend(["", "현재 핫한 신호"])
     if headlines:
-        for item in headlines[:5]:
+        for item in headlines[:3]:
             lines.append(f"- [{item['query']}] {item['title']}")
     else:
         lines.append("- 외부 트렌드 수집값 없음. 내부 반응 기준으로만 판단.")
 
-    lines.extend(["", "제목 보강 후보 (GSC: 노출되는데 클릭 안 되는 검색어 → 기존 글 제목 손볼 대상)"])
-    if gsc and gsc.get("ok"):
-        candidates = gsc.get("title_fix_candidates", [])
-        if candidates:
-            for cand in candidates[:5]:
-                ctr_pct = round(cand["ctr"] * 100, 1)
-                title = cand.get("title", cand["page"])
-                lines.append(
-                    f"- '{cand['query']}' 노출 {cand['impressions']}/CTR {ctr_pct}%/순위 {cand['position']} → [{title}] 제목 재검토"
-                )
-        else:
-            lines.append("- 조건 충족 검색어 없음 (트래픽 누적 중)")
-    else:
-        reason = gsc.get("error", "미설정") if gsc else "미수집"
-        lines.append(f"- GSC 미연결/실패: {reason}")
+    candidates = gsc.get("title_fix_candidates", []) if gsc and gsc.get("ok") else []
+    if candidates:
+        lines.extend(["", "제목 보강 후보 (GSC 저CTR 검색어)"])
+        for cand in candidates[:5]:
+            ctr_pct = round(cand["ctr"] * 100, 1)
+            title = cand.get("title", cand["page"])
+            lines.append(
+                f"- '{cand['query']}' 노출 {cand['impressions']}/CTR {ctr_pct}%/순위 {cand['position']} → [{title}] 제목 재검토"
+            )
 
     lines.extend([
         "",
-        f"버즈 판단:\n{judgement}",
+        f"버즈 판단:\n{_truncate_complete_lines(judgement, limit=650, max_lines=7)}",
     ])
     if ai_cost_line:
         lines.extend(["", ai_cost_line])
@@ -632,6 +677,7 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
 - daily_top_posts의 조회·좋아요·댓글은 대상일 하루 데이터이며 사람 반응만 포함한다.
 - 에이전트 자동 댓글·에이전트 토론 투표·글의 누적 조회수는 성과 근거에 포함되지 않는다.
 - 대상일 상위 글/태그는 참고하되 같은 장르를 연속 추천하지 말 것.
+- ai_debate는 대상일 사람 댓글 합계가 2개 이상이거나 상위 글이 토론 글일 때만 추천할 것.
 - 데이터가 적으면 성공을 단정하지 말고 새 포맷 실험을 추천할 것.
 - 봇/저품질 유입 주의가 필요하면 이유나 피할 것에 짧게 반영.
 
@@ -647,13 +693,13 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
             max_tokens=350,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = msg.content[0].text.strip()
+        text = _guard_buzz_judgement(msg.content[0].text.strip(), snapshot, bot_signals)
         usage_obj = getattr(msg, "usage", None)
         input_tokens = int(getattr(usage_obj, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage_obj, "output_tokens", 0) or 0)
         return {
             "ok": True,
-            "text": text[:900],
+            "text": _truncate_complete_lines(text, limit=650, max_lines=7),
             "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
             "cost_usd": _cost_usd(input_tokens, output_tokens),
         }
