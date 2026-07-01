@@ -28,7 +28,8 @@ _ANTHROPIC_PRICE = {
 }
 # fal.ai: USD per image(추론당). ⚠ 정확한 단가는 fal 가격표에서 확인 후 갱신할 것.
 _FAL_PRICE = {
-    "fal-ai/flux-pro/kontext": float(os.environ.get("FAL_KONTEXT_USD_PER_IMG", "0.04")),
+    "fal-ai/flux-pro/kontext":     float(os.environ.get("FAL_KONTEXT_USD_PER_IMG", "0.04")),
+    "fal-ai/flux-pro/kontext/max": float(os.environ.get("FAL_KONTEXT_MAX_USD_PER_IMG", "0.08")),
     "fal-ai/flux/dev":         float(os.environ.get("FAL_FLUX_DEV_USD_PER_IMG", "0.025")),
     "fal-ai/flux/schnell":     float(os.environ.get("FAL_FLUX_SCHNELL_USD_PER_IMG", "0.003")),
 }
@@ -1126,13 +1127,14 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         return None
 
     # 포스트마다 랜덤 스타일 선택 — 스타일을 앞에, 부정어를 뒤에 배치
+    # 톤·구도는 scene_prompt(코미디 방향)가 전담 — 여기서 고정 접미사로 덮어쓰지 않음
     style = _THUMBNAIL_STYLE_MAP.get(force_style, None) if force_style else None
     if style is None:
         style = random.choice(_THUMBNAIL_STYLES)
     full_prompt = (
         f"{style['prefix']} "
         f"{scene_prompt}, "
-        "exaggerated expressive poses, cute and playful, high quality, no text, no watermark, "
+        "no text, no watermark, no Chinese characters, no Chinese text, "
         f"{style['suffix']}"
     )
 
@@ -1141,18 +1143,19 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         result = await asyncio.wait_for(
             asyncio.to_thread(
                 fal_client.subscribe,
-                "fal-ai/flux-pro/kontext",
+                "fal-ai/flux-pro/kontext/max",
                 arguments={
                     "image_url": char_url,
                     "prompt": full_prompt,
                     "aspect_ratio": "4:3",
-                    "output_format": "jpeg",
+                    "output_format": "png",
+                    "guidance_scale": 4.5,
                 },
             ),
             timeout=120.0,
         )
         fal_url = result["images"][0]["url"]
-        _log_image_cost(sink, "thumbnail", "fal-ai/flux-pro/kontext")
+        _log_image_cost(sink, "thumbnail", "fal-ai/flux-pro/kontext/max")
         return await _download_image(fal_url)
     except Exception as e:
         # 캐시된 캐릭터 URL이 만료됐을 수 있으니 비워서 다음 발행 때 재업로드(self-heal)
@@ -1179,16 +1182,31 @@ async def generate_scene_prompt_from_content(agent_id: str, title: str, content:
                 "  B) Absurd scale: tiny character on giant object OR towering over tiny things\n"
                 "  C) Ironic situation: character is the ONLY one enthusiastic while everything around them is chaos or indifferent\n"
                 "  D) Too many things at once: juggling/holding ridiculous number of props, sweating, panicked but smiling\n"
+                "  E) Deadpan detective: squinting through a magnifying glass or holding up evidence with exaggerated suspicion\n"
+                "  F) Mad scientist glee: cackling over a bubbling contraption or chalkboard full of scribbled diagrams\n"
+                "  G) Triumphant victory pose: dramatically striking a hero pose atop/beside the subject, cape or scarf flapping\n"
+                "  H) Sneaky mischief: tiptoeing or peeking from behind an object with an exaggerated sly grin\n"
+                "Also vary the SHOT: mix close-up, wide establishing shot, low angle (heroic), and bird's-eye view across posts — don't default to a plain mid-shot.\n"
                 "RULES:\n"
                 "- Clear dynamic ACTION (no standing still, no posing for camera)\n"
                 "- Costume matching the scene\n"
                 "- Cute and charming, NOT grotesque or disturbing\n"
+                "- NEVER describe signs, labels, screens, books, or any object with readable words/text on it "
+                "(image models render text as garbled gibberish) — show the IDEA visually instead (e.g. glowing "
+                "orbs/icons/objects, not labeled orbs)\n"
                 "- Environment reflects blog content\n"
                 "Output only the raw prompt, no explanation."
             ),
         }],
     )
-    return message.content[0].text.strip()
+    raw = message.content[0].text.strip()
+    # Haiku가 가끔 마크다운 헤더/메타 설명을 덧붙임 — 그대로 Flux에 넘기면 글자로 렌더링될 수 있어 제거
+    lines = [
+        ln for ln in raw.splitlines()
+        if ln.strip() and not ln.strip().startswith("#") and not re.fullmatch(r"\*\*.*\*\*", ln.strip())
+    ]
+    cleaned = " ".join(lines).replace("**", "").strip()
+    return cleaned or raw
 
 
 async def _generate_content_image(prompt: str, cheap: bool = False, sink: list | None = None) -> str | None:
@@ -1201,7 +1219,8 @@ async def _generate_content_image(prompt: str, cheap: bool = False, sink: list |
             "prompt": (
                 f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
                 "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
-                "smooth 3D render, playful and charming, no text, no watermark."
+                "smooth 3D render, playful and charming, no text, no watermark, "
+                "no Chinese characters, no Chinese text."
             ),
             "image_size": "square_hd",
         }
