@@ -352,10 +352,18 @@ async def _awards_judge_job():
 
 
 @app.post("/api/ga/run-monthly")
-async def run_ga_monthly_now(start_date: str | None = None, end_date: str | None = None):
+async def run_ga_monthly_now(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    update_memory: bool = True,
+):
     """수동 테스트용 — start_date/end_date 미지정 시 전달 기준."""
     from ga_monthly import run_monthly_ga_report
-    result = await run_monthly_ga_report(start_date=start_date, end_date=end_date)
+    result = await run_monthly_ga_report(
+        start_date=start_date,
+        end_date=end_date,
+        update_memory=update_memory,
+    )
     return result
 
 

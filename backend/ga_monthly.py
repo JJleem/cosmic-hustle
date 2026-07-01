@@ -169,6 +169,148 @@ def _lines_to_html_list(text: str) -> str:
     ) + "</ul>"
 
 
+def _metric(value, suffix: str = "") -> str:
+    if value is None:
+        return "N/A"
+    return f"{value}{suffix}"
+
+
+def _table_rows(rows: list[dict], columns: list[tuple[str, str, str]]) -> str:
+    if not rows:
+        return f"<tr><td colspan=\"{len(columns)}\" style=\"padding:8px;border:1px solid #e5e7eb;color:#777\">데이터 없음</td></tr>"
+    html_rows = []
+    for row in rows:
+        cells = []
+        for key, _, suffix in columns:
+            cells.append(
+                f"<td style=\"padding:8px;border:1px solid #e5e7eb\">{html.escape(_metric(row.get(key), suffix))}</td>"
+            )
+        html_rows.append("<tr>" + "".join(cells) + "</tr>")
+    return "".join(html_rows)
+
+
+def _table_html(rows: list[dict], columns: list[tuple[str, str, str]]) -> str:
+    headers = "".join(
+        f"<td style=\"padding:8px;border:1px solid #e5e7eb\">{html.escape(label)}</td>"
+        for _, label, _ in columns
+    )
+    return (
+        "<table style=\"border-collapse:collapse;width:100%;margin:8px 0 16px\">"
+        f"<tr style=\"background:#f3f4f6;font-weight:bold\">{headers}</tr>"
+        f"{_table_rows(rows, columns)}"
+        "</table>"
+    )
+
+
+def _monthly_takeaways(overview: dict, problem_pages: list, channels: list, devices: list) -> list[str]:
+    users = int(overview.get("total_users") or 0)
+    new_users = int(overview.get("new_users") or 0)
+    best_channel = _lowest_bounce_channel(channels)
+    slow_device = _slowest_device(devices)
+    worst_page = problem_pages[0] if problem_pages else None
+    takeaways = [
+        f"신규 사용자 비중은 {_pct(new_users, users)}입니다. 유입은 생기고 있지만 재방문 자산은 아직 약합니다.",
+    ]
+    if best_channel:
+        takeaways.append(
+            f"{best_channel['channel']} 유입은 세션 {best_channel['sessions']}, 이탈률 {best_channel['bounce_rate']}%로 가장 품질이 좋습니다."
+        )
+    if worst_page:
+        takeaways.append(
+            f"{worst_page['path']}는 이탈률 {worst_page['bounce_rate']}%입니다. 글 말미의 관련 글/댓글 CTA가 우선 개선 대상입니다."
+        )
+    if slow_device:
+        takeaways.append(
+            f"{slow_device['device']} 체류가 {slow_device['avg_session_sec']}초로 낮습니다. 첫 화면 요약과 이미지 로딩, 모바일 문단 길이를 점검하세요."
+        )
+    return takeaways
+
+
+def _monthly_actions() -> list[str]:
+    return [
+        "모든 신규 글 말미에 관련 글 2개와 댓글 질문 1개를 고정으로 넣습니다.",
+        "Referral 유입원의 실제 소스를 확인하고, 해당 독자층에 맞는 제목/도입부를 3편 이상 발행합니다.",
+        "모바일 첫 화면에서 제목, 요약, 대표 이미지가 한 화면 안에 들어오는지 점검합니다.",
+        "다음 월간 리포트에서는 재방문 사용자 수, 다음 페이지 이동률, Referral 소스별 성과를 같이 봅니다.",
+    ]
+
+
+def _render_monthly_email_bodies(
+    period: str,
+    overview: dict,
+    problem_pages: list,
+    pages: list,
+    channels: list,
+    devices: list,
+    ka_analysis: str,
+    buzz_suggestions: str,
+    memory_status: str,
+) -> tuple[str, str]:
+    takeaways = _monthly_takeaways(overview, problem_pages, channels, devices)
+    actions = _monthly_actions()
+    ka_excerpt = _trim_complete_lines(ka_analysis, limit=1200, max_lines=14)
+    buzz_excerpt = _trim_complete_lines(buzz_suggestions, limit=1000, max_lines=12)
+    top_pages = pages[:8] if pages else problem_pages
+
+    text_body = "\n\n".join([
+        f"Cosmic Hustle GA 월간 리포트 — {period}",
+        (
+            f"전체 요약: 세션 {overview.get('sessions','N/A')}, 사용자 {overview.get('total_users','N/A')}, "
+            f"페이지뷰 {overview.get('page_views','N/A')}, 이탈률 {overview.get('bounce_rate','N/A')}%, "
+            f"체류 {overview.get('avg_session_sec','N/A')}초"
+        ),
+        "핵심 해석\n" + "\n".join(f"- {item}" for item in takeaways),
+        "카의 분석\n" + ka_excerpt,
+        "버즈의 개선안\n" + buzz_excerpt,
+        "이번 달 실행 체크리스트\n" + "\n".join(f"- {item}" for item in actions),
+        memory_status,
+    ])
+
+    summary_cards = "".join([
+        f"<div style=\"padding:12px;border:1px solid #e5e7eb;background:#fafafa\"><div style=\"font-size:12px;color:#666\">세션</div><b>{overview.get('sessions','N/A')}</b></div>",
+        f"<div style=\"padding:12px;border:1px solid #e5e7eb;background:#fafafa\"><div style=\"font-size:12px;color:#666\">사용자</div><b>{overview.get('total_users','N/A')}</b></div>",
+        f"<div style=\"padding:12px;border:1px solid #e5e7eb;background:#fafafa\"><div style=\"font-size:12px;color:#666\">페이지뷰</div><b>{overview.get('page_views','N/A')}</b></div>",
+        f"<div style=\"padding:12px;border:1px solid #e5e7eb;background:#fafafa\"><div style=\"font-size:12px;color:#666\">이탈률</div><b>{overview.get('bounce_rate','N/A')}%</b></div>",
+        f"<div style=\"padding:12px;border:1px solid #e5e7eb;background:#fafafa\"><div style=\"font-size:12px;color:#666\">평균 체류</div><b>{overview.get('avg_session_sec','N/A')}초</b></div>",
+        f"<div style=\"padding:12px;border:1px solid #e5e7eb;background:#fafafa\"><div style=\"font-size:12px;color:#666\">신규 사용자</div><b>{overview.get('new_users','N/A')}</b></div>",
+    ])
+    html_body = f"""
+<html><body style="font-family:Arial,sans-serif;max-width:760px;margin:0 auto;color:#1a1a1a;line-height:1.5">
+<h2 style="color:#6d28d9;margin-bottom:4px">Cosmic Hustle — GA 월간 리포트</h2>
+<p style="color:#666;margin-top:0">{html.escape(period)}</p>
+
+<h3>전체 요약</h3>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:16px">{summary_cards}</div>
+
+<h3>핵심 해석</h3>
+<div style="background:#f8fafc;padding:14px;border-radius:8px">{_lines_to_html_list(chr(10).join(takeaways))}</div>
+
+<h3>주의 페이지 TOP {len(problem_pages)}</h3>
+{_table_html(problem_pages, [("path", "페이지", ""), ("bounce_rate", "이탈률", "%"), ("avg_session_sec", "체류시간", "초"), ("sessions", "세션", "")])}
+
+<h3>상위 페이지 지표</h3>
+{_table_html(top_pages, [("path", "페이지", ""), ("sessions", "세션", ""), ("page_views", "페이지뷰", ""), ("bounce_rate", "이탈률", "%"), ("avg_session_sec", "체류시간", "초")])}
+
+<h3>유입 채널</h3>
+{_table_html(channels[:6], [("channel", "채널", ""), ("sessions", "세션", ""), ("bounce_rate", "이탈률", "%")])}
+
+<h3>기기별 체류</h3>
+{_table_html(devices[:5], [("device", "기기", ""), ("sessions", "세션", ""), ("bounce_rate", "이탈률", "%"), ("avg_session_sec", "체류시간", "초")])}
+
+<h3>카의 분석</h3>
+<div style="background:#faf5ff;padding:14px;border-radius:8px">{_lines_to_html_list(ka_excerpt)}</div>
+
+<h3>버즈의 개선안</h3>
+<div style="background:#fff7ed;padding:14px;border-radius:8px">{_lines_to_html_list(buzz_excerpt)}</div>
+
+<h3>이번 달 실행 체크리스트</h3>
+<div style="background:#ecfdf5;padding:14px;border-radius:8px">{_lines_to_html_list(chr(10).join(actions))}</div>
+
+<p style="color:#999;font-size:12px;margin-top:28px">{html.escape(memory_status)}<br>Cosmic Hustle 자동 발송</p>
+</body></html>"""
+    return text_body, html_body
+
+
 def _delta_str(curr: dict, prev: dict) -> str:
     """이번 달 vs 이전 달 수치 변화 요약 문자열 생성."""
     if not prev:
@@ -338,6 +480,9 @@ def _send_email(
     ka_analysis: str,
     buzz_suggestions: str,
     *,
+    pages: list | None = None,
+    channels: list | None = None,
+    devices: list | None = None,
     memory_updated: bool = True,
 ):
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -350,79 +495,18 @@ def _send_email(
         logger.warning("SMTP 미설정 — 이메일 발송 건너뜀")
         return {"ok": False, "skipped": True, "reason": "missing_smtp"}
 
-    # 페이지 테이블 rows
-    page_rows = "".join(
-        f"<tr><td>{p['path']}</td><td>{p['bounce_rate']}%</td>"
-        f"<td>{p['avg_session_sec']}초</td><td>{p['sessions']}</td></tr>"
-        for p in problem_pages
-    )
-
-    ka_excerpt = _trim_complete_lines(ka_analysis, limit=900, max_lines=12)
-    buzz_excerpt = _trim_complete_lines(buzz_suggestions, limit=800, max_lines=10)
-    ka_html = _lines_to_html_list(ka_excerpt)
-    buzz_html = _lines_to_html_list(buzz_excerpt)
     memory_status = "에이전트 메모리 업데이트 완료 (buzz / over / pixel / ka)" if memory_updated else "GA 데이터 없음: 에이전트 메모리 업데이트 건너뜀"
-
-    text_body = "\n\n".join([
-        f"Cosmic Hustle GA 월간 리포트 — {period}",
-        (
-            f"전체 요약: 세션 {overview.get('sessions','N/A')}, 사용자 {overview.get('total_users','N/A')}, "
-            f"페이지뷰 {overview.get('page_views','N/A')}, 이탈률 {overview.get('bounce_rate','N/A')}%, "
-            f"체류 {overview.get('avg_session_sec','N/A')}초"
-        ),
-        f"주의 페이지 TOP {len(problem_pages)}",
-        "카의 분석\n" + ka_excerpt,
-        "버즈의 개선안\n" + buzz_excerpt,
+    text_body, html_body = _render_monthly_email_bodies(
+        period,
+        overview,
+        problem_pages,
+        pages or [],
+        channels or [],
+        devices or [],
+        ka_analysis,
+        buzz_suggestions,
         memory_status,
-    ])
-
-    html_body = f"""
-<html><body style="font-family:sans-serif;max-width:680px;margin:0 auto;color:#1a1a1a">
-<h2 style="color:#6d28d9">Cosmic Hustle — GA 월간 리포트</h2>
-<p style="color:#666">{period}</p>
-
-<h3>전체 요약</h3>
-<table style="border-collapse:collapse;width:100%">
-<tr style="background:#f3f4f6">
-  <td style="padding:8px;border:1px solid #e5e7eb">총 세션</td>
-  <td style="padding:8px;border:1px solid #e5e7eb"><b>{overview.get('sessions','N/A')}</b></td>
-  <td style="padding:8px;border:1px solid #e5e7eb">총 사용자</td>
-  <td style="padding:8px;border:1px solid #e5e7eb"><b>{overview.get('total_users','N/A')}</b></td>
-</tr>
-<tr>
-  <td style="padding:8px;border:1px solid #e5e7eb">전체 이탈률</td>
-  <td style="padding:8px;border:1px solid #e5e7eb"><b>{overview.get('bounce_rate','N/A')}%</b></td>
-  <td style="padding:8px;border:1px solid #e5e7eb">평균 체류시간</td>
-  <td style="padding:8px;border:1px solid #e5e7eb"><b>{overview.get('avg_session_sec','N/A')}초</b></td>
-</tr>
-<tr style="background:#f3f4f6">
-  <td style="padding:8px;border:1px solid #e5e7eb">페이지뷰</td>
-  <td style="padding:8px;border:1px solid #e5e7eb"><b>{overview.get('page_views','N/A')}</b></td>
-  <td style="padding:8px;border:1px solid #e5e7eb">신규 사용자</td>
-  <td style="padding:8px;border:1px solid #e5e7eb"><b>{overview.get('new_users','N/A')}</b></td>
-</tr>
-</table>
-
-<h3>주의 페이지 TOP {len(problem_pages)}</h3>
-<table style="border-collapse:collapse;width:100%">
-<tr style="background:#f3f4f6;font-weight:bold">
-  <td style="padding:8px;border:1px solid #e5e7eb">페이지</td>
-  <td style="padding:8px;border:1px solid #e5e7eb">이탈률</td>
-  <td style="padding:8px;border:1px solid #e5e7eb">체류시간</td>
-  <td style="padding:8px;border:1px solid #e5e7eb">세션</td>
-</tr>
-{page_rows}
-</table>
-
-<h3>카의 분석</h3>
-<div style="background:#faf5ff;padding:16px;border-radius:8px">{ka_html}</div>
-
-<h3>버즈의 개선안</h3>
-<div style="background:#fff7ed;padding:16px;border-radius:8px">{buzz_html}</div>
-
-<p style="color:#999;font-size:12px;margin-top:32px">{html.escape(memory_status)}<br>
-Cosmic Hustle 자동 발송</p>
-</body></html>"""
+    )
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[Cosmic Hustle] GA 월간 리포트 — {period}"
@@ -440,7 +524,11 @@ Cosmic Hustle 자동 발송</p>
     return {"ok": True, "to": to_email}
 
 
-async def run_monthly_ga_report(start_date: str | None = None, end_date: str | None = None):
+async def run_monthly_ga_report(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    update_memory: bool = True,
+):
     """월간 GA 분석 실행. 날짜 미지정 시 전달(1일~말일) 기준."""
     import ga_client
 
@@ -462,17 +550,30 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
     problem_pages = [p for p in pages if p["sessions"] >= 5][:5]
     has_ga_metrics = _has_ga_metrics(overview, pages, channels, devices)
 
+    memory_updated = False
     if has_ga_metrics:
         ka_analysis = await _analyze_with_ka(overview, problem_pages, channels, devices, period)
         buzz_suggestions = await _suggest_with_buzz(ka_analysis, overview, period)
-        await _update_agent_memories(ka_analysis, buzz_suggestions, period, overview)
+        if update_memory:
+            await _update_agent_memories(ka_analysis, buzz_suggestions, period, overview)
+            memory_updated = True
     else:
         ka_analysis = _no_ga_data_analysis(period)
         buzz_suggestions = "GA 데이터가 없어 개선안을 생성하지 않았습니다. 먼저 측정 설정을 복구한 뒤 다음 월간 리포트에서 전략을 만듭니다."
         logger.warning("GA 월간 데이터 없음 — AI 분석과 메모리 업데이트를 건너뜀: %s", period)
 
     try:
-        email_status = _send_email(period, overview, problem_pages, ka_analysis, buzz_suggestions, memory_updated=has_ga_metrics)
+        email_status = _send_email(
+            period,
+            overview,
+            problem_pages,
+            ka_analysis,
+            buzz_suggestions,
+            pages=pages,
+            channels=channels,
+            devices=devices,
+            memory_updated=memory_updated,
+        )
     except Exception as e:
         logger.error(f"이메일 발송 실패: {e}")
         email_status = {"ok": False, "error": str(e)}
@@ -485,6 +586,6 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
         "problem_pages": problem_pages,
         "ka_analysis": ka_analysis,
         "buzz_suggestions": buzz_suggestions,
-        "memory_updated": has_ga_metrics,
+        "memory_updated": memory_updated,
         "email": email_status,
     }
