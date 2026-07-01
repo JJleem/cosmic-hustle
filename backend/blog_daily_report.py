@@ -775,7 +775,19 @@ def _replace_growth_memory_section(current_memory: str | None, section: str, lim
         updated = f"{current}\n\n{section}"
     else:
         updated = section
-    return updated[-limit:].strip() if len(updated) > limit else updated
+    if len(updated) <= limit:
+        return updated
+    lines = [line.rstrip() for line in updated.splitlines() if line.strip()]
+    selected: list[str] = []
+    for line in reversed(lines):
+        candidate = "\n".join([line, *reversed(selected)])
+        if len(candidate) > limit:
+            break
+        selected.append(line)
+    kept = list(reversed(selected))
+    if len(kept) < len(lines):
+        kept.insert(0, "... (이전 내용 생략)")
+    return "\n".join(kept).strip()
 
 
 def update_buzz_growth_memory(

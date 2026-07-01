@@ -69,6 +69,25 @@ def _trim_complete_lines(text: str | None, limit: int = 900, max_lines: int = 10
     return "\n".join(selected)
 
 
+def _trim_complete_lines_from_end(text: str | None, limit: int, max_lines: int | None = None) -> str:
+    lines = [line.rstrip() for line in (text or "").strip().splitlines() if line.strip()]
+    selected: list[str] = []
+    for line in reversed(lines):
+        if max_lines is not None and len(selected) >= max_lines:
+            break
+        candidate_lines = [line, *reversed(selected)]
+        candidate = "\n".join(candidate_lines)
+        if len(candidate) > limit:
+            break
+        selected.append(line)
+    if not selected:
+        return "요약 생략"
+    kept = list(reversed(selected))
+    if len(kept) < len(lines):
+        kept.insert(0, "... (이전 내용 생략)")
+    return "\n".join(kept)
+
+
 def _no_ga_data_analysis(period: str) -> str:
     return "\n".join([
         f"GA 데이터 수집 확인 필요 — {period}",
@@ -353,9 +372,15 @@ def _split_growth_memory(memory: str | None) -> tuple[str | None, str | None]:
 
 def _restore_growth_memory(memory: str, growth: str | None, limit: int = 1800) -> str:
     if not growth:
-        return memory
+        return _trim_complete_lines(memory, limit=limit, max_lines=40)
     updated = f"{memory.strip()}\n\n{growth}".strip() if memory.strip() else growth
-    return updated[-limit:].strip() if len(updated) > limit else updated
+    if len(updated) <= limit:
+        return updated
+    growth_budget = min(len(growth), 900)
+    base_budget = max(limit - growth_budget - 2, 300)
+    base = _trim_complete_lines(memory, limit=base_budget, max_lines=30)
+    restored = f"{base.strip()}\n\n{growth.strip()}".strip()
+    return _trim_complete_lines_from_end(restored, limit=limit, max_lines=60)
 
 
 async def _update_agent_memories(
@@ -457,7 +482,7 @@ async def _update_agent_memories(
                 max_tokens=700,
                 messages=[{"role": "user", "content": prompt}],
             )
-            new_memory = msg.content[0].text.strip()[:1200]
+            new_memory = _trim_complete_lines(msg.content[0].text.strip(), limit=1200, max_lines=40)
             if agent_id == "buzz":
                 new_memory = _restore_growth_memory(new_memory, growth_memory)
 
