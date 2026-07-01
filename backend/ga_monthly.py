@@ -2,6 +2,7 @@
 import html
 import json
 import os
+import re
 import smtplib
 import logging
 from datetime import date, datetime, timedelta
@@ -79,82 +80,93 @@ def _no_ga_data_analysis(period: str) -> str:
 
 
 async def _analyze_with_ka(overview: dict, pages: list, channels: list, devices: list, period: str) -> str:
-    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
-    # 문제 페이지 TOP 5 (이탈률 높고 세션 10 이상)
-    problem_pages = [p for p in pages if p["sessions"] >= 5][:5]
-    pages_text = "\n".join(
-        f"  {i+1}. {p['path']} — 이탈률 {p['bounce_rate']}%, 체류 {p['avg_session_sec']}초, 세션 {p['sessions']}"
-        for i, p in enumerate(problem_pages)
-    )
-    channels_text = "\n".join(
-        f"  - {c['channel']}: 세션 {c['sessions']}, 이탈률 {c['bounce_rate']}%"
-        for c in channels
-    )
-    devices_text = "\n".join(
-        f"  - {d['device']}: 세션 {d['sessions']}, 체류 {d['avg_session_sec']}초"
-        for d in devices
-    )
-
-    prompt = f"""【분석 기간】{period}
-
-【전체 요약】
-- 총 세션: {overview.get('sessions', 'N/A')}
-- 총 사용자: {overview.get('total_users', 'N/A')} (신규: {overview.get('new_users', 'N/A')})
-- 전체 이탈률: {overview.get('bounce_rate', 'N/A')}%
-- 평균 체류시간: {overview.get('avg_session_sec', 'N/A')}초
-- 총 페이지뷰: {overview.get('page_views', 'N/A')}
-
-【이탈률 높은 페이지 TOP 5】
-{pages_text if pages_text else "  데이터 없음"}
-
-【유입 채널】
-{channels_text if channels_text else "  데이터 없음"}
-
-【기기 분포】
-{devices_text if devices_text else "  데이터 없음"}
-
-위 데이터를 분석해 다음을 작성하세요:
-1. 전체 블로그 현황 총평 (2~3문장)
-2. 핵심 문제점 3가지 (수치 근거 포함)
-3. 주목할 긍정적 신호 1~2가지
-4. 에이전트(글쓴이)별 개선 방향 힌트 (buzz/over/pixel 각 1줄)
-
-전체 900자 이하. 표, 긴 서론, 마크다운 장식은 쓰지 마세요."""
-
-    msg = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=700,
-        system=KA_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return _trim_complete_lines(msg.content[0].text.strip(), limit=900, max_lines=12)
+    return _build_ka_analysis(overview, pages, channels, devices, period)
 
 
 async def _suggest_with_buzz(ka_analysis: str, overview: dict, period: str) -> str:
-    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    return _build_buzz_suggestions(overview, period)
 
-    prompt = f"""【기간】{period}
-【카의 분석 결과】
-{ka_analysis}
 
-【전체 이탈률】{overview.get('bounce_rate', 'N/A')}% / 평균 체류 {overview.get('avg_session_sec', 'N/A')}초
+def _pct(numerator: int | float | None, denominator: int | float | None) -> str:
+    if not numerator or not denominator:
+        return "N/A"
+    return f"{(float(numerator) / float(denominator) * 100):.1f}%"
 
-위 분석을 바탕으로 다음 달 블로그 개선을 위한 액션 아이템을 작성하세요:
-1. 글 구조 개선 (서론 길이, 소제목 배치, 요약 위치 등)
-2. 주제 방향 (잘 되는 카테고리·형식 강화, 피해야 할 패턴)
-3. 에이전트별 맞춤 조언 (buzz / over / pixel 각 1~2문장)
-4. 이번 달 최우선 실험 1가지 (A/B 테스트 가능한 수준으로 구체적으로)
 
-전체 800자 이하. 표, 긴 서론, 마크다운 장식은 쓰지 마세요."""
+def _lowest_bounce_channel(channels: list[dict]) -> dict | None:
+    eligible = [c for c in channels if int(c.get("sessions") or 0) > 0]
+    return min(eligible, key=lambda c: float(c.get("bounce_rate") or 100), default=None)
 
-    msg = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=600,
-        system=BUZZ_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return _trim_complete_lines(msg.content[0].text.strip(), limit=800, max_lines=10)
+
+def _slowest_device(devices: list[dict]) -> dict | None:
+    eligible = [d for d in devices if int(d.get("sessions") or 0) > 0]
+    return min(eligible, key=lambda d: int(d.get("avg_session_sec") or 0), default=None)
+
+
+def _build_ka_analysis(overview: dict, pages: list, channels: list, devices: list, period: str) -> str:
+    sessions = int(overview.get("sessions") or 0)
+    users = int(overview.get("total_users") or 0)
+    new_users = int(overview.get("new_users") or 0)
+    page_views = int(overview.get("page_views") or 0)
+    avg_sec = int(overview.get("avg_session_sec") or 0)
+    bounce = overview.get("bounce_rate", "N/A")
+    worst_page = pages[0] if pages else None
+    best_channel = _lowest_bounce_channel(channels)
+    slow_device = _slowest_device(devices)
+
+    lines = [
+        f"찾았다. {period}은 세션 {sessions}, 사용자 {users}, 페이지뷰 {page_views}, 평균 체류 {avg_sec}초입니다.",
+        f"전체 이탈률은 {bounce}%이고 신규 사용자 비중은 {_pct(new_users, users)}입니다.",
+    ]
+    if worst_page:
+        lines.append(
+            f"핵심 1. {worst_page['path']}는 이탈률 {worst_page['bounce_rate']}%, 체류 {worst_page['avg_session_sec']}초, 세션 {worst_page['sessions']}입니다. 글 끝 내부 이동 장치가 필요합니다."
+        )
+    if slow_device:
+        lines.append(
+            f"핵심 2. {slow_device['device']} 체류가 {slow_device['avg_session_sec']}초로 가장 낮습니다. 첫 화면 요약과 모바일 가독성을 우선 점검하세요."
+        )
+    if best_channel:
+        lines.append(
+            f"긍정 신호. {best_channel['channel']} 유입은 세션 {best_channel['sessions']}, 이탈률 {best_channel['bounce_rate']}%입니다. 이 채널의 유입원을 다음 성장 레버로 봅니다."
+        )
+    lines.extend([
+        "buzz: 이탈률 낮은 유입 채널의 독자 의도를 기준으로 제목과 CTA를 맞추세요.",
+        "over: 완결형 글 끝에 관련 글 2개와 다음 행동 문장을 붙이세요.",
+        "pixel: 모바일 첫 화면에서 제목, 요약, 대표 이미지가 바로 신뢰를 주는지 점검하세요.",
+    ])
+    return "\n".join(lines)
+
+
+def _build_buzz_suggestions(overview: dict, period: str) -> str:
+    bounce = overview.get("bounce_rate", "N/A")
+    avg_sec = overview.get("avg_session_sec", "N/A")
+    return "\n".join([
+        f"버즈 판단. {period}의 다음 목표는 재방문과 내부 이동입니다. 이탈률 {bounce}%, 평균 체류 {avg_sec}초를 기준으로 봅니다.",
+        "글 구조. 모든 신규 글은 첫 3문장 안에 핵심 요약을 넣고, 300~400자마다 소제목을 둡니다.",
+        "CTA. 글 말미에 관련 글 2개와 댓글 질문 1개를 고정으로 넣습니다.",
+        "주제 방향. 유입 품질이 좋은 채널의 독자 의도와 맞는 글을 우선 발행합니다.",
+        "에이전트별. buzz는 유입 채널 분석, over는 관련 글 연결, pixel은 모바일 첫 화면 개선을 맡습니다.",
+        "최우선 실험. 다음 신규 글 5편 중 A안은 기존 형식, B안은 첫 화면 요약과 관련 글 CTA를 넣은 형식으로 발행해 이탈률과 다음 페이지 이동을 비교합니다.",
+    ])
+
+
+def _strip_markdown(text: str) -> str:
+    cleaned = re.sub(r"(\*\*|__)(.*?)\1", r"\2", text or "")
+    cleaned = re.sub(r"(^|\s)(`{1,3})([^`]+)\2", r"\1\3", cleaned)
+    cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned)
+    cleaned = re.sub(r"^\s*[-*]\s+", "", cleaned)
+    return cleaned.strip()
+
+
+def _lines_to_html_list(text: str) -> str:
+    items = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    if not items:
+        return "<p>내용 없음</p>"
+    return "<ul>" + "".join(
+        f"<li style=\"margin:6px 0;line-height:1.55\">{html.escape(_strip_markdown(item))}</li>"
+        for item in items
+    ) + "</ul>"
 
 
 def _delta_str(curr: dict, prev: dict) -> str:
@@ -336,7 +348,7 @@ def _send_email(
 
     if not smtp_user or not smtp_password:
         logger.warning("SMTP 미설정 — 이메일 발송 건너뜀")
-        return
+        return {"ok": False, "skipped": True, "reason": "missing_smtp"}
 
     # 페이지 테이블 rows
     page_rows = "".join(
@@ -347,6 +359,8 @@ def _send_email(
 
     ka_excerpt = _trim_complete_lines(ka_analysis, limit=900, max_lines=12)
     buzz_excerpt = _trim_complete_lines(buzz_suggestions, limit=800, max_lines=10)
+    ka_html = _lines_to_html_list(ka_excerpt)
+    buzz_html = _lines_to_html_list(buzz_excerpt)
     memory_status = "에이전트 메모리 업데이트 완료 (buzz / over / pixel / ka)" if memory_updated else "GA 데이터 없음: 에이전트 메모리 업데이트 건너뜀"
 
     text_body = "\n\n".join([
@@ -401,10 +415,10 @@ def _send_email(
 </table>
 
 <h3>카의 분석</h3>
-<div style="background:#faf5ff;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(ka_excerpt)}</div>
+<div style="background:#faf5ff;padding:16px;border-radius:8px">{ka_html}</div>
 
 <h3>버즈의 개선안</h3>
-<div style="background:#fff7ed;padding:16px;border-radius:8px;white-space:pre-wrap">{html.escape(buzz_excerpt)}</div>
+<div style="background:#fff7ed;padding:16px;border-radius:8px">{buzz_html}</div>
 
 <p style="color:#999;font-size:12px;margin-top:32px">{html.escape(memory_status)}<br>
 Cosmic Hustle 자동 발송</p>
@@ -423,6 +437,7 @@ Cosmic Hustle 자동 발송</p>
         server.sendmail(smtp_user, to_email, msg.as_string())
 
     logger.info(f"GA 월간 리포트 이메일 발송 완료 → {to_email}")
+    return {"ok": True, "to": to_email}
 
 
 async def run_monthly_ga_report(start_date: str | None = None, end_date: str | None = None):
@@ -457,9 +472,10 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
         logger.warning("GA 월간 데이터 없음 — AI 분석과 메모리 업데이트를 건너뜀: %s", period)
 
     try:
-        _send_email(period, overview, problem_pages, ka_analysis, buzz_suggestions, memory_updated=has_ga_metrics)
+        email_status = _send_email(period, overview, problem_pages, ka_analysis, buzz_suggestions, memory_updated=has_ga_metrics)
     except Exception as e:
         logger.error(f"이메일 발송 실패: {e}")
+        email_status = {"ok": False, "error": str(e)}
 
     logger.info(f"GA 월간 분석 완료 — {period}")
     return {
@@ -470,4 +486,5 @@ async def run_monthly_ga_report(start_date: str | None = None, end_date: str | N
         "ka_analysis": ka_analysis,
         "buzz_suggestions": buzz_suggestions,
         "memory_updated": has_ga_metrics,
+        "email": email_status,
     }

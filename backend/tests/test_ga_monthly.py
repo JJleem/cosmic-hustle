@@ -1,6 +1,7 @@
 import importlib.util
 import asyncio
 from datetime import date
+from email import message_from_string
 from pathlib import Path
 
 
@@ -58,6 +59,7 @@ def test_run_monthly_skips_ai_memory_when_ga_has_no_rows(monkeypatch):
 
     def _fake_email(*args, **kwargs):
         calls["email"] = kwargs
+        return {"ok": True}
 
     monkeypatch.setattr(ga_monthly, "_analyze_with_ka", _fake_analyze)
     monkeypatch.setattr(ga_monthly, "_update_agent_memories", _fake_memory)
@@ -67,6 +69,56 @@ def test_run_monthly_skips_ai_memory_when_ga_has_no_rows(monkeypatch):
 
     assert result["ok"] is True
     assert result["memory_updated"] is False
+    assert result["email"] == {"ok": True}
     assert calls["analyze"] == 0
     assert calls["memory"] == 0
     assert calls["email"] == {"memory_updated": False}
+
+
+def test_email_html_renders_lists_without_markdown(monkeypatch):
+    ga_monthly = _load_module()
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port):
+            sent["host"] = host
+            sent["port"] = port
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def starttls(self):
+            sent["tls"] = True
+
+        def login(self, user, password):
+            sent["login"] = (user, password)
+
+        def sendmail(self, from_addr, to_addrs, raw):
+            sent["raw"] = raw
+
+    monkeypatch.setattr(ga_monthly.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setenv("SMTP_USER", "from@example.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "pw")
+    monkeypatch.setenv("REPORT_EMAIL", "to@example.com")
+
+    result = ga_monthly._send_email(
+        "2026-06-01 ~ 2026-06-30",
+        {"sessions": 448, "total_users": 189, "page_views": 3567, "bounce_rate": 30.8, "avg_session_sec": 666, "new_users": 188},
+        [{"path": "/discovery", "bounce_rate": 100.0, "avg_session_sec": 90, "sessions": 6}],
+        "찾았다. **마크다운** 없이 표시\n핵심 1. 완료된 문장입니다.",
+        "버즈 판단. 완료된 문장입니다.\n최우선 실험. B안도 끝까지 완성된 문장입니다.",
+    )
+
+    msg = message_from_string(sent["raw"])
+    html_part = next(part for part in msg.walk() if part.get_content_type() == "text/html")
+    html_body = html_part.get_payload(decode=True).decode("utf-8")
+
+    assert "<ul>" in html_body
+    assert "<li" in html_body
+    assert "white-space:pre-wrap" not in html_body
+    assert "**" not in html_body
+    assert "B안도 끝까지 완성된 문장입니다." in html_body
+    assert result == {"ok": True, "to": "to@example.com"}
