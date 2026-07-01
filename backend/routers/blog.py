@@ -1000,6 +1000,8 @@ async def regenerate_thumbnail(request: Request, slug: str, body: dict = None, d
 
     post.thumbnail_url = url
     db.commit()
+    if post.published:
+        revalidate_frontend_bg([post.slug])
     return {"thumbnail_url": url, "scene_prompt": scene_prompt}
 
 
