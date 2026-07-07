@@ -1374,6 +1374,15 @@ _GENERAL_CONTENT_TYPE_BY_AGENT = {
     "wiki":  "WIKI",
 }
 
+# 5K: 일반 자동 발행 중 SEO 마커를 켤 에이전트 allowlist (순차 활성화용).
+# 비어 있으면 discovery 외 일반 자동 SEO는 전부 OFF (fail-safe). 현재는 pixel만.
+# 확장은 반드시 한 명씩 추가하고, 에이전트별 실제 발행을 관찰한 뒤 다음으로 넘어간다.
+SEO_ENABLED_GENERAL_AGENTS = frozenset({"pixel"})
+
+
+def general_seo_enabled(agent_id: str) -> bool:
+    return agent_id in SEO_ENABLED_GENERAL_AGENTS
+
 # 4B-2: 일반 게시글용 SEO 메타 규칙. discovery(과학 전용)와 분리 — 문구 중립.
 _GENERAL_SEO_RULES = """
 

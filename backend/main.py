@@ -60,7 +60,7 @@ app.include_router(dm.router)
 
 
 async def _daily_blog_job():
-    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs
+    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled
     from db.models import BlogComment
 
     for attempt in range(1, 4):
@@ -89,7 +89,7 @@ async def _daily_blog_job():
                 # 포케는 discovery 전용 — 실사진 박힌 단일주제 과학글(카테고리 날짜 로테이션)
                 data = await generate_discovery_post(recent_titles=recent_titles, seo_markers=True)
             else:
-                data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags)
+                data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags, seo_markers=general_seo_enabled(today_agent_id))
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")

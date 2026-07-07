@@ -438,11 +438,19 @@ def test_scheduled_discovery_enables_seo_without_published_override():
     assert "published" not in keywords
 
 
-def test_scheduled_general_generation_keeps_seo_off():
+# 5K-A: 일반 자동 발행의 seo_markers는 allowlist 헬퍼로 게이팅된다.
+# 리터럴 True(무조건/일괄 활성화)나 미전달이 아니라 general_seo_enabled(today_agent_id) 호출이어야 한다.
+def test_scheduled_general_seo_is_allowlist_gated():
     calls = _calls_in_daily_job("generate_blog_post")
     assert len(calls) == 1
     keywords = {kw.arg: kw.value for kw in calls[0].keywords}
-    assert "seo_markers" not in keywords
+    seo = keywords.get("seo_markers")
+    assert seo is not None, "일반 호출에 seo_markers 배선 필요"
+    # 리터럴 상수 금지 — allowlist 헬퍼 호출만 허용(일괄 활성화 실수 방지)
+    assert isinstance(seo, ast.Call), "seo_markers는 general_seo_enabled(...) 호출이어야 함"
+    assert isinstance(seo.func, ast.Name) and seo.func.id == "general_seo_enabled"
+    assert len(seo.args) == 1
+    assert isinstance(seo.args[0], ast.Name) and seo.args[0].id == "today_agent_id"
 
 
 def test_daily_blog_schedule_stays_at_9am_kst():
@@ -660,3 +668,59 @@ def test_other_agents_guidance_unchanged(agent_id, existing_phrase):
     assert existing_phrase in system            # 기존 유형별 지시 그대로
     assert _WIKI_GROUNDING_KEY not in system    # wiki 전용 문구 미혼입
     assert _BUZZ_GROUNDING_KEY not in system    # buzz 전용 문구 미혼입
+
+
+# ── 5K-A: 일반 자동 SEO allowlist (pixel 단일 활성화) ────────────────────────────
+# general_seo_enabled 순수 함수 분기 + allowlist에 따른 seo_markers 배선만 검증.
+# 실제 생성/DB/scheduler 없이 mock 하니스로만 확인한다.
+
+_NON_PIXEL_GENERAL = ["buzz", "over", "ka", "ping", "wiki"]
+
+
+# A. allowlist는 현재 pixel만 — 헬퍼가 pixel만 True
+def test_general_seo_allowlist_pixel_only():
+    assert blog_generator.SEO_ENABLED_GENERAL_AGENTS == frozenset({"pixel"})
+    assert blog_generator.general_seo_enabled("pixel") is True
+    for agent_id in _NON_PIXEL_GENERAL:
+        assert blog_generator.general_seo_enabled(agent_id) is False
+
+
+# B. allowlist가 비면 pixel 포함 전부 False (fail-safe)
+def test_general_seo_allowlist_empty_disables_all(monkeypatch):
+    monkeypatch.setattr(blog_generator, "SEO_ENABLED_GENERAL_AGENTS", frozenset())
+    for agent_id in ["pixel", *_NON_PIXEL_GENERAL]:
+        assert blog_generator.general_seo_enabled(agent_id) is False
+
+
+# C. Pixel 일반 글 — 헬퍼가 켠 seo_markers로 SEO 3필드 + content_type=DESIGN 생성
+def test_pixel_general_seo_on_produces_fields():
+    seo_markers = blog_generator.general_seo_enabled("pixel")   # 실제 배선 값
+    assert seo_markers is True
+    data, system = _run_blog_post("pixel", _BODY_FULL + _SEO_TAIL, seo_markers=seo_markers)
+    assert "{{SEO_TITLE}}" in system                            # SEO 규칙 주입됨
+    for k in ("seo_title", "summary", "seo_description"):
+        assert data.get(k) and data[k].strip()                 # 3필드 존재·비어있지 않음
+    assert data["content_type"] == "DESIGN"
+    assert "{{" not in data["content"]                         # 마커 잔존 없음
+
+
+# D. non-Pixel 일반 글 — 헬퍼가 끈 seo_markers로 기존처럼 SEO 키 없음
+@pytest.mark.parametrize("agent_id", _NON_PIXEL_GENERAL)
+def test_nonpixel_general_seo_off_no_fields(agent_id):
+    seo_markers = blog_generator.general_seo_enabled(agent_id)  # 실제 배선 값
+    assert seo_markers is False
+    raw = _BODY_FULL + "\n\n{{THUMBNAIL: a hamster}}\n{{TAGS: 태그1, 태그2}}"
+    data, system = _run_blog_post(agent_id, raw, seo_markers=seo_markers)
+    for k in ("seo_title", "summary", "seo_description", "content_type"):
+        assert k not in data                                   # SEO 키 미생성
+    assert "{{SEO_TITLE}}" not in system                       # SEO 규칙 미주입
+
+
+# E. discovery는 allowlist와 무관 — 빈 allowlist에서도 seo_markers=True면 SEO 정상
+def test_discovery_independent_of_general_allowlist(monkeypatch):
+    monkeypatch.setattr(blog_generator, "SEO_ENABLED_GENERAL_AGENTS", frozenset())
+    data, system = _run_discovery_post(_BODY_FULL + _SEO_TAIL, seo_markers=True)
+    assert "{{SEO_TITLE}}" in system
+    for k in ("seo_title", "summary", "seo_description"):
+        assert data.get(k) and data[k].strip()
+    assert data["content_type"] == "SCIENCE"                   # discovery 고정값 불변
