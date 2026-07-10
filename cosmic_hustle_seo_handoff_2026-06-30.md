@@ -1128,3 +1128,61 @@ DB 직접 수정
 2. **배포는 CEO 별도 승인 후** 진행.
 3. 배포되면 **2026-07-10(금) 09:00 KST Pixel 자동 발행을 5J와 동일한 읽기전용 방식으로 관찰**(글 1건·SEO 3필드·content_type=DESIGN·비용·metadata·중복 없음·다른 요일 OFF 유지 확인).
 4. Pixel 관찰 PASS 시에만 다음 에이전트를 allowlist에 1명 추가(5K-B).
+
+---
+
+# 12. 5K-A 실행 결과 — Pixel 일반 자동 SEO 첫 발행 관찰 (2026-07-10, 금)
+
+## 판정: **PASS (CEO 확정)**
+
+배포 커밋 `355d1cc`(allowlist `frozenset({"pixel"})`) 기준, 09:00 KST 자동 scheduler가 정시에 자동 실행되어 Pixel 일반 글 1건을 정상 발행했다. 읽기 전용(SELECT / GET / journalctl 조회)으로만 관찰했으며, 운영을 일절 변경하지 않았다. 상세 산출물은 저장소 루트 `5K-A-report.md` 참고.
+
+## 명시 사항 (CEO 확정)
+
+- **09:00:00.03 KST 자동 scheduler 실행 성공** — cron 정시 발화(created_at `2026-07-10 00:00:00.029983 UTC` = 09:00:00.03 KST), **09:02:18 KST 발행 완료**(약 2분18초 소요).
+- **Pixel 일반 글 1건만 정상 발행** — slug `pixel-2026-07-10`, post_id `ab749fda-b0a2-42cd-acd8-acd9d8dd0812`, **agent_id=pixel**, **content_type=DESIGN**, published=true.
+- **seo_title / seo_description / summary 3필드 정상 생성** — 전부 non-null, 마커 누출 없음.
+- **Pixel-only gate 유지** — allowlist `SEO_ENABLED_GENERAL_AGENTS = frozenset({"pixel"})` 불변 확인. **buzz(`buzz-2026-07-06`) / over(`over-2026-07-08`) / ka(`ka-2026-07-09`) / ping(`ping-2026-07-04`) / wiki(`wiki-2026-07-05`) 최신 일반 글 SEO 3필드 전부 null 유지** 확인.
+- **중복 생성 없음** — 오늘 생성된 글은 pixel 1건뿐(같은 시간대 다른 에이전트 글 없음, 중복 slug 없음).
+- **에러 / retry 없음** — journalctl에 실패·재시도 로그 없음(attempt 1 성공으로 판단).
+- **수동 실행 흔적 없음** — `POST /api/blog/generate*` 로그 관찰 구간 0건.
+- **서버 배포 코드와 로컬 커밋 `355d1cc` diff 0건** — `blog_generator.py`/`main.py` 전량 일치 확인.
+- **API / DB / sitemap / JSON-LD / 비용 정상** — 목록·상세·related API 200, sitemap에 신규 slug + lastmod 반영, JSON-LD(BlogPosting+BreadcrumbList) 파싱 정상.
+- **비용 $0.3225/건** — trend(haiku)+content(sonnet)+content_image×3(flux/dev)+thumbnail(flux-pro/kontext/max) 6 phase, 전부 post_id 연결, 중복 없음. **SEO ON으로 인한 별도 LLM 호출 없음**(기존 content 단계 마커 파싱 결과).
+- **⚠️ 사전 스냅샷 한계**: 세션이 08:50이 아닌 09:12 KST에 시작되어 실행 전 순수 사전(pre) 상태는 기록하지 못함. 대신 DB `created_at`/`updated_at` 타임스탬프로 실행 시각을 사후 재구성함(실행 자체나 결과 해석에는 영향 없음). 다음 관찰(5K-B)부터는 실행 최소 10분 전 세션 시작.
+- **og:url / article:modified_time(meta) / JSON-LD description 소스 불일치는 기존 프론트 후속 항목으로 유지** — 5J에서 이미 식별된 항목과 동일하게 재확인됨. 5K-A 자체 결함 아님.
+- **PR #25 merge / 백필 CLI 실행 / 일반 SEO 전체 활성화는 계속 금지** — 금지 항목 전부 미수행.
+
+## 검증 요약
+
+| 항목 | 결과 |
+|------|------|
+| 운영 DB revision | 032 (head) |
+| MainPID / NRestarts | 1463685 / 0 |
+| /health | 200 |
+| 게시글 수 (관찰 시점) | 총 60 / 공개 55 / 비공개 5 (신규 pixel 1건 포함) |
+| agent_id / content_type | pixel / DESIGN |
+| seo_title / seo_description / summary | 전부 존재, 마커 누출 없음 |
+| non-Pixel(buzz/over/ka/ping/wiki) SEO 3필드 | 전부 null 유지 |
+| 본문 마커 누출 | 없음 |
+| embedding | 존재 |
+| 중복 slug / 중복 글 | 없음 (1건) |
+| 목록 / 상세 / 관련 API | 200 / 200 / 200 |
+| SSR metadata | title/description/canonical/og:title·description·image·type/twitter/robots 정상 / **og:url·article:modified_time(meta) 부재(기존 후속)** |
+| JSON-LD | BlogPosting + BreadcrumbList 파싱 정상, 필수 필드 전부 존재, null/undefined 없음 / **description은 본문 폴백(기존 후속)** |
+| sitemap | 신규 slug 포함, lastmod `2026-07-10T00:02:18.526Z`(=updated_at) |
+| 비용 | 6 phase(trend/content/content_image×3/thumbnail) 모두 post_id 연결, 총 **$0.3225**, 중복 없음, SEO 추가 호출 없음 |
+| 로그 | 09:00:00.03 KST 정시 자동 실행(DB 타임스탬프 기준), ERROR/misfire/중복/수동실행 없음 |
+
+## 후속 항목
+
+1. (선택, 기존 유지) 프론트 `og:url`, `article:modified_time` 추가 검토 — 우선순위 낮음.
+2. (선택, 기존 유지) JSON-LD BlogPosting description을 seo_description으로 통일 검토.
+3. journalctl에서 앱 로거(`logger.info`)의 "생성 완료"/"실패" 텍스트 라인 자체가 안 잡히는 원인 불명 — DB로는 실행이 명확히 입증되나 로그 가시성은 별도 점검 필요(5K-A 범위 밖).
+4. **다음 게이트: 5K-B — non-Pixel 에이전트 1명 순차 활성화.** 대상 에이전트는 별도 승인 전까지 allowlist에 추가하지 않는다.
+
+---
+
+# 13. 다음 실행 예정 — 5K-B (대상/일정 미정)
+
+5K-A PASS(CEO 확정)로 다음 단계는 **5K-B: non-Pixel 에이전트 1명을 allowlist에 순차 추가**다. 대상 에이전트와 실행일은 CEO 별도 지시로 확정하며, 지시 전까지 `SEO_ENABLED_GENERAL_AGENTS`는 `frozenset({"pixel"})`로 유지한다.
