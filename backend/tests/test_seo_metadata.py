@@ -670,25 +670,27 @@ def test_other_agents_guidance_unchanged(agent_id, existing_phrase):
     assert _BUZZ_GROUNDING_KEY not in system    # buzz 전용 문구 미혼입
 
 
-# ── 5K-A: 일반 자동 SEO allowlist (pixel 단일 활성화) ────────────────────────────
+# ── 5K-A/5K-B: 일반 자동 SEO allowlist (pixel+ka 순차 활성화) ───────────────────
 # general_seo_enabled 순수 함수 분기 + allowlist에 따른 seo_markers 배선만 검증.
 # 실제 생성/DB/scheduler 없이 mock 하니스로만 확인한다.
 
-_NON_PIXEL_GENERAL = ["buzz", "over", "ka", "ping", "wiki"]
+_SEO_ON_GENERAL = ["pixel", "ka"]
+_SEO_OFF_GENERAL = ["buzz", "over", "ping", "wiki"]
 
 
-# A. allowlist는 현재 pixel만 — 헬퍼가 pixel만 True
-def test_general_seo_allowlist_pixel_only():
-    assert blog_generator.SEO_ENABLED_GENERAL_AGENTS == frozenset({"pixel"})
-    assert blog_generator.general_seo_enabled("pixel") is True
-    for agent_id in _NON_PIXEL_GENERAL:
+# A. allowlist는 현재 pixel+ka — 헬퍼가 이 둘만 True
+def test_general_seo_allowlist_pixel_and_ka():
+    assert blog_generator.SEO_ENABLED_GENERAL_AGENTS == frozenset({"pixel", "ka"})
+    for agent_id in _SEO_ON_GENERAL:
+        assert blog_generator.general_seo_enabled(agent_id) is True
+    for agent_id in _SEO_OFF_GENERAL:
         assert blog_generator.general_seo_enabled(agent_id) is False
 
 
-# B. allowlist가 비면 pixel 포함 전부 False (fail-safe)
+# B. allowlist가 비면 pixel+ka 포함 전부 False (fail-safe)
 def test_general_seo_allowlist_empty_disables_all(monkeypatch):
     monkeypatch.setattr(blog_generator, "SEO_ENABLED_GENERAL_AGENTS", frozenset())
-    for agent_id in ["pixel", *_NON_PIXEL_GENERAL]:
+    for agent_id in [*_SEO_ON_GENERAL, *_SEO_OFF_GENERAL]:
         assert blog_generator.general_seo_enabled(agent_id) is False
 
 
@@ -704,9 +706,21 @@ def test_pixel_general_seo_on_produces_fields():
     assert "{{" not in data["content"]                         # 마커 잔존 없음
 
 
-# D. non-Pixel 일반 글 — 헬퍼가 끈 seo_markers로 기존처럼 SEO 키 없음
-@pytest.mark.parametrize("agent_id", _NON_PIXEL_GENERAL)
-def test_nonpixel_general_seo_off_no_fields(agent_id):
+# C-2. ka 일반 글 — 헬퍼가 켠 seo_markers로 SEO 3필드 + content_type=DATA 생성 (5K-B)
+def test_ka_general_seo_on_produces_fields():
+    seo_markers = blog_generator.general_seo_enabled("ka")      # 실제 배선 값
+    assert seo_markers is True
+    data, system = _run_blog_post("ka", _BODY_FULL + _SEO_TAIL, seo_markers=seo_markers)
+    assert "{{SEO_TITLE}}" in system                            # SEO 규칙 주입됨
+    for k in ("seo_title", "summary", "seo_description"):
+        assert data.get(k) and data[k].strip()                 # 3필드 존재·비어있지 않음
+    assert data["content_type"] == "DATA"
+    assert "{{" not in data["content"]                         # 마커 잔존 없음
+
+
+# D. allowlist 밖 일반 글 — 헬퍼가 끈 seo_markers로 기존처럼 SEO 키 없음
+@pytest.mark.parametrize("agent_id", _SEO_OFF_GENERAL)
+def test_nonallowlisted_general_seo_off_no_fields(agent_id):
     seo_markers = blog_generator.general_seo_enabled(agent_id)  # 실제 배선 값
     assert seo_markers is False
     raw = _BODY_FULL + "\n\n{{THUMBNAIL: a hamster}}\n{{TAGS: 태그1, 태그2}}"

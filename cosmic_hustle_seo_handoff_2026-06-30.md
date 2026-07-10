@@ -1183,6 +1183,52 @@ DB 직접 수정
 
 ---
 
-# 13. 다음 실행 예정 — 5K-B (대상/일정 미정)
+# 13. 5K-B 후보 선정 — ka 확정 (2026-07-10)
 
-5K-A PASS(CEO 확정)로 다음 단계는 **5K-B: non-Pixel 에이전트 1명을 allowlist에 순차 추가**다. 대상 에이전트와 실행일은 CEO 별도 지시로 확정하며, 지시 전까지 `SEO_ENABLED_GENERAL_AGENTS`는 `frozenset({"pixel"})`로 유지한다.
+5K-A PASS 이후 non-Pixel 5개 후보(wiki/buzz/over/ka/ping)를 코드·최근 실제 글 기준으로 검토했다. 상세는 세션 산출물 `5K-B-candidate-report.md` 참고.
+
+- **선정: ka** (content_type=DATA). 4B-2C 실LLM파일럿에서 유일하게 "정합"(왜곡 없음) 확인됨, SEO 구조화에 가장 적합, 다음 발행(2026-07-16)까지 일정 여유 있음.
+- **wiki 제외**: 기본 가설과 달리 5개 중 최고 리스크로 판단됨 — 4B-2C에서 확인된 가짜출처/본문단정 문제가 4B-2D/E 보강 후에도 "부분 개선"에 그쳤고, 실제 최근 글(`wiki-2026-07-05`, 염증/YMYL 주제)에서도 검증 불가한 구체적 출처 나열이 재현됨. wiki는 이번 대상에서 제외, 향후 순번은 CEO 판단 대기.
+- CEO가 ka를 5K-B 대상으로 최종 승인(2026-07-10).
+
+---
+
+# 14. 5K-B 구현 — ka 일반 자동 SEO allowlist 추가 (2026-07-10 / 로컬 변경만)
+
+## 상태: **로컬 코드 변경 + 테스트 완료, 미배포·미커밋 (승인 대기)**
+
+CEO 승인 범위: `SEO_ENABLED_GENERAL_AGENTS`에 `"ka"` 추가, 관련 테스트 추가/수정, 문서 업데이트, 로컬 테스트 실행까지만. **배포·커밋·push·PR merge·백필·전체 활성화는 이번 범위 밖.**
+
+## 변경 내용 (backend, 2파일)
+
+- `blog_generator.py`: `SEO_ENABLED_GENERAL_AGENTS = frozenset({"pixel"})` → `frozenset({"pixel", "ka"})`. `general_seo_enabled()` 함수 자체는 무변경(이미 allowlist 멤버십만 확인하는 순수 함수라 로직 변경 불필요).
+- `tests/test_seo_metadata.py`: 5K-A 테스트 그룹 갱신 —
+  - `_NON_PIXEL_GENERAL`(5개) → `_SEO_ON_GENERAL=["pixel","ka"]` / `_SEO_OFF_GENERAL=["buzz","over","ping","wiki"]`로 분리.
+  - A: `test_general_seo_allowlist_pixel_only` → `test_general_seo_allowlist_pixel_and_ka`(allowlist가 정확히 `{"pixel","ka"}`인지 + 이 둘만 True인지 검증).
+  - B: 빈 allowlist fail-safe 테스트는 대상 목록만 갱신(pixel+ka+off 4종 전부 False).
+  - C-2(신규): `test_ka_general_seo_on_produces_fields` — ka 헬퍼 seo_markers=True로 SEO 3필드 + `content_type=DATA` 생성 확인(Pixel의 C와 동일 패턴).
+  - D: `test_nonpixel_general_seo_off_no_fields` → `test_nonallowlisted_general_seo_off_no_fields`, 대상에서 ka 제외(buzz/over/ping/wiki 4종만 SEO OFF 검증).
+  - `test_scheduled_general_seo_is_allowlist_gated`(AST 가드)는 allowlist 값과 무관하게 `general_seo_enabled(today_agent_id)` 호출 구조만 검증하므로 무변경.
+
+## 동작 근거
+
+- **Pixel+ka만 ON**: allowlist=`{"pixel","ka"}`. buzz/over/ping/wiki는 여전히 False.
+- **discovery 무영향**: 여전히 별도 분기(pocke, `seo_markers=True` 고정)라 allowlist 확장과 무관.
+- **fail-safe 유지**: allowlist를 비우면 pixel·ka 포함 전부 OFF.
+- **content_type**: ka는 코드 매핑(`_GENERAL_CONTENT_TYPE_BY_AGENT["ka"] = "DATA"`)으로 고정, LLM이 지정하지 않음.
+
+## 테스트 결과
+
+- `tests/test_seo_metadata.py`: **56 passed** (5K-A 때와 동일 개수 — ka가 OFF목록에서 ON목록으로 이동, 신규 C-2 테스트 1개 추가로 상쇄).
+- 백엔드 전체: `TORCHDYNAMO_DISABLE=1 .venv/bin/python -m pytest tests/ -q` → **76 passed**(0.57s), 회귀 없음.
+
+## PR #25와의 관계
+
+- **무관.** PR #25(`feat: add safe SEO backfill CLI`, Draft, head `8f48633`)는 백필 스크립트 전용 파일만 건드림 — 5K-B 변경 파일(`blog_generator.py`, `tests/test_seo_metadata.py`)과 교집합 0.
+
+## 운영 배포 전 남은 단계
+
+1. 로컬 변경 커밋 — **CEO 별도 지시 필요**(이번 승인 범위는 코드/테스트/문서까지, 커밋은 포함 안 됨).
+2. 배포는 커밋 이후 **CEO 별도 승인** 후 진행.
+3. 배포되면 **2026-07-16(목) 09:00 KST ka 자동 발행을 5K-A와 동일한 읽기전용 방식으로 관찰**(글 1건·SEO 3필드·content_type=DATA·비용·metadata·중복 없음·non-ka/non-pixel 요일 OFF 유지 확인).
+4. ka 관찰 PASS 시에만 다음 에이전트를 allowlist에 1명 추가(5K-C, 대상 미정).

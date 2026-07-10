@@ -1375,9 +1375,9 @@ _GENERAL_CONTENT_TYPE_BY_AGENT = {
 }
 
 # 5K: 일반 자동 발행 중 SEO 마커를 켤 에이전트 allowlist (순차 활성화용).
-# 비어 있으면 discovery 외 일반 자동 SEO는 전부 OFF (fail-safe). 현재는 pixel만.
+# 비어 있으면 discovery 외 일반 자동 SEO는 전부 OFF (fail-safe). 현재는 pixel(5K-A PASS)+ka(5K-B).
 # 확장은 반드시 한 명씩 추가하고, 에이전트별 실제 발행을 관찰한 뒤 다음으로 넘어간다.
-SEO_ENABLED_GENERAL_AGENTS = frozenset({"pixel"})
+SEO_ENABLED_GENERAL_AGENTS = frozenset({"pixel", "ka"})
 
 
 def general_seo_enabled(agent_id: str) -> bool:
