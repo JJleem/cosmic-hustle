@@ -1134,7 +1134,8 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
     full_prompt = (
         f"{style['prefix']} "
         f"{scene_prompt}, "
-        "no text, no watermark, no Chinese characters, no Chinese text, "
+        "absolutely no text, no letters, no words, no signage, no captions, "
+        "no writing of any kind, no watermark, "
         f"{style['suffix']}"
     )
 
@@ -1219,8 +1220,9 @@ async def _generate_content_image(prompt: str, cheap: bool = False, sink: list |
             "prompt": (
                 f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
                 "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
-                "smooth 3D render, playful and charming, no text, no watermark, "
-                "no Chinese characters, no Chinese text."
+                "smooth 3D render, playful and charming, "
+                "absolutely no text, no letters, no words, no signage, no captions, "
+                "no writing of any kind, no watermark."
             ),
             "image_size": "square_hd",
         }
