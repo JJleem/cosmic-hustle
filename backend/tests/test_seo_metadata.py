@@ -670,57 +670,53 @@ def test_other_agents_guidance_unchanged(agent_id, existing_phrase):
     assert _BUZZ_GROUNDING_KEY not in system    # buzz 전용 문구 미혼입
 
 
-# ── 5K-A/5K-B: 일반 자동 SEO allowlist (pixel+ka 순차 활성화) ───────────────────
+# ── 5K-C: 일반 자동 SEO 전체 활성화 (pixel/ka/buzz/over/ping/wiki 전원 ON) ───────
 # general_seo_enabled 순수 함수 분기 + allowlist에 따른 seo_markers 배선만 검증.
 # 실제 생성/DB/scheduler 없이 mock 하니스로만 확인한다.
 
-_SEO_ON_GENERAL = ["pixel", "ka"]
-_SEO_OFF_GENERAL = ["buzz", "over", "ping", "wiki"]
+_ALL_GENERAL_AGENTS = ["pixel", "ka", "buzz", "over", "ping", "wiki"]
 
 
-# A. allowlist는 현재 pixel+ka — 헬퍼가 이 둘만 True
-def test_general_seo_allowlist_pixel_and_ka():
-    assert blog_generator.SEO_ENABLED_GENERAL_AGENTS == frozenset({"pixel", "ka"})
-    for agent_id in _SEO_ON_GENERAL:
+# A. allowlist는 일반 에이전트 전원 — 헬퍼가 6명 모두 True
+def test_general_seo_allowlist_all_general_agents():
+    assert blog_generator.SEO_ENABLED_GENERAL_AGENTS == frozenset(
+        {"pixel", "ka", "buzz", "over", "ping", "wiki"}
+    )
+    for agent_id in _ALL_GENERAL_AGENTS:
         assert blog_generator.general_seo_enabled(agent_id) is True
-    for agent_id in _SEO_OFF_GENERAL:
-        assert blog_generator.general_seo_enabled(agent_id) is False
 
 
-# B. allowlist가 비면 pixel+ka 포함 전부 False (fail-safe)
+# B. allowlist가 비면 전원 False (fail-safe) — 즉시 전체 OFF 복귀 가능
 def test_general_seo_allowlist_empty_disables_all(monkeypatch):
     monkeypatch.setattr(blog_generator, "SEO_ENABLED_GENERAL_AGENTS", frozenset())
-    for agent_id in [*_SEO_ON_GENERAL, *_SEO_OFF_GENERAL]:
+    for agent_id in _ALL_GENERAL_AGENTS:
         assert blog_generator.general_seo_enabled(agent_id) is False
 
 
-# C. Pixel 일반 글 — 헬퍼가 켠 seo_markers로 SEO 3필드 + content_type=DESIGN 생성
-def test_pixel_general_seo_on_produces_fields():
-    seo_markers = blog_generator.general_seo_enabled("pixel")   # 실제 배선 값
+# C. 일반 에이전트 전원 — 헬퍼가 켠 실제 seo_markers로 SEO 3필드 + 매핑된 content_type 생성
+@pytest.mark.parametrize("agent_id,expected_type", [
+    ("pixel", "DESIGN"),
+    ("ka",    "DATA"),
+    ("buzz",  "MARKETING"),
+    ("over",  "ESSAY"),
+    ("ping",  "IDEA"),
+    ("wiki",  "WIKI"),
+])
+def test_general_seo_on_produces_fields(agent_id, expected_type):
+    seo_markers = blog_generator.general_seo_enabled(agent_id)  # 실제 배선 값
     assert seo_markers is True
-    data, system = _run_blog_post("pixel", _BODY_FULL + _SEO_TAIL, seo_markers=seo_markers)
+    data, system = _run_blog_post(agent_id, _BODY_FULL + _SEO_TAIL, seo_markers=seo_markers)
     assert "{{SEO_TITLE}}" in system                            # SEO 규칙 주입됨
     for k in ("seo_title", "summary", "seo_description"):
         assert data.get(k) and data[k].strip()                 # 3필드 존재·비어있지 않음
-    assert data["content_type"] == "DESIGN"
+    assert data["content_type"] == expected_type
     assert "{{" not in data["content"]                         # 마커 잔존 없음
 
 
-# C-2. ka 일반 글 — 헬퍼가 켠 seo_markers로 SEO 3필드 + content_type=DATA 생성 (5K-B)
-def test_ka_general_seo_on_produces_fields():
-    seo_markers = blog_generator.general_seo_enabled("ka")      # 실제 배선 값
-    assert seo_markers is True
-    data, system = _run_blog_post("ka", _BODY_FULL + _SEO_TAIL, seo_markers=seo_markers)
-    assert "{{SEO_TITLE}}" in system                            # SEO 규칙 주입됨
-    for k in ("seo_title", "summary", "seo_description"):
-        assert data.get(k) and data[k].strip()                 # 3필드 존재·비어있지 않음
-    assert data["content_type"] == "DATA"
-    assert "{{" not in data["content"]                         # 마커 잔존 없음
-
-
-# D. allowlist 밖 일반 글 — 헬퍼가 끈 seo_markers로 기존처럼 SEO 키 없음
-@pytest.mark.parametrize("agent_id", _SEO_OFF_GENERAL)
-def test_nonallowlisted_general_seo_off_no_fields(agent_id):
+# D. allowlist가 비면(fail-safe) 일반 글은 헬퍼가 끈 seo_markers로 기존처럼 SEO 키 없음
+@pytest.mark.parametrize("agent_id", _ALL_GENERAL_AGENTS)
+def test_general_seo_off_no_fields_when_disabled(agent_id, monkeypatch):
+    monkeypatch.setattr(blog_generator, "SEO_ENABLED_GENERAL_AGENTS", frozenset())
     seo_markers = blog_generator.general_seo_enabled(agent_id)  # 실제 배선 값
     assert seo_markers is False
     raw = _BODY_FULL + "\n\n{{THUMBNAIL: a hamster}}\n{{TAGS: 태그1, 태그2}}"

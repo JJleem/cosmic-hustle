@@ -1226,9 +1226,112 @@ CEO 승인 범위: `SEO_ENABLED_GENERAL_AGENTS`에 `"ka"` 추가, 관련 테스�
 
 - **무관.** PR #25(`feat: add safe SEO backfill CLI`, Draft, head `8f48633`)는 백필 스크립트 전용 파일만 건드림 — 5K-B 변경 파일(`blog_generator.py`, `tests/test_seo_metadata.py`)과 교집합 0.
 
-## 운영 배포 전 남은 단계
+## 운영 배포 전 남은 단계 (2026-07-10 종료 시점: 전부 완료)
 
-1. 로컬 변경 커밋 — **CEO 별도 지시 필요**(이번 승인 범위는 코드/테스트/문서까지, 커밋은 포함 안 됨).
-2. 배포는 커밋 이후 **CEO 별도 승인** 후 진행.
-3. 배포되면 **2026-07-16(목) 09:00 KST ka 자동 발행을 5K-A와 동일한 읽기전용 방식으로 관찰**(글 1건·SEO 3필드·content_type=DATA·비용·metadata·중복 없음·non-ka/non-pixel 요일 OFF 유지 확인).
+1. ✅ 로컬 변경 커밋 — `9d36b892654c01eca557db23cbc670805262cca5`.
+2. ✅ 배포 — CEO 승인 후 `git push origin main` 실행, GitHub Actions 자동배포 완료(§15).
+3. ⏳ **2026-07-16(목) 09:00 KST ka 자동 발행을 5K-A와 동일한 읽기전용 방식으로 관찰 예정**(글 1건·SEO 3필드·content_type=DATA·비용·metadata·중복 없음·non-ka/non-pixel 요일 OFF 유지 확인).
 4. ka 관찰 PASS 시에만 다음 에이전트를 allowlist에 1명 추가(5K-C, 대상 미정).
+
+---
+
+# 15. 5K-B 배포 결과 — ka allowlist 운영 반영 (2026-07-10)
+
+## 판정: **PASS**
+
+CEO 승인(push=배포+재시작 자동 트리거임을 인지한 명시적 승인) 후 `git push origin main` 실행 → GitHub Actions `Deploy Backend` 워크플로우가 정상 완료되어 ka가 운영 allowlist에 반영됐다. 상세 산출물은 저장소 루트 `5K-B-deploy-report.md` 참고.
+
+## 명시 사항
+
+- **commit deployed**: `9d36b892654c01eca557db23cbc670805262cca5`(push `355d1cc..9d36b89`).
+- **GitHub Actions run**: `29063079125`, **success, 34s**.
+- **서비스 재시작**: MainPID `1463685` → `1528920`, `ActiveEnterTimestamp` `2026-07-10 01:45:26 UTC`로 갱신. **재시작/scp는 GitHub Actions 자동배포 절차로만 발생** — 수동 `systemctl restart`·수동 scp 없음.
+- **/health**: 재시작 찰나(약 20초 창) 1회 빈 응답 이후 **200 `{"status":"ok","db":"connected"}`** 정상 확인.
+- **서버 `blog_generator.py` allowlist 반영**: `SEO_ENABLED_GENERAL_AGENTS = frozenset({"pixel", "ka"})` 확인.
+- **`main.py` 일반 분기 유지**: `seo_markers=general_seo_enabled(today_agent_id)` — 5K-A 상태 그대로(이번 커밋에 main.py 없음, 서버 파일도 무변경).
+- **discovery 분기 유지**: `seo_markers=True` 고정.
+- **Alembic revision**: `032` 유지, **no-op** 확인(스키마 변화 없음).
+- **수동 DB 수정 없음 / scheduler 수동 실행 없음 / `_daily_blog_job` 직접 실행 없음 / 생성 API 호출 없음 / 백필 CLI 실행 없음 / PR #25 merge 없음 / 전체 일반 SEO 활성화 없음** — 금지 항목 전부 미수행.
+- **즉시 신규 글 생성 없음** — 배포는 재시작만 유발, 다음 cron(09:00 KST) 도래 전까지 발행 없음.
+
+## 배포 후 상태 요약
+
+| 항목 | 결과 |
+|------|------|
+| allowlist | `frozenset({"pixel", "ka"})` |
+| Pixel SEO | ON 유지 |
+| KA SEO | ON 준비 완료(실제 발행은 다음 목요일) |
+| Buzz/Over/Ping/Wiki SEO | OFF 유지 |
+| Discovery SEO | ON 유지 |
+| DB revision | 032, 무변화 |
+| 서비스 상태 | active, 에러/exception/traceback 0건 |
+
+## 다음 관찰
+
+**2026-07-16(목) 08:50~09:15 KST**, `ka-2026-07-16` 자동 발행을 5K-A와 동일한 읽기 전용 방식으로 관찰(글 1건·`agent_id=ka`·`content_type=DATA`·SEO 3필드·비용·metadata·중복 없음·non-ka/non-pixel 요일 OFF·allowlist `{"pixel","ka"}` 불변 확인).
+
+---
+
+# 16. 5K-B 실행 결과 — ka 일반 자동 SEO 첫 발행 관찰 (2026-07-16, 목)
+
+## 판정: **PASS (CEO 확정, 2026-07-16)**
+
+배포 커밋 `9d36b89`(allowlist `frozenset({"pixel", "ka"})`) 기준, **2026-07-16 09:00:00.015 KST** cron이 정시에 자동 실행되어 KA 일반 글 1건을 정상 발행했다(09:01:59 KST 완료, 약 2분). 읽기 전용(SELECT / GET / systemctl show / journalctl / curl GET)으로만 관찰했으며 운영을 일절 변경하지 않았다. 상세 산출물은 저장소 루트 `5K-B-report.md` 참고.
+
+## 명시 사항 (CEO 확정)
+
+- **자동 실행**: 2026-07-16 **09:00:00.015 KST** cron 정시 자동 실행. 수동 scheduler 실행·`_daily_blog_job` 직접 호출·생성 API 호출 흔적 없음, 서비스 재시작 없음(MainPID 1635339 그대로).
+- **신규 글**: `ka-2026-07-16` **1건만** 발행. post id `5a713550-1f90-45d3-a552-d0ccb8ec567c`, agent=**ka**, content_type=**DATA**, published=**true**, embedding·thumbnail **존재**, 본문 SEO marker 누출 **0**, 중복 slug **0**. 전체 게시글 count **65→66**(+1 공개 글 = KA 하나, discovery/non-target 미실행).
+- **DATA 품질 통과**: seo_title/seo_description/summary 3필드 정상 생성 + 본문 근거 검증 통과 —
+  - "대전 지출 **5510억**" ↔ 본문 "**5,510억 원**을 돌파했습니다 (출처: 뉴데일리…)"
+  - "캠핑 예약 **2배**" ↔ 본문 "동기 대비 무려 **102%** 증가"(≈2배)
+  - "전국 **1위**" ↔ 본문 "대전 여행 일수 증가율 전년 대비 20.6%로 **전국 1위**"
+  - **조작된 수치/기관/출처 없음**, 최초·공식·검증됨·역대 등 **과장 표현 없음**, content_type=DATA 정상 부여.
+- **Pixel/KA-only gate 유지**: pixel(`pixel-2026-07-10` DESIGN) SEO ON, ka 신규 SEO ON, **buzz(`-07-13`)/over(`-07-15`)/ping(`-07-11`)/wiki(`-07-12`) 전부 SEO OFF**(3필드 null). allowlist `frozenset({"pixel", "ka"})` **불변**, 일반 SEO 전체 활성화 흔적 없음.
+- **인프라 정상**: API list/detail/related **200**(embedding 미노출), frontend SSR **200**, sitemap에 신규 slug 포함(lastmod=updated_at 일치), JSON-LD 파싱 정상, 비용 5 rows 합계 **약 $0.2948**(trend/content/content_image×2/thumbnail), **SEO ON으로 인한 추가 LLM 호출 없음**(content 단계 마커 파싱). 에러·retry·timeout 없음.
+- **금지 작업 위반 0**: scheduler 수동실행·생성 API·재시작·DB 수정·PR #25 merge·백필 CLI·전체 SEO 활성화·allowlist 확장 전부 없음.
+- **기존 프론트 후속 항목은 5K-B 결함 아님** — 5J/5K-A부터 알려진 항목이 동일 재현: **og:url(meta) 부재**, **article:modified_time(meta) 부재**, **JSON-LD description 소스 불일치**(seo_description 아닌 본문 폴백). title/description/canonical/og:title/og:description은 모두 정상.
+- **journalctl 앱 logger "생성 완료" 텍스트 미매칭**은 5K-A와 동일 — DB 타임스탬프로 실행은 명확히 입증됨. **후속 관찰성(observability) 개선 항목**으로 유지.
+
+## 후속 항목
+
+1. 프론트: og:url·article:modified_time(meta) 부재, JSON-LD description 소스 불일치 — 5J/5K-A부터의 기존 개선 후보, 5K-B에서도 동일 재현(자체 결함 아님).
+2. 관찰성: journalctl에서 앱 로거 "생성 완료"/"실패" 라인 미매칭 원인 불명 — 로거 설정/버퍼링 별도 점검(5K-B 범위 밖).
+3. **다음 게이트: 5K-C — non-target 3번째 대상. 대상 에이전트는 CEO 확정 전까지 allowlist에 추가하지 않는다.** 현 allowlist `frozenset({"pixel", "ka"})` 유지.
+
+---
+
+# 17. 5K-C 구현 — 일반 자동 SEO 전체 활성화 (2026-07-16 / 로컬 변경만)
+
+## 상태: **로컬 코드 변경 + 테스트 완료, 미배포·미커밋 (CEO 승인 대기)**
+
+5K-C는 순차 활성화가 아니라 **일반 에이전트 전원 활성화**다. CEO 지시로 남은 non-target 4명(buzz/over/ping/wiki)을 한 번에 allowlist에 추가한다. wiki는 과거 YMYL/출처 리스크가 있으나 이번 단계에서 별도 보류하지 않고 포함하되, 첫 wiki 발행 관찰 때 특별 체크한다.
+
+## 변경 내용 (backend, 2파일)
+
+- `blog_generator.py:1382`: `SEO_ENABLED_GENERAL_AGENTS`를 `frozenset({"pixel", "ka"})` → `frozenset({"pixel", "ka", "buzz", "over", "ping", "wiki"})`로 확장. 위 주석을 "순차 활성화" → "5K-C 전원 활성화"로 갱신(fail-safe 설명 유지). `general_seo_enabled()` 헬퍼 본문 무변경.
+- `tests/test_seo_metadata.py`: 5K 섹션(A~D)을 5K-C에 맞게 재구성 — A) 6명 전원 allowlist·True 확인, B) 빈 allowlist monkeypatch 시 6명 전원 False(fail-safe), C) 6명 parametrize로 실제 배선 seo_markers ON → SEO 3필드 + 매핑 content_type 생성, D) 빈 allowlist(fail-safe)에서 6명 전원 OFF → SEO 키·규칙 미생성. E(discovery 독립성)·기존 content_type 매핑·AST guard 테스트는 유지.
+
+## 동작 근거
+
+- 일반 분기(`main.py:92`)는 여전히 `seo_markers=general_seo_enabled(today_agent_id)` — 리터럴 True를 박지 않고 allowlist 헬퍼로 게이팅(AST guard 유지). allowlist만 확장했으므로 이제 6명 전원 True.
+- discovery 분기(`main.py:90`)는 `seo_markers=True` 고정 — allowlist와 무관, 무변경. content_type=SCIENCE 고정.
+- 이번 변경은 **향후 발행 글에만** 적용. 과거 글 백필 아님(PR #25/백필 CLI 계속 금지).
+- fail-safe: 문제 시 allowlist를 빈 frozenset으로 되돌리면 즉시 전체 OFF(테스트 B/D로 보장).
+
+## 테스트 결과
+
+- `tests/test_seo_metadata.py`: **62 passed** (5K-B 56 → +6: C가 pixel/ka 2개 → 6명 parametrize +4, D가 4명 → 6명 +2).
+- 전체 백엔드: **82 passed** (회귀 0).
+
+## PR #25와의 관계
+
+- **무관.** 변경 파일 2개는 backfill 관련 파일(`scripts/backfill_blog_seo.py`·`seo_backfill.py`·`tests/test_seo_backfill.py`)과 교집합 0. PR #25 Draft·merge 금지 유지.
+
+## 운영 배포 전 남은 단계 (CEO 승인 후)
+
+1. ⏳ 커밋 `feat(seo): enable general SEO for all general agents via allowlist` (2파일).
+2. ⏳ `git push origin main` → GitHub Actions 자동배포(scp+alembic no-op+restart). 배포 후 `/health`·서버 allowlist 반영·MainPID 갱신 확인.
+3. ⏳ 전원 활성화 후 요일별 첫 일반 발행 관찰 — buzz/over/ping/wiki SEO 3필드 정상·본문 근거 내 생성, **wiki 첫 발행은 YMYL/출처/과장/‘검증됨·공식·의학적으로 입증’ 표현 집중 관찰**, pixel·ka ON 유지, discovery seo_markers=True 유지. 각 관찰은 읽기 전용.
+
+상세 산출물은 저장소 루트 `5K-C-report.md` 참고.
