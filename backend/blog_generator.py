@@ -1100,7 +1100,7 @@ _THUMBNAIL_STYLES = [
     },
     # 네온 사이버펑크
     {
-        "prefix": "neon cyberpunk illustration, dark background with glowing neon accents, vivid electric colors, futuristic stylized art —",
+        "prefix": "neon cyberpunk illustration, dark background lit by glowing light strips and colored rim light, vivid electric colors, futuristic stylized art —",
         "suffix": "NOT 3D CGI render, NOT Pixar, dark moody lighting",
     },
 ]
@@ -1131,11 +1131,11 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
     style = _THUMBNAIL_STYLE_MAP.get(force_style, None) if force_style else None
     if style is None:
         style = random.choice(_THUMBNAIL_STYLES)
+    # Flux는 negative prompt가 없어서 "no text" 류를 쓰면 오히려 글자를 불러옴.
+    # 글자 억제는 여기서 하지 않고 scene_prompt 단계(LLM)에서 전담함.
     full_prompt = (
         f"{style['prefix']} "
         f"{scene_prompt}, "
-        "absolutely no text, no letters, no words, no signage, no captions, "
-        "no writing of any kind, no watermark, "
         f"{style['suffix']}"
     )
 
@@ -1192,9 +1192,12 @@ async def generate_scene_prompt_from_content(agent_id: str, title: str, content:
                 "- Clear dynamic ACTION (no standing still, no posing for camera)\n"
                 "- Costume matching the scene\n"
                 "- Cute and charming, NOT grotesque or disturbing\n"
-                "- NEVER describe signs, labels, screens, books, or any object with readable words/text on it "
-                "(image models render text as garbled gibberish) — show the IDEA visually instead (e.g. glowing "
-                "orbs/icons/objects, not labeled orbs)\n"
+                "- CRITICAL — the scene must contain NOTHING that could carry writing. Never mention: signs, "
+                "neon signs, billboards, banners, posters, scrolls, labels, tags, screens, monitors, books, "
+                "newspapers, whiteboards, chalkboards, speech bubbles, logos, or branded packaging. "
+                "The image model renders any such surface as garbled fake Korean/Chinese gibberish, which ruins "
+                "the thumbnail. Show the IDEA visually instead (glowing orbs, icons, shapes, props, gestures)\n"
+                "- Describe surfaces as blank, plain, or bare when they appear at all\n"
                 "- Environment reflects blog content\n"
                 "Output only the raw prompt, no explanation."
             ),
@@ -1220,9 +1223,7 @@ async def _generate_content_image(prompt: str, cheap: bool = False, sink: list |
             "prompt": (
                 f"Pixar 3D animation style illustration, whimsical and witty. {prompt} "
                 "No people or characters. Vibrant saturated colors, soft cinematic lighting, "
-                "smooth 3D render, playful and charming, "
-                "absolutely no text, no letters, no words, no signage, no captions, "
-                "no writing of any kind, no watermark."
+                "smooth 3D render, playful and charming, clean uncluttered surfaces."
             ),
             "image_size": "square_hd",
         }
