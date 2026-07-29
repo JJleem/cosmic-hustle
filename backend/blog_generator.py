@@ -908,6 +908,106 @@ async def _fetch_trending(agent_id: str, query: str | None = None, frequent_tags
     return rss_result
 
 
+# ── 검색 수요 기반 타깃 키워드 선정 ────────────────────────────────────────────
+# 주제 선정 계층 교체(2026-07-29). 기존엔 서브테마 풀(개발자 취향) → RSS → 글이라 파이프라인
+# 어디에도 '사람들이 실제로 검색하는 말'이 들어가지 않았고, 3개월 74편에 클릭 2회로 끝났다.
+# 이제 서브테마는 씨앗을 뽑는 입력일 뿐이고, 무엇을 쓸지는 자동완성이 증명한 실수요가 정한다.
+# 어느 단계든 실패하면 None을 돌려 기존 동작으로 폴백한다 — 발행 자체는 절대 막지 않는다.
+
+_KEYWORD_TARGETING = os.getenv("BLOG_KEYWORD_TARGETING", "1").lower() not in ("0", "false", "no")
+
+_SEED_PROMPT = """다음 주제 방향을 다룰 블로그 글을 준비 중이다.
+【주제 방향】{context}
+
+한국 사람이 구글 검색창에 실제로 칠 법한 '씨앗 키워드' 4개를 뽑아라.
+규칙:
+- 1~2어절의 일반명사 위주 (예: "번아웃", "로고 색상", "1인 가구")
+- 브랜드명·인명·특정 상품명 금지
+- 의료 증상·진단·치료, 정치, 투자 종목은 금지
+- 4개가 서로 다른 하위 영역을 향할 것
+- 검색창에 치는 말이어야 함 — 글 제목이나 문장이 아니라
+
+JSON 배열만 출력: ["키워드1", "키워드2", "키워드3", "키워드4"]"""
+
+_PICK_PROMPT = """아래는 구글 자동완성에서 수집한 '실제로 사람들이 검색하는 말' 후보다.
+【에이전트】{role} — {theme}
+【후보】
+{candidates}
+
+오늘 쓸 글의 타깃 검색어 1개와, 그 글이 본문에서 함께 답해야 할 하위 질문 3~4개를 골라라.
+
+【중요】 후보는 이미 '우리가 순위를 잡을 가능성이 높은 순'으로 정렬돼 있다. 위쪽일수록 좁고
+구체적이라 신생 블로그가 뚫을 수 있고, 아래로 갈수록 대형 사이트가 독식한 넓은 키워드다.
+특별한 이유가 없으면 위쪽에서 고를 것. 아래쪽을 고르려면 위쪽 후보들이 왜 안 되는지가 분명해야 한다.
+
+선정 기준:
+1. 3,000자 이상 깊이 있게 쓸 내용이 있을 것 — 한 줄 정의로 끝나는 건 탈락
+2. 의료 진단·치료 조언, 정치, 투자 권유가 아닐 것
+3. 이 에이전트가 자기 관점으로 다룰 수 있을 것
+4. 검색한 사람이 진짜 궁금해하는 게 뚜렷할 것
+
+하위 질문은 후보 목록에 있는 것을 우선 쓰되, 없으면 타깃과 같은 의도를 가진 질문을 직접 만들어도 된다.
+JSON만 출력: {{"target": "타깃 검색어", "related": ["하위질문1", "하위질문2", "하위질문3"]}}"""
+
+
+def _parse_json_block(text: str):
+    """LLM 응답에서 JSON만 뽑는다. 코드펜스·설명문이 섞여도 견디게."""
+    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
+    m = re.search(r"[\[{].*[\]}]", text, re.DOTALL)
+    return json.loads(m.group(0)) if m else None
+
+
+async def select_target_keyword(
+    client, agent_id: str, seed_context: str, role: str, theme: str,
+    covered_terms: list[str] | None = None, sink: list | None = None,
+) -> dict | None:
+    """서브테마 → 씨앗 4개 → 자동완성 확장 → 후보 → 타깃 1개 + 하위질문.
+    반환 {"target": str, "related": list[str], "candidates": list[str]} 또는 None(폴백)."""
+    if not _KEYWORD_TARGETING:
+        return None
+    log = logging.getLogger(__name__)
+    try:
+        import keyword_miner
+
+        msg = await _logged_create(
+            client, sink, "keyword_seed",
+            model="claude-haiku-4-5-20251001", max_tokens=300,
+            messages=[{"role": "user", "content": _SEED_PROMPT.format(context=seed_context)}],
+        )
+        raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        seeds = _parse_json_block(raw)
+        if not isinstance(seeds, list) or not seeds:
+            log.warning("씨앗 키워드 파싱 실패 — 키워드 타기팅 스킵")
+            return None
+        seeds = [str(s).strip() for s in seeds[:4] if str(s).strip()]
+
+        candidates = await keyword_miner.mine(seeds, covered_terms)
+        if len(candidates) < 3:
+            log.warning("자동완성 후보 부족(%d) — 키워드 타기팅 스킵", len(candidates))
+            return None
+
+        msg = await _logged_create(
+            client, sink, "keyword_pick",
+            model="claude-haiku-4-5-20251001", max_tokens=500,
+            messages=[{"role": "user", "content": _PICK_PROMPT.format(
+                role=role, theme=theme,
+                candidates="\n".join(f"- {c}" for c in candidates),
+            )}],
+        )
+        raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        picked = _parse_json_block(raw)
+        if not isinstance(picked, dict) or not picked.get("target"):
+            log.warning("타깃 키워드 파싱 실패 — 키워드 타기팅 스킵")
+            return None
+
+        related = [str(r).strip() for r in (picked.get("related") or []) if str(r).strip()]
+        log.info("타깃 검색어 선정: '%s' (씨앗 %s / 후보 %d)", picked["target"], seeds, len(candidates))
+        return {"target": str(picked["target"]).strip(), "related": related[:4], "candidates": candidates}
+    except Exception:
+        log.warning("타깃 키워드 선정 실패 — 기존 방식으로 진행", exc_info=True)
+        return None
+
+
 # ── 이미지 생성 ────────────────────────────────────────────────────────────────
 
 _IMAGE_RE           = re.compile(r"\{\{IMAGE:\s*([^}]+?)\s*\}\}")
@@ -1524,15 +1624,34 @@ async def generate_blog_post(
         pool = _AGENT_POOLS[agent_id]
         _pool_item = pool[_rotation_index(today, rotation_offset) % len(pool)]
 
+    # 오버는 풀 대신 형식·감정 로테이션을 쓴다 — 씨앗 문맥에 감정이 필요해 여기서 미리 정한다.
+    over_fmt = over_emotion = None
+    if agent_id == "over":
+        rot = _rotation_index(today, rotation_offset)
+        over_fmt = OVER_ESSAY_FORMATS[rot % len(OVER_ESSAY_FORMATS)]
+        over_emotion = OVER_EMOTIONS[(rot + 3) % len(OVER_EMOTIONS)]
+
     # trending_query 결정: 풀 쿼리 → 픽셀 AI 오버라이드
     trending_query = _pool_item["query"] if _pool_item else None
     if agent_id == "pixel" and last_agent_title:
         if any(kw in last_agent_title for kw in _PIXEL_AI_KEYWORDS):
             trending_query = _PIXEL_EVERYDAY_QUERY
 
-    trending_context = await _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags, recent_titles=recent_titles, sink=costs)
-
     client      = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    # 타깃 검색어 선정과 트렌드 수집은 서로 독립이라 같이 돌린다.
+    if _pool_item:
+        seed_context = f"{_pool_item['subtheme']} ({theme})"
+    elif over_emotion:
+        seed_context = f"'{over_emotion}' 감정을 겪는 사람이 검색해볼 만한 것 ({theme})"
+    else:
+        seed_context = theme
+    covered_terms = list(recent_titles or []) + list(agent_recent_tags or [])
+
+    trending_context, keyword_plan = await asyncio.gather(
+        _fetch_trending(agent_id, query=trending_query, frequent_tags=frequent_tags, agent_recent_tags=agent_recent_tags, recent_titles=recent_titles, sink=costs),
+        select_target_keyword(client, agent_id, seed_context, persona["role"], theme, covered_terms, sink=costs),
+    )
     system_text = persona["system"]
     if memory:
         system_text += f"\n\n【나의 지난 경험과 학습】\n{memory}"
@@ -1604,11 +1723,24 @@ async def generate_blog_post(
         f"오늘({today.strftime('%Y년 %m월 %d일')}, {_weekday_kr(today.weekday())}) 주제: **{theme}**\n"
     )
 
+    # 검색 수요 기반 타깃 — '무엇을 쓸지'는 실수요가 정하고 '어떻게 쓸지'는 페르소나가 정한다.
+    if keyword_plan:
+        user_content += (
+            f"\n【오늘의 타깃 검색어】: \"{keyword_plan['target']}\"\n"
+            "이 검색어를 구글에 친 사람이 원하는 답을 반드시 담을 것. 오늘 글의 주제는 이 검색어가 정한다.\n"
+            "- 제목에 타깃 검색어의 핵심 표현을 자연스럽게 포함할 것 (억지로 끼워넣지는 말 것)\n"
+            "- 도입부 세 문장 안에 이 검색어가 묻는 것의 답이 어디로 갈지 보여줄 것\n"
+            "- 말투·형식·감정 등 페르소나는 그대로 유지할 것 — 검색어는 '무엇을 다룰지'만 정하고 '어떻게 쓸지'는 정하지 않는다\n"
+            "- SEO 블록을 쓰는 경우 SEO_TITLE·SEO_DESCRIPTION에 타깃 검색어를 그대로 포함할 것\n"
+            "- 트렌드 참고자료는 이 검색어를 설명하는 데 도움이 될 때만 쓸 것. 무관하면 통째로 무시할 것\n"
+        )
+        if keyword_plan["related"]:
+            subs = "\n".join(f"  - {q}" for q in keyword_plan["related"])
+            user_content += f"- 아래 하위 질문들을 ## 소제목으로 나눠 각각 실제로 답할 것:\n{subs}\n"
+
     # 오버 전용: 형식 + 감정 출발점 주입
     if agent_id == "over":
-        rot = _rotation_index(today, rotation_offset)
-        fmt = OVER_ESSAY_FORMATS[rot % len(OVER_ESSAY_FORMATS)]
-        emotion = OVER_EMOTIONS[(rot + 3) % len(OVER_EMOTIONS)]
+        fmt, emotion = over_fmt, over_emotion
         user_content += (
             f"\n【오늘의 에세이 형식: {fmt['name']}】\n{fmt['guide']}\n"
             f"\n【오늘의 감정 출발점】: {emotion}\n"
@@ -1724,7 +1856,9 @@ async def generate_blog_post(
         "thumbnail_url": thumbnail_url,
         "tags":          tags,
         "published":     published,
-        "trending_topic": default_theme,
+        # 타깃 검색어가 있으면 그것이 이 글의 핵심 주제다. 임베딩·관련글·중복가드·recent_titles의
+        # '핵심 아이디어' 힌트가 전부 이 필드를 쓰므로 요일 테마보다 검색어가 훨씬 유용하다.
+        "trending_topic": (keyword_plan["target"] if keyword_plan else default_theme),
         "published_at":  datetime.now(timezone.utc).replace(tzinfo=None),
         "costs":         costs,
     }
