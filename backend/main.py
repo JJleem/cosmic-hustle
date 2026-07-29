@@ -60,8 +60,10 @@ app.include_router(dm.router)
 
 
 async def _daily_blog_job():
-    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled, find_duplicate_posts
+    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled, find_duplicate_posts, is_lab_day, KST
     from db.models import BlogComment
+
+    today_kst = datetime.now(KST).date()
 
     for attempt in range(1, 4):
         db = SessionLocal()
@@ -86,7 +88,18 @@ async def _daily_blog_job():
                 )
                 last_agent_title = last_pixel[0] if last_pixel else None
 
-            if today_agent_id == "pocke":
+            if is_lab_day(today_kst):
+                # 매월 첫째 토요일: 루트의 실험실 리포트. 지난달 운영 데이터로만 쓰는 1차 자료.
+                import lab_report
+                from blog_generator import generate_lab_post, LAB_QUESTIONS
+                period = lab_report._prev_period(today_kst.strftime("%Y-%m"))
+                collected = lab_report.collect(db, period)
+                question = lab_report.pick_question(
+                    collected, LAB_QUESTIONS, today_kst.year * 12 + today_kst.month
+                )
+                today_agent_id = "root"
+                data = await generate_lab_post(period, lab_report.to_prompt_text(collected), question)
+            elif today_agent_id == "pocke":
                 # 포케는 discovery 전용 — 실사진 박힌 단일주제 과학글(카테고리 날짜 로테이션)
                 data = await generate_discovery_post(recent_titles=recent_titles, seo_markers=True)
             else:

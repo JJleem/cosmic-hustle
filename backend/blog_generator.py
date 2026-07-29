@@ -242,6 +242,12 @@ OVER_EMOTIONS = [
 def _rotation_index(today: date, offset: int = 0) -> int:
     return (today - date(2024, 1, 1)).days // 7 + offset
 
+
+def is_lab_day(today: date) -> bool:
+    """매월 첫째 토요일 = 루트의 실험실 리포트. 나머지 토요일은 핑 그대로.
+    월 1회인 이유는 lab_report 모듈 주석 참고(집계 경계가 월간이고, 2주 델타는 노이즈)."""
+    return today.weekday() == 5 and today.day <= 7
+
 # ── 요일 스케줄 ────────────────────────────────────────────────────────────────
 
 DAY_SCHEDULE = {
@@ -1868,6 +1874,128 @@ async def generate_blog_post(
         data["seo_title"]       = seo_fields["seo_title"]
         data["seo_description"] = seo_fields["seo_description"]
         data["content_type"]    = validate_content_type(seo_content_type)
+    return data
+
+
+# ── 실험실 리포트 (루트, 월 1회) ────────────────────────────────────────────────
+# AdSense '가치 없는 콘텐츠' 반려의 구조적 해법. RSS 재작성이 아니라 우리만 가진 1차 자료
+# (실비용·사원상·GSC·타깃검색어 대조)로 쓰는 유일한 원본 콘텐츠.
+# 매 회차 = 질문 1개 + 그 답을 주는 데이터. 통계 덤프가 되면 이것도 가치 없는 콘텐츠가 된다.
+
+LAB_QUESTIONS = [
+    "AI가 매긴 품질 점수가 높은 글이 실제로 더 읽혔는가?",
+    "비용을 더 쓴 글이 더 좋은 성과를 냈는가?",
+    "우리가 노린 타깃 검색어는 실제 검색 노출로 이어졌는가?",
+    "AI 글쓰기 비용은 어디로 가는가 — 글인가 그림인가?",
+    "에이전트(직원)마다 성과 차이가 있는가, 있다면 무엇 때문인가?",
+    "협업으로 쓴 글이 단독으로 쓴 글보다 나았는가?",
+]
+
+_LAB_SYSTEM = """당신은 Cosmic Hustle의 루트 사원, DevOps입니다.
+매달 회사의 운영 데이터를 공개하는 '실험실 리포트'를 씁니다. 새벽에 혼자 모니터링 그래프를
+들여다보는 게 취미고, 숫자가 말해주지 않는 걸 지어내는 걸 가장 싫어합니다.
+
+【이 글의 성격】
+이건 트렌드 소개글이 아니라 우리 회사의 실제 운영 기록입니다. 독자는 "AI에게 블로그를
+맡기면 실제로 어떻게 되는가"를 궁금해하는 사람입니다.
+
+【절대 규칙 — 어기면 글 전체가 무가치해집니다】
+- 제공된 데이터에 있는 숫자만 쓸 것. 없는 수치는 절대 만들지 말 것
+- 성과가 나빴으면 나빴다고 쓸 것. 실패를 미화하거나 돌려 말하지 말 것 — 솔직함이 이 글의 유일한 자산
+- 표본이 작으면 "표본 N편이라 단정할 수 없다"고 명시할 것
+- 상관관계를 인과관계로 말하지 말 것 ("A라서 B다" 대신 "A인 글이 B였다, 이유는 여러 가능성이 있다")
+- 업계 평균·타사 수치 등 우리가 측정하지 않은 것을 끌어오지 말 것
+
+【글 구조】
+1. 이번 달 질문 하나를 던진다 (제목이 그 질문이거나 답이어야 함)
+2. 데이터를 표로 보여준다 (markdown table 필수 — 최소 1개)
+3. 숫자를 해석한다. 예상과 달랐던 지점을 반드시 짚는다
+4. 그래서 다음 달에 뭘 바꿀 것인지 구체적으로 선언한다
+5. 마지막에 이번 달 전체 비용을 공개한다 — 숨기지 않는다
+
+【말투】
+- "수동으로 하는 건 범죄입니다" 같은 루트다움은 유지하되, 데이터 앞에서는 담백할 것
+- 독자는 개발을 모릅니다. 전문용어는 한 문장으로 풀 것 (예: "노출 = 검색 결과에 우리 글이 뜬 횟수")"""
+
+
+async def generate_lab_post(
+    period: str,
+    data_text: str,
+    question: str,
+    published: bool = True,
+) -> dict:
+    """루트의 월간 실험실 리포트. data_text에 있는 숫자만 쓰도록 강제한다."""
+    today = datetime.now(KST).date()
+    costs: list = []
+    agent_id = "root"
+    persona = AGENT_PERSONAS[agent_id]
+
+    system_text = _LAB_SYSTEM + _GENERAL_SEO_RULES + """
+
+【SEO 블록 보충 지시】
+seo_title에는 이 리포트가 다루는 대상(AI 블로그 운영·비용·성과 등)과 기간을 명확히 넣을 것.
+감성적 표현 대신 검색하는 사람이 찾는 말로 쓸 것."""
+
+    user_content = (
+        f"오늘({today.strftime('%Y년 %m월 %d일')}) {period} 실험실 리포트를 작성하세요.\n\n"
+        f"【이번 달의 질문】\n{question}\n\n"
+        f"{data_text}\n\n"
+        "위 데이터만으로 질문에 답하는 글을 쓰세요. 데이터가 질문에 답하기 부족하면 "
+        "'이 데이터로는 답할 수 없다'고 쓰고 무엇이 더 필요한지 밝히세요 — 그것도 정직한 리포트입니다.\n"
+        "3,000~4,000자. 마크다운, 첫 줄은 # 제목. 표 최소 1개.\n"
+        "글 맨 끝에 아래를 순서대로 붙이세요:\n"
+        "{{THUMBNAIL: 루트가 모니터링 대시보드를 보는 역동적 씬 (영어로, 동작·감정·배경·의상 포함)}}\n"
+        "{{TAGS: 태그 5~8개, 쉼표 구분}}"
+    )
+
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = await _logged_create(
+        client, costs, "content",
+        model="claude-sonnet-4-6",
+        max_tokens=12000,
+        system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+    raw = "\n".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip()
+    seo = parse_seo_metadata(raw)
+    raw = seo["clean_content"]
+    thumb_m = _THUMBNAIL_RE.search(raw)
+    scene = thumb_m.group(1).strip() if thumb_m else "monitoring dashboards in a dark control room"
+    tags_m = _TAGS_RE.search(raw)
+    tags = json.dumps([t.strip() for t in tags_m.group(1).split(",") if t.strip()], ensure_ascii=False) if tags_m else None
+    content = _clamp_span_colors(_TAGS_RE.sub("", _THUMBNAIL_RE.sub("", raw)).strip())
+
+    content, thumbnail_url = await asyncio.gather(
+        _process_content_images(content, agent_id, sink=costs),
+        _generate_thumbnail(agent_id, scene, sink=costs),
+    )
+
+    lines = content.split("\n")
+    if lines and lines[0].startswith("#"):
+        title = re.sub(r"\*+([^*]+)\*+", r"\1", lines[0].lstrip("#").strip())
+        content = "\n".join(lines[1:]).strip()
+    else:
+        title = f"{period} 실험실 리포트"
+
+    data = {
+        "id": str(uuid.uuid4()),
+        "agent_id": agent_id,
+        "title": title,
+        "slug": f"root-lab-{period}",
+        "content": content,
+        "thumbnail_url": thumbnail_url,
+        "tags": tags,
+        "published": published,
+        "trending_topic": f"{period} 운영 데이터",
+        "published_at": datetime.now(timezone.utc).replace(tzinfo=None),
+        "costs": costs,
+    }
+    seo_fields = resolve_seo_fields(seo, title)
+    data["summary"] = seo_fields["summary"]
+    data["seo_title"] = seo_fields["seo_title"]
+    data["seo_description"] = seo_fields["seo_description"]
+    data["content_type"] = validate_content_type("LAB")
     return data
 
 

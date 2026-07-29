@@ -108,6 +108,7 @@ CONTENT_TYPES = (
     "DEBATE",     # *+fact — AI 토론 시리즈
     "QUIZ",       # plan — AI 테스트
     "INTRO",      # buzz+ping — 소개/공지
+    "LAB",        # root — 실험실 리포트(우리 운영 데이터로 쓰는 월간 1차 자료)
 )
 
 
