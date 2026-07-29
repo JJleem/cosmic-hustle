@@ -201,6 +201,22 @@ OVER_ESSAY_FORMATS = [
         "name": "반전형",
         "guide": "글의 3분의 2 지점까지 독자를 특정 결론으로 유도한 뒤, 마지막에 완전히 뒤집을 것. 반전이 억지스럽지 않게 복선을 심어둘 것.",
     },
+    {
+        "name": "목록형",
+        "guide": "'~하는 N가지' 같은 목록 형식을 빌리되, 뒤로 갈수록 항목이 무너지게 할 것. 마지막 항목은 목록이라는 형식 자체를 배신할 것.",
+    },
+    {
+        "name": "대화형",
+        "guide": "누군가와 나눈 짧은 대화 하나를 축으로 전개할 것. 상대의 말은 짧게, 오버의 속마음은 길게. 대화가 끝난 뒤의 침묵으로 마무리할 것.",
+    },
+    {
+        "name": "실패기록형",
+        "guide": "시도했다가 실패한 일 하나를 시간 순으로 담담히 기록할 것. 교훈으로 정리하거나 극복하지 말고 실패한 상태 그대로 둘 것.",
+    },
+    {
+        "name": "정의형",
+        "guide": "흔히 쓰는 단어 하나를 골라 사전적 정의에서 출발해 계속 다시 정의할 것. 정의가 바뀔 때마다 글의 방향도 함께 꺾일 것.",
+    },
 ]
 
 OVER_EMOTIONS = [
@@ -212,7 +228,19 @@ OVER_EMOTIONS = [
     "분노 — 조용하고 오래된, 해결되지 않는",
     "설렘 — 이유를 말로 설명할 수 없는",
     "피로 — 지쳐있지만 멈출 수 없는",
+    "안도 — 최악을 피했다는 걸 한참 뒤에야 알았을 때의",
+    "질투 — 인정하고 싶지 않은, 가까운 사람을 향한",
+    "죄책감 — 아무도 탓하지 않는데 혼자 남는",
+    "다정함 — 예상 못 한 순간 낯선 사람에게서 건네받은",
+    "체념 — 싸움을 그만둔 뒤에 찾아온 이상한 고요",
 ]
+
+# 로테이션 인덱스는 '일'이 아니라 '주' 기준이어야 한다.
+# 에이전트는 주 1회만 발행하므로 day_index를 쓰면 %7이 항상 같은 값에 고정돼(요일 고정)
+# 형식 풀이 아예 순환하지 않고, 형식·감정 조합도 8주마다 그대로 재현됐다(2026-06-03 == 2026-07-29).
+# 주 단위로 바꾸면 형식은 매주 넘어가고, 조합 주기는 lcm(11,13)=143주가 된다.
+def _rotation_index(today: date, offset: int = 0) -> int:
+    return (today - date(2024, 1, 1)).days // 7 + offset
 
 # ── 요일 스케줄 ────────────────────────────────────────────────────────────────
 
@@ -1367,6 +1395,40 @@ def _rank_posts_by_relevance(query_text: str, posts: list[dict], top_k: int) -> 
         return posts[:top_k]
 
 
+# ── 주제 중복 가드 ─────────────────────────────────────────────────────────────
+# 발행 직전 본문 임베딩(attach_embedding이 넣는 그 값)으로 같은 에이전트의 과거 글과 코사인
+# 유사도를 비교한다. 임계값은 실측 보정(2026-07-29, 발행글 74편 전수 페어와이즈):
+#   실제 중복 재발 사례(over 06-03 vs 07-29) 0.81 / 위키 주간 키워드처럼 제목만 정형인 쌍 최대 0.66
+# → 0.75면 '사실상 같은 글'만 걸리고 인접·유사 주제는 통과한다.
+_DUP_SIM_THRESHOLD = float(os.getenv("BLOG_DUP_SIM_THRESHOLD", "0.75"))
+
+
+def find_duplicate_posts(db, embedding, agent_id: str, limit: int = 3) -> list[tuple[str, float]]:
+    """같은 에이전트의 과거 발행글 중 주제가 사실상 동일한 글을 (제목, 유사도) 목록으로 반환.
+    기간 제한 없음 — '다시는 같은 주제로 쓰지 않는다'가 목표라 전체 이력을 본다."""
+    if embedding is None:
+        return []
+    try:
+        from db.models import BlogPost
+        dist = BlogPost.embedding.cosine_distance(embedding)
+        rows = (
+            db.query(BlogPost.title, dist)
+            .filter(
+                BlogPost.agent_id == agent_id,
+                BlogPost.published == True,
+                BlogPost.embedding.isnot(None),
+                dist <= 1 - _DUP_SIM_THRESHOLD,
+            )
+            .order_by(dist)
+            .limit(limit)
+            .all()
+        )
+        return [(title, 1 - float(d)) for title, d in rows]
+    except Exception:
+        logging.getLogger(__name__).warning("주제 중복 검사 실패 — 발행은 계속", exc_info=True)
+        return []
+
+
 # 4B-2: 일반 게시글 에이전트 → content_type (LLM이 아니라 코드가 지정). pocke는 discovery 경로라 제외.
 _GENERAL_CONTENT_TYPE_BY_AGENT = {
     "buzz":  "MARKETING",
@@ -1437,6 +1499,9 @@ async def generate_blog_post(
     recent_posts: list[dict] | None = None,
     agent_recent_tags: list[str] | None = None,
     seo_markers: bool = False,
+    agent_past_titles: list[str] | None = None,
+    avoid_topics: list[str] | None = None,
+    rotation_offset: int = 0,
 ) -> dict:
     today = datetime.now(KST).date()
     costs: list = []
@@ -1456,9 +1521,8 @@ async def generate_blog_post(
     # 에이전트별 서브테마+앵글 풀 선택
     _pool_item: dict | None = None
     if agent_id in _AGENT_POOLS:
-        day_index = (today - date(2024, 1, 1)).days
         pool = _AGENT_POOLS[agent_id]
-        _pool_item = pool[day_index % len(pool)]
+        _pool_item = pool[_rotation_index(today, rotation_offset) % len(pool)]
 
     # trending_query 결정: 풀 쿼리 → 픽셀 AI 오버라이드
     trending_query = _pool_item["query"] if _pool_item else None
@@ -1542,9 +1606,9 @@ async def generate_blog_post(
 
     # 오버 전용: 형식 + 감정 출발점 주입
     if agent_id == "over":
-        day_index = (today - date(2024, 1, 1)).days
-        fmt = OVER_ESSAY_FORMATS[day_index % len(OVER_ESSAY_FORMATS)]
-        emotion = OVER_EMOTIONS[(day_index + 3) % len(OVER_EMOTIONS)]
+        rot = _rotation_index(today, rotation_offset)
+        fmt = OVER_ESSAY_FORMATS[rot % len(OVER_ESSAY_FORMATS)]
+        emotion = OVER_EMOTIONS[(rot + 3) % len(OVER_EMOTIONS)]
         user_content += (
             f"\n【오늘의 에세이 형식: {fmt['name']}】\n{fmt['guide']}\n"
             f"\n【오늘의 감정 출발점】: {emotion}\n"
@@ -1578,7 +1642,22 @@ async def generate_blog_post(
             "\n【글쓰기 지침】\n"
             "- 자주 다룬 태그 목록에서 2회 이상 등장한 세부 주제·브랜드·캠페인은 이번엔 다루지 말 것 — 트렌드 참고자료에 나와도 다른 소재로 교체할 것\n"
             "- 자주 다룬 태그 목록을 보고 덜 다룬 영역을 우선 탐색할 것\n"
-            "- 2주 이내에 거의 동일한 제목·결론으로 쓴 글은 피할 것\n"
+            "- 위 목록에 있는 글과 같은 통념·같은 질문·같은 결론을 다시 쓰지 말 것 (기간 무관). "
+            "비슷한 분야·인접한 소재는 괜찮지만, 독자가 '전에 읽은 그 글'이라고 느낄 만큼 겹치면 실패다\n"
+        )
+    if agent_past_titles:
+        past_str = "\n".join(f"- {t}" for t in agent_past_titles)
+        user_content += (
+            f"\n【내가 지금까지 쓴 글 전체】 아래는 내(같은 에이전트)가 발행한 글이다. "
+            f"여기 있는 주제·통념·핵심 질문은 다시 다루지 말 것 — 며칠 전이든 몇 달 전이든 동일하게 적용된다. "
+            f"소재가 겹칠 것 같으면 각도가 아니라 소재 자체를 바꿀 것:\n{past_str}\n"
+        )
+    if avoid_topics:
+        avoid_str = "\n".join(f"- {t}" for t in avoid_topics)
+        user_content += (
+            f"\n【⛔ 재작성 지시】 방금 쓴 글이 아래 과거 글과 주제가 사실상 같다고 판정됐다. "
+            f"이번에는 아래 글들과 겹치지 않는 완전히 다른 소재로 처음부터 다시 쓸 것. "
+            f"표현만 바꾸는 것은 소용없다 — 다루는 대상 자체를 바꿔야 한다:\n{avoid_str}\n"
         )
     if agent_recent_tags:
         user_content += (

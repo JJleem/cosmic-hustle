@@ -60,18 +60,19 @@ app.include_router(dm.router)
 
 
 async def _daily_blog_job():
-    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled
+    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled, find_duplicate_posts
     from db.models import BlogComment
 
     for attempt in range(1, 4):
         db = SessionLocal()
         try:
-            from routers.blog import _recent_post_context
+            from routers.blog import _recent_post_context, _agent_past_titles
             # 오늘 담당 에이전트 메모리 조회
             from blog_generator import get_today_agent
             today_agent_id, _ = get_today_agent()
 
             recent_titles, frequent_tags, recent_posts, agent_recent_tags = _recent_post_context(db, agent_id=today_agent_id)
+            past_titles = _agent_past_titles(db, today_agent_id)
             mem_row = db.query(AgentMemory).filter(AgentMemory.agent_id == today_agent_id).first()
             agent_memory = mem_row.memory if mem_row else None
 
@@ -89,7 +90,33 @@ async def _daily_blog_job():
                 # 포케는 discovery 전용 — 실사진 박힌 단일주제 과학글(카테고리 날짜 로테이션)
                 data = await generate_discovery_post(recent_titles=recent_titles, seo_markers=True)
             else:
-                data = await generate_blog_post(recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory, last_agent_title=last_agent_title, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags, seo_markers=general_seo_enabled(today_agent_id))
+                # 주제 중복 가드: 과거 글과 사실상 같은 주제면 로테이션을 밀어 다시 쓴다(최대 2회 재작성).
+                # 재작성은 이미지 생성까지 다시 타므로 비용이 붙지만, 임계값이 '사실상 동일'만 잡아
+                # 실제 발화는 드물다. 버려진 시도의 비용도 합산해 사원상 비용 축을 정확히 유지한다.
+                avoid: list[str] = []
+                dropped_costs: list = []
+                for offset in range(3):
+                    data = await generate_blog_post(
+                        recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory,
+                        last_agent_title=last_agent_title, recent_posts=recent_posts,
+                        agent_recent_tags=agent_recent_tags,
+                        seo_markers=general_seo_enabled(today_agent_id),
+                        agent_past_titles=past_titles, avoid_topics=avoid, rotation_offset=offset,
+                    )
+                    attach_embedding(data)
+                    dups = find_duplicate_posts(db, data.get("embedding"), today_agent_id)
+                    if not dups:
+                        break
+                    avoid += [t for t, _ in dups if t not in avoid]
+                    dropped_costs += data.pop("costs", [])   # pop이라 마지막 시도가 else로 빠져도 중복 합산 없음
+                    logger.warning(
+                        "주제 중복 감지(시도 %d/3): '%s' ≈ %s",
+                        offset + 1, data["title"],
+                        ", ".join(f"'{t}'({s:.2f})" for t, s in dups),
+                    )
+                else:
+                    logger.error("재작성 2회 후에도 주제 중복 — 그대로 발행: %s", data["title"])
+                data["costs"] = dropped_costs + data.get("costs", [])
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")

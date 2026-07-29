@@ -647,6 +647,18 @@ def _recent_post_context(db: Session, agent_id: str | None = None) -> tuple[list
     return recent_titles, [tag for tag, _ in tag_counter.most_common(10)], recent_posts, agent_tags
 
 
+def _agent_past_titles(db: Session, agent_id: str, limit: int = 60) -> list[str]:
+    """해당 에이전트가 지금까지 발행한 글 제목(최신순). 90일 창을 쓰는 recent_titles와 달리
+    기간 제한이 없다 — 오래된 글 주제가 그대로 재활용되는 것을 막기 위함."""
+    rows = (
+        db.query(BlogPost.title, BlogPost.trending_topic)
+        .filter(BlogPost.agent_id == agent_id, BlogPost.published == True)
+        .order_by(desc(BlogPost.published_at))
+        .limit(limit).all()
+    )
+    return [f"{title} (핵심 아이디어: {topic})" if topic else title for title, topic in rows]
+
+
 @router.post("/generate")
 async def trigger_generate(request: Request, agent_id: str | None = None, theme: str | None = None, thumbnail_style: str | None = None, published: bool = True, force: bool = False, seo: bool = False, db: Session = Depends(get_db), _=Depends(_require_admin)):
     """수동으로 블로그 포스트 + 댓글 생성 (테스트·관리용). force=true 시 slug suffix 붙여서 중복 우회.
@@ -654,7 +666,8 @@ async def trigger_generate(request: Request, agent_id: str | None = None, theme:
     from blog_generator import get_today_agent as _get_today_agent
     _effective_agent = agent_id or _get_today_agent()[0]
     recent_titles, frequent_tags, recent_posts, agent_recent_tags = _recent_post_context(db, agent_id=_effective_agent)
-    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags, seo_markers=seo)
+    # 수동 경로는 CEO가 결과를 직접 확인하므로 재작성 루프(main.py)는 태우지 않고 프롬프트 가드만 건다.
+    data = await generate_blog_post(agent_id, recent_titles=recent_titles, frequent_tags=frequent_tags, theme=theme, thumbnail_style=thumbnail_style, published=published, recent_posts=recent_posts, agent_recent_tags=agent_recent_tags, seo_markers=seo, agent_past_titles=_agent_past_titles(db, _effective_agent))
 
     existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
     if existing:

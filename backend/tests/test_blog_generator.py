@@ -71,3 +71,24 @@ def test_clamp_span_colors_keeps_palette_accents():
     for hex_color in ("#F97316", "#FACC15", "#6EE7B7", "#EF4444", "#60A5FA"):
         src = f'<span style="color:{hex_color}">x</span>'
         assert blog_generator._clamp_span_colors(src) == src
+
+def test_rotation_index_advances_every_week():
+    # 회귀: day_index 기반이던 시절 주 1회 발행 에이전트는 %7이 요일에 고정돼
+    # 오버가 '반박형'만 반복했다(2026-06-03 == 2026-07-29). 주 단위 인덱스는 매주 +1이어야 함.
+    from datetime import date, timedelta
+    base = date(2026, 7, 29)
+    idx = [blog_generator._rotation_index(base + timedelta(days=7 * w)) for w in range(5)]
+    assert idx == [idx[0] + w for w in range(5)]
+    assert blog_generator._rotation_index(base, offset=2) == idx[0] + 2
+
+
+def test_over_format_emotion_pair_does_not_repeat_within_a_year():
+    # 형식 11 · 감정 13(서로소) → 조합 주기 143주. 1년(52주) 안에는 같은 조합이 없어야 함.
+    from datetime import date, timedelta
+    fmts, emos = blog_generator.OVER_ESSAY_FORMATS, blog_generator.OVER_EMOTIONS
+    seen = set()
+    for w in range(52):
+        r = blog_generator._rotation_index(date(2026, 7, 29) + timedelta(days=7 * w))
+        pair = (r % len(fmts), (r + 3) % len(emos))
+        assert pair not in seen, f"{w}주 뒤 형식·감정 조합 재현: {pair}"
+        seen.add(pair)
