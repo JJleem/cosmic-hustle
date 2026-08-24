@@ -3,6 +3,51 @@ import pytest
 import blog_generator
 
 
+def test_thumbnail_styles_do_not_invite_written_surfaces():
+    risky = ("poster", "panel", "magazine", "card", "sign", "screen", "chalkboard")
+    for style in blog_generator._THUMBNAIL_STYLES:
+        prompt = f"{style['prefix']} {style['suffix']}".lower()
+        assert not any(word in prompt for word in risky)
+
+
+def test_sanitize_thumbnail_prompt_removes_writing_surfaces_and_cjk():
+    prompt = 'character points at a neon sign saying "SALE" beside a 간판 and 中文 poster'
+    clean = blog_generator._sanitize_thumbnail_scene_prompt(prompt)
+
+    assert "sign" not in clean.lower()
+    assert "poster" not in clean.lower()
+    assert "SALE" not in clean
+    assert "간판" not in clean
+    assert "中文" not in clean
+
+
+@pytest.mark.asyncio
+async def test_thumbnail_retries_once_when_glyph_guard_rejects(monkeypatch):
+    monkeypatch.setenv("FAL_KEY", "test")
+
+    async def fake_upload(agent_id):
+        return "https://example.com/character.png"
+
+    calls = []
+    async def fake_generate(char_url, prompt, sink=None):
+        calls.append(prompt)
+        return f"http://backend/static/blog/thumb-{len(calls)}.png"
+
+    verdicts = iter([True, False])
+    async def fake_guard(url, sink=None):
+        return next(verdicts)
+
+    monkeypatch.setattr(blog_generator, "_upload_character", fake_upload)
+    monkeypatch.setattr(blog_generator, "_run_thumbnail_generation", fake_generate)
+    monkeypatch.setattr(blog_generator, "_thumbnail_has_glyphs", fake_guard)
+    monkeypatch.setattr(blog_generator, "_discard_local_image", lambda url: None)
+
+    result = await blog_generator._generate_thumbnail("buzz", "holding a blank orb")
+
+    assert result.endswith("thumb-2.png")
+    assert len(calls) == 2
+
+
 @pytest.mark.asyncio
 async def test_process_content_images_removes_unprocessed_placeholders(monkeypatch):
     async def fake_generate_content_image(prompt: str, cheap: bool = False, sink=None):

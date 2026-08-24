@@ -130,6 +130,17 @@ async def _daily_blog_job():
                 else:
                     logger.error("재작성 2회 후에도 주제 중복 — 그대로 발행: %s", data["title"])
                 data["costs"] = dropped_costs + data.get("costs", [])
+
+            # 무료 구조 검사 -> Haiku 1회 -> 필요 섹션만 1회 수정.
+            # 실패해도 산출물은 삭제하지 않고 비공개 초안으로 보존한다.
+            from blog_quality_gate import run_quality_gate
+            gate = await run_quality_gate(data)
+            data.pop("embedding", None)  # 부분 수정됐다면 최종 본문 기준으로 재생성
+            if not gate.get("publishable"):
+                data["published"] = False
+                logger.warning("품질 게이트 미통과 — 비공개 초안 보존: %s | %s", data["title"], gate)
+            else:
+                logger.info("품질 게이트 통과: %s | %s", data["title"], gate)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
             if existing:
                 logger.info(f"블로그 포스트 이미 존재: {data['slug']}")
@@ -139,12 +150,15 @@ async def _daily_blog_job():
             db.add(post)
             db.flush()
             record_post_costs(db, post.id, post.agent_id, costs)
-            summary = data["content"][:300]
-            comments = await generate_comments(post.id, post.agent_id, post.title, summary)
-            for c in comments:
-                db.add(BlogComment(**c))
+            if post.published:
+                summary = data["content"][:300]
+                comments = await generate_comments(post.id, post.agent_id, post.title, summary)
+                for c in comments:
+                    db.add(BlogComment(**c))
             db.commit()
-            logger.info(f"블로그 포스트+댓글 생성 완료: {data['slug']}")
+            logger.info(f"블로그 포스트 생성 완료(published={post.published}): {data['slug']}")
+            if not post.published:
+                return
             from blog_generator import notify_search_engines_bg, revalidate_frontend_bg, AGENT_PERSONAS
             notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{data['slug']}")
             revalidate_frontend_bg([data["slug"]])

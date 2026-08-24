@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import json
+import base64
 import random
 import asyncio
 import logging
@@ -1214,12 +1215,12 @@ _THUMBNAIL_STYLES = [
     },
     # 2D 플랫 카툰
     {
-        "prefix": "2D flat vector illustration, bold black outlines, solid limited color palette, graphic novel panel —",
+        "prefix": "2D flat vector illustration, bold black outlines, solid limited color palette, dynamic asymmetrical composition —",
         "suffix": "NOT 3D render, NOT CGI, NOT Pixar, flat colors only",
     },
     # 레트로 팝아트
     {
-        "prefix": "retro pop art poster, Roy Lichtenstein style, halftone dot texture, bold primary colors, vintage 60s print —",
+        "prefix": "retro pop art illustration, halftone dot texture, bold primary colors, vintage 60s color treatment —",
         "suffix": "NOT 3D, NOT CGI, NOT smooth render, halftone dots visible",
     },
     # 수채화
@@ -1229,7 +1230,7 @@ _THUMBNAIL_STYLES = [
     },
     # 매거진 일러스트
     {
-        "prefix": "editorial magazine illustration, semi-realistic painterly style, ink outlines with flat color fills, sharp composition —",
+        "prefix": "semi-realistic editorial illustration, painterly style, ink outlines with flat color fills, sharp composition —",
         "suffix": "NOT 3D render, NOT CGI, NOT Pixar animation",
     },
     # 네온 사이버펑크
@@ -1241,9 +1242,74 @@ _THUMBNAIL_STYLES = [
 
 _THUMBNAIL_STYLE_MAP = {s["prefix"].split(",")[0].lower().split()[0]: s for s in _THUMBNAIL_STYLES}
 _THUMBNAIL_STYLE_MAP["tcg"] = {
-    "prefix": "Pokemon Trading Card Game TCG holographic rare card illustration, ornate golden card frame border, vivid fantasy character portrait art, shiny foil texture, centered hero composition —",
-    "suffix": "NOT plain background, NOT photo, card frame must be visible, holographic sheen",
+    "prefix": "holographic fantasy character illustration, ornate abstract golden border, vivid portrait art, shiny foil texture, centered hero composition —",
+    "suffix": "iridescent holographic sheen, clean abstract border",
 }
+
+_WRITING_SURFACE_RE = re.compile(
+    r"\b(?:neon\s+signs?|signs?|billboards?|banners?|posters?|scrolls?|labels?|tags?|screens?|"
+    r"monitors?|books?|newspapers?|whiteboards?|chalkboards?|speech\s+bubbles?|logos?|"
+    r"branded\s+packaging|packaging|letters?|words?|writing|text)\b",
+    re.IGNORECASE,
+)
+_CJK_RE = re.compile(r"[\u2e80-\u2eff\u3000-\u303f\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]+")
+
+
+def _sanitize_thumbnail_scene_prompt(prompt: str) -> str:
+    """Flux가 가짜 CJK 글리프를 만들기 쉬운 표면·문구를 장면에서 제거한다."""
+    clean = re.sub(r'["\u201c][^"\u201d]{1,80}["\u201d]', "", prompt)
+    clean = _CJK_RE.sub("", clean)
+    clean = _WRITING_SURFACE_RE.sub("plain object", clean)
+    clean = re.sub(r"\s+", " ", clean).strip(" ,.-")
+    return f"{clean}, minimal uncluttered environment, organic shapes and unmarked objects"
+
+
+def _discard_local_image(url: str) -> None:
+    filename = url.rsplit("/", 1)[-1]
+    path = _STATIC_DIR / filename
+    if path.parent == _STATIC_DIR and path.exists():
+        path.unlink()
+
+
+async def _thumbnail_has_glyphs(url: str, sink: list | None = None) -> bool | None:
+    """보수적 비전 검사. None은 판정 불가(재생성하지 않고 폴백)."""
+    path = _STATIC_DIR / url.rsplit("/", 1)[-1]
+    if not path.exists():
+        logger.warning("썸네일 문자 검사 실패: 로컬 파일 없음")
+        return None
+    mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(path.suffix.lower(), "image/png")
+    try:
+        client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        message = await _logged_create(
+            client, sink, "thumbnail_guard",
+            model="claude-haiku-4-5-20251001", max_tokens=5,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.b64encode(path.read_bytes()).decode("ascii")}},
+                {"type": "text", "text": "Does this image contain any visible letter, number, word, logo, watermark, or text-like glyph in any script, including fake Chinese/Korean-looking marks? Reply only YES or NO. When uncertain reply YES."},
+            ]}],
+        )
+        answer = "".join(b.text for b in message.content if getattr(b, "type", "") == "text").strip().upper()
+        return answer != "NO"
+    except Exception as e:
+        logger.warning(f"썸네일 문자 검사 실패(안전하게 폐기): {e}")
+        return None
+
+
+async def _run_thumbnail_generation(char_url: str, prompt: str, sink: list | None = None) -> str:
+    import fal_client
+    result = await asyncio.wait_for(
+        asyncio.to_thread(
+            fal_client.subscribe,
+            "fal-ai/flux-pro/kontext/max",
+            arguments={
+                "image_url": char_url, "prompt": prompt, "aspect_ratio": "4:3",
+                "output_format": "png", "guidance_scale": 4.5,
+            },
+        ),
+        timeout=120.0,
+    )
+    _log_image_cost(sink, "thumbnail", "fal-ai/flux-pro/kontext/max")
+    return await _download_image(result["images"][0]["url"])
 
 
 async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str | None = None, sink: list | None = None) -> str | None:
@@ -1267,6 +1333,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         style = random.choice(_THUMBNAIL_STYLES)
     # Flux는 negative prompt가 없어서 "no text" 류를 쓰면 오히려 글자를 불러옴.
     # 글자 억제는 여기서 하지 않고 scene_prompt 단계(LLM)에서 전담함.
+    scene_prompt = _sanitize_thumbnail_scene_prompt(scene_prompt)
     full_prompt = (
         f"{style['prefix']} "
         f"{scene_prompt}, "
@@ -1274,24 +1341,25 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
     )
 
     try:
-        import fal_client
-        result = await asyncio.wait_for(
-            asyncio.to_thread(
-                fal_client.subscribe,
-                "fal-ai/flux-pro/kontext/max",
-                arguments={
-                    "image_url": char_url,
-                    "prompt": full_prompt,
-                    "aspect_ratio": "4:3",
-                    "output_format": "png",
-                    "guidance_scale": 4.5,
-                },
-            ),
-            timeout=120.0,
+        url = await _run_thumbnail_generation(char_url, full_prompt, sink)
+        verdict = await _thumbnail_has_glyphs(url, sink)
+        if verdict is False:
+            return url
+        _discard_local_image(url)
+        if verdict is None:
+            logger.warning("썸네일 문자 판정 불가 — 재생성 비용 없이 프론트 폴백 사용")
+            return None
+        logger.warning("썸네일 문자 흔적 감지 — 안전 스타일로 1회 재생성")
+        retry_prompt = (
+            "Pixar 3D animation style, charming expressive cartoon, smooth 3D render, "
+            f"{scene_prompt}, soft cinematic lighting, simple seamless background"
         )
-        fal_url = result["images"][0]["url"]
-        _log_image_cost(sink, "thumbnail", "fal-ai/flux-pro/kontext/max")
-        return await _download_image(fal_url)
+        retry_url = await _run_thumbnail_generation(char_url, retry_prompt, sink)
+        if await _thumbnail_has_glyphs(retry_url, sink) is False:
+            return retry_url
+        _discard_local_image(retry_url)
+        logger.warning("재생성 썸네일에도 문자 흔적 감지 — 썸네일 없이 프론트 폴백 사용")
+        return None
     except Exception as e:
         # 캐시된 캐릭터 URL이 만료됐을 수 있으니 비워서 다음 발행 때 재업로드(self-heal)
         _CHAR_URL_CACHE.pop(agent_id, None)
