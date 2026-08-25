@@ -132,13 +132,12 @@ async def _daily_blog_job():
                 data["costs"] = dropped_costs + data.get("costs", [])
 
             # 무료 구조 검사 -> Haiku 1회 -> 필요 섹션만 1회 수정.
-            # 실패해도 산출물은 삭제하지 않고 비공개 초안으로 보존한다.
+            # 품질 검수는 조언 역할이며 매일 발행을 막지 않는다.
             from blog_quality_gate import run_quality_gate
             gate = await run_quality_gate(data)
             data.pop("embedding", None)  # 부분 수정됐다면 최종 본문 기준으로 재생성
             if not gate.get("publishable"):
-                data["published"] = False
-                logger.warning("품질 게이트 미통과 — 비공개 초안 보존: %s | %s", data["title"], gate)
+                logger.warning("품질 게이트 미통과 — 원문 발행 계속: %s | %s", data["title"], gate)
             else:
                 logger.info("품질 게이트 통과: %s | %s", data["title"], gate)
             existing = db.query(BlogPost).filter(BlogPost.slug == data["slug"]).first()
@@ -157,8 +156,6 @@ async def _daily_blog_job():
                     db.add(BlogComment(**c))
             db.commit()
             logger.info(f"블로그 포스트 생성 완료(published={post.published}): {data['slug']}")
-            if not post.published:
-                return
             from blog_generator import notify_search_engines_bg, revalidate_frontend_bg, AGENT_PERSONAS
             notify_search_engines_bg(f"https://cosmic-hustle.ai.kr/{data['slug']}")
             revalidate_frontend_bg([data["slug"]])
