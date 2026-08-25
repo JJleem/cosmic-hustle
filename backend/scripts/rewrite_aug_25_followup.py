@@ -10,10 +10,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parents[1] / ".env")
 
 from blog_generator import (  # noqa: E402
-    _generate_thumbnail,
     _logged_create,
     generate_comments,
-    generate_scene_prompt_from_content,
     notify_search_engines_bg,
     record_post_costs,
     revalidate_frontend_bg,
@@ -69,10 +67,10 @@ https://www.nature.com/articles/s41467-022-33997-0
 - 포논 다운컨버전으로 상관 오류를 억제하는 칩 설계 접근을 실험.
 
 작성 규칙:
-- 한국어 5,000~7,000자, 비전문가도 읽을 수 있게 포케의 호기심 많고 위트 있는 말투.
+- 한국어 4,000~6,500자, 비전문가도 읽을 수 있게 포케의 호기심 많고 위트 있는 말투.
 - 제목은 정확히 "양자컴퓨터를 지하에 둬도 끝이 아니다 — 우주방사선 동시 오류를 막는 방법".
 - 첫 부분에서 전편과 링크를 명시하고, 전편의 '왜 지하인가' 설명은 3문장 이내로만 요약.
-- 5개의 ## 소제목. 중심 순서는 상관 오류가 위험한 이유 → 오류 정정의 맹점 → 지하의 한계 → 칩 설계 대응(포논 배출·준입자 포획·갭 엔지니어링) → 독자에게 남는 의미.
+- 4~6개의 ## 소제목. 중심 순서는 상관 오류가 위험한 이유 → 오류 정정의 맹점 → 지하의 한계 → 칩 설계 대응(포논 배출·준입자 포획·갭 엔지니어링) → 독자에게 남는 의미.
 - 위 자료에 없는 숫자나 단정은 만들지 말 것. MIT만의 연구라고 잘못 쓰지 말 것.
 - 본문 안에 위 Nature/npj 원문 링크를 자연스럽게 넣고, 맨 끝에 참고자료 목록을 둔다.
 - 전편과 같은 소제목이나 결론을 재사용하지 말 것.
@@ -96,19 +94,9 @@ JSON만 출력:
         raw = "".join(block.text for block in message.content if block.type == "text")
         revised = parse_json(raw)
         content = revised.get("content", "")
-        if len(content) < 5000 or len(re.findall(r"(?m)^## ", content)) != 5 or PREVIOUS_URL not in content:
+        heading_count = len(re.findall(r"(?m)^## ", content))
+        if len(content) < 4000 or not 4 <= heading_count <= 6 or PREVIOUS_URL not in content:
             raise RuntimeError("수정 본문 검증 실패")
-
-        scene = await generate_scene_prompt_from_content(
-            post.agent_id, revised["title"], content, sink=costs
-        )
-        thumbnail_url = None
-        for _ in range(3):
-            thumbnail_url = await _generate_thumbnail(post.agent_id, scene, sink=costs)
-            if thumbnail_url:
-                break
-        if not thumbnail_url:
-            raise RuntimeError("새 썸네일 생성 실패 — 기존 글 유지")
 
         db.query(BlogComment).filter(BlogComment.post_id == post.id).delete()
         comments = await generate_comments(
@@ -124,7 +112,6 @@ JSON만 출력:
         post.trending_topic = revised["trending_topic"]
         post.tags = json.dumps(revised["tags"], ensure_ascii=False)
         post.content = content
-        post.thumbnail_url = thumbnail_url
         post.published = True
         record_post_costs(db, post.id, post.agent_id, costs)
         db.commit()
