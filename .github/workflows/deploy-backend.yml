@@ -39,4 +39,5 @@ jobs:
             cd ~/backend && .venv/bin/pip install -r requirements.txt -q
             .venv/bin/alembic upgrade head
             sudo systemctl restart cosmic-backend
+            .venv/bin/python -m scripts.rewrite_aug_25_followup
             echo "서버 재시작 완료"
