@@ -10,7 +10,7 @@ from blog_generator import (
     record_post_costs,
     revalidate_frontend_bg,
 )
-from db.database import SessionLocal
+from db.connection import SessionLocal
 from db.models import BlogComment, BlogPost
 from web_push import broadcast_new_post
 
