@@ -38,7 +38,16 @@ async def main() -> None:
         if not post:
             raise RuntimeError(f"수정 대상 없음: {SLUG}")
         if "지하에 둬도 끝이 아니다" in post.title:
-            print(f"이미 수정 완료: {SLUG}")
+            corrections = {
+                "Berndtson et al.": "Li et al.",
+                "Acharya et al.": "Harrington et al.",
+                "Cardani et al.": "Martinis",
+            }
+            for wrong, correct in corrections.items():
+                post.content = (post.content or "").replace(wrong, correct)
+            db.commit()
+            revalidate_frontend_bg([post.slug])
+            print(f"후속편 참고문헌 교정 완료: {SLUG}")
             return
 
         costs: list[dict] = []
