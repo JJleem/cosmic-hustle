@@ -18,6 +18,16 @@ def test_thumbnail_styles_include_matchday_inspired_options():
     assert len(blog_generator._THUMBNAIL_STYLES) == 11
 
 
+def test_matchday_styles_do_not_hardcode_football_team_pink():
+    prompts = " ".join(
+        f"{blog_generator._THUMBNAIL_STYLE_MAP[name]['prefix']} {blog_generator._THUMBNAIL_STYLE_MAP[name]['suffix']}"
+        for name in ("xerox", "risograph")
+    ).lower()
+
+    assert "pink" not in prompts
+    assert "character" in prompts
+
+
 def test_thumbnail_style_rotates_without_weekly_repeats():
     start = date(2026, 8, 27)
     styles = [

@@ -1243,11 +1243,11 @@ _THUMBNAIL_STYLES = [
         "suffix": "NOT photorealistic, NOT 3D, bold hand-inked contours",
     },
     {
-        "prefix": "xerox zine collage aesthetic, rough toner grain, torn paper edges, masking tape corners, hot pink abstract marker strokes —",
-        "suffix": "NOT glossy, NOT 3D, monochrome photocopy texture with one accent color",
+        "prefix": "xerox zine collage aesthetic, rough toner grain, torn paper edges, masking tape corners, abstract marker strokes using the character's defining accent color —",
+        "suffix": "NOT glossy, NOT 3D, monochrome photocopy texture with one character-derived accent color",
     },
     {
-        "prefix": "risograph print illustration, misregistered navy and hot pink ink layers, coarse halftone grain, limited two-color palette —",
+        "prefix": "risograph print illustration, misregistered deep midnight blue and character-derived accent ink layers, coarse halftone grain, limited two-color palette —",
         "suffix": "NOT photorealistic, NOT 3D, visible ink texture",
     },
     {
