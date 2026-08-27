@@ -1357,9 +1357,8 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         retry_url = await _run_thumbnail_generation(char_url, retry_prompt, sink)
         if await _thumbnail_has_glyphs(retry_url, sink) is False:
             return retry_url
-        _discard_local_image(retry_url)
-        logger.warning("재생성 썸네일에도 문자 흔적 감지 — 썸네일 없이 프론트 폴백 사용")
-        return None
+        logger.warning("재생성 썸네일 문자 검사 미통과 — 누락 방지를 위해 재생성 이미지 사용")
+        return retry_url
     except Exception as e:
         # 캐시된 캐릭터 URL이 만료됐을 수 있으니 비워서 다음 발행 때 재업로드(self-heal)
         _CHAR_URL_CACHE.pop(agent_id, None)
