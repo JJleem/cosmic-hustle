@@ -29,6 +29,12 @@ def test_thumbnail_style_rotates_without_weekly_repeats():
     assert all(left != right for left, right in zip(styles, styles[1:]))
 
 
+def test_thumbnail_style_can_be_forced_for_manual_preview():
+    selected = blog_generator._select_thumbnail_style("ka", force_style="vintage")
+
+    assert selected is blog_generator._THUMBNAIL_STYLE_MAP["vintage"]
+
+
 def test_sanitize_thumbnail_prompt_removes_writing_surfaces_and_cjk():
     prompt = 'character points at a neon sign saying "SALE" beside a 간판 and 中文 poster'
     clean = blog_generator._sanitize_thumbnail_scene_prompt(prompt)

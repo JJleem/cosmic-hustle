@@ -1003,12 +1003,13 @@ async def regenerate_thumbnail(request: Request, slug: str, body: dict = None, d
         raise HTTPException(status_code=404, detail="Post not found")
 
     scene_prompt = (body or {}).get("scene_prompt")
+    thumbnail_style = (body or {}).get("thumbnail_style")
     if not scene_prompt:
         scene_prompt = await generate_scene_prompt_from_content(
             post.agent_id, post.title, post.content or ""
         )
 
-    url = await _generate_thumbnail(post.agent_id, scene_prompt)
+    url = await _generate_thumbnail(post.agent_id, scene_prompt, force_style=thumbnail_style)
     if not url:
         raise HTTPException(status_code=500, detail="썸네일 생성 실패 (FAL_KEY 확인)")
 
@@ -1016,7 +1017,7 @@ async def regenerate_thumbnail(request: Request, slug: str, body: dict = None, d
     db.commit()
     if post.published:
         revalidate_frontend_bg([post.slug])
-    return {"thumbnail_url": url, "scene_prompt": scene_prompt}
+    return {"thumbnail_url": url, "scene_prompt": scene_prompt, "thumbnail_style": thumbnail_style}
 
 
 # ── 댓글 ──────────────────────────────────────────────────────────────────────
