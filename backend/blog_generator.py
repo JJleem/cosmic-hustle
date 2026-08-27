@@ -1345,10 +1345,10 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         verdict = await _thumbnail_has_glyphs(url, sink)
         if verdict is False:
             return url
-        _discard_local_image(url)
         if verdict is None:
-            logger.warning("썸네일 문자 판정 불가 — 재생성 비용 없이 프론트 폴백 사용")
-            return None
+            logger.warning("썸네일 문자 판정 불가 — 재생성 비용 없이 생성된 이미지 사용")
+            return url
+        _discard_local_image(url)
         logger.warning("썸네일 문자 흔적 감지 — 안전 스타일로 1회 재생성")
         retry_prompt = (
             "Pixar 3D animation style, charming expressive cartoon, smooth 3D render, "

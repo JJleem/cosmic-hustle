@@ -49,6 +49,31 @@ async def test_thumbnail_retries_once_when_glyph_guard_rejects(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_thumbnail_keeps_generated_image_when_glyph_guard_is_unavailable(monkeypatch):
+    monkeypatch.setenv("FAL_KEY", "test")
+
+    async def fake_upload(agent_id):
+        return "https://example.com/character.png"
+
+    async def fake_generate(char_url, prompt, sink=None):
+        return "http://backend/static/blog/thumb.png"
+
+    async def fake_guard(url, sink=None):
+        return None
+
+    discarded = []
+    monkeypatch.setattr(blog_generator, "_upload_character", fake_upload)
+    monkeypatch.setattr(blog_generator, "_run_thumbnail_generation", fake_generate)
+    monkeypatch.setattr(blog_generator, "_thumbnail_has_glyphs", fake_guard)
+    monkeypatch.setattr(blog_generator, "_discard_local_image", discarded.append)
+
+    result = await blog_generator._generate_thumbnail("ka", "holding a blank orb")
+
+    assert result == "http://backend/static/blog/thumb.png"
+    assert discarded == []
+
+
+@pytest.mark.asyncio
 async def test_process_content_images_removes_unprocessed_placeholders(monkeypatch):
     async def fake_generate_content_image(prompt: str, cheap: bool = False, sink=None):
         return f"https://example.com/{prompt}.png"
