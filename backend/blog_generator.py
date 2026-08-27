@@ -1356,7 +1356,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         logger.warning(f"캐릭터 이미지 업로드 실패 ({agent_id}), 썸네일 생성 건너뜀")
         return None
 
-    # 포스트마다 랜덤 스타일 선택 — 스타일을 앞에, 부정어를 뒤에 배치
+    # 에이전트별 주간 순환 스타일 선택 — 스타일을 앞에, 부정어를 뒤에 배치
     # 톤·구도는 scene_prompt(코미디 방향)가 전담 — 여기서 고정 접미사로 덮어쓰지 않음
     style = _select_thumbnail_style(agent_id, force_style)
     # Flux는 negative prompt가 없어서 "no text" 류를 쓰면 오히려 글자를 불러옴.
