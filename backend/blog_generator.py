@@ -1238,6 +1238,26 @@ _THUMBNAIL_STYLES = [
         "prefix": "neon cyberpunk illustration, dark background lit by glowing light strips and colored rim light, vivid electric colors, futuristic stylized art —",
         "suffix": "NOT 3D CGI render, NOT Pixar, dark moody lighting",
     },
+    {
+        "prefix": "vintage action comic illustration, energetic ink hatching, exaggerated motion, cream paper texture, dynamic foreshortening, limited accent colors —",
+        "suffix": "NOT photorealistic, NOT 3D, bold hand-inked contours",
+    },
+    {
+        "prefix": "xerox zine collage aesthetic, rough toner grain, torn paper edges, masking tape corners, hot pink abstract marker strokes —",
+        "suffix": "NOT glossy, NOT 3D, monochrome photocopy texture with one accent color",
+    },
+    {
+        "prefix": "risograph print illustration, misregistered navy and hot pink ink layers, coarse halftone grain, limited two-color palette —",
+        "suffix": "NOT photorealistic, NOT 3D, visible ink texture",
+    },
+    {
+        "prefix": "charcoal and graphite drawing, rough paper grain, loose gestural strokes, selective muted accent color —",
+        "suffix": "NOT glossy, NOT CGI, hand-drawn sketch texture",
+    },
+    {
+        "prefix": "papercut diorama illustration, hand-cut colored paper shapes, tactile fibers, shallow depth, playful crafted shadows —",
+        "suffix": "NOT photorealistic, NOT CGI, handmade paper craft aesthetic",
+    },
 ]
 
 _THUMBNAIL_STYLE_MAP = {s["prefix"].split(",")[0].lower().split()[0]: s for s in _THUMBNAIL_STYLES}
@@ -1245,6 +1265,16 @@ _THUMBNAIL_STYLE_MAP["tcg"] = {
     "prefix": "holographic fantasy character illustration, ornate abstract golden border, vivid portrait art, shiny foil texture, centered hero composition —",
     "suffix": "iridescent holographic sheen, clean abstract border",
 }
+
+
+def _select_thumbnail_style(agent_id: str, force_style: str | None = None, on_date: date | None = None) -> dict:
+    """Rotate weekly per agent so a weekly author cannot repeat a style back-to-back."""
+    if force_style and force_style.lower() in _THUMBNAIL_STYLE_MAP:
+        return _THUMBNAIL_STYLE_MAP[force_style.lower()]
+    current = on_date or datetime.now(KST).date()
+    week_index = current.toordinal() // 7
+    agent_offset = sum(ord(char) for char in agent_id)
+    return _THUMBNAIL_STYLES[(week_index + agent_offset) % len(_THUMBNAIL_STYLES)]
 
 _WRITING_SURFACE_RE = re.compile(
     r"\b(?:neon\s+signs?|signs?|billboards?|banners?|posters?|scrolls?|labels?|tags?|screens?|"
@@ -1328,9 +1358,7 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
 
     # 포스트마다 랜덤 스타일 선택 — 스타일을 앞에, 부정어를 뒤에 배치
     # 톤·구도는 scene_prompt(코미디 방향)가 전담 — 여기서 고정 접미사로 덮어쓰지 않음
-    style = _THUMBNAIL_STYLE_MAP.get(force_style, None) if force_style else None
-    if style is None:
-        style = random.choice(_THUMBNAIL_STYLES)
+    style = _select_thumbnail_style(agent_id, force_style)
     # Flux는 negative prompt가 없어서 "no text" 류를 쓰면 오히려 글자를 불러옴.
     # 글자 억제는 여기서 하지 않고 scene_prompt 단계(LLM)에서 전담함.
     scene_prompt = _sanitize_thumbnail_scene_prompt(scene_prompt)
@@ -1351,8 +1379,9 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         _discard_local_image(url)
         logger.warning("썸네일 문자 흔적 감지 — 안전 스타일로 1회 재생성")
         retry_prompt = (
-            "Pixar 3D animation style, charming expressive cartoon, smooth 3D render, "
-            f"{scene_prompt}, soft cinematic lighting, simple seamless background"
+            f"{style['prefix']} "
+            f"{scene_prompt}, simplified composition, fewer props, plain seamless background, "
+            f"{style['suffix']}"
         )
         retry_url = await _run_thumbnail_generation(char_url, retry_prompt, sink)
         if await _thumbnail_has_glyphs(retry_url, sink) is False:

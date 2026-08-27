@@ -1,4 +1,5 @@
 import pytest
+from datetime import date, timedelta
 
 import blog_generator
 
@@ -8,6 +9,24 @@ def test_thumbnail_styles_do_not_invite_written_surfaces():
     for style in blog_generator._THUMBNAIL_STYLES:
         prompt = f"{style['prefix']} {style['suffix']}".lower()
         assert not any(word in prompt for word in risky)
+
+
+def test_thumbnail_styles_include_matchday_inspired_options():
+    style_ids = set(blog_generator._THUMBNAIL_STYLE_MAP)
+
+    assert {"vintage", "xerox", "risograph", "charcoal", "papercut"} <= style_ids
+    assert len(blog_generator._THUMBNAIL_STYLES) == 11
+
+
+def test_thumbnail_style_rotates_without_weekly_repeats():
+    start = date(2026, 8, 27)
+    styles = [
+        blog_generator._select_thumbnail_style("ka", on_date=start + timedelta(weeks=week))["prefix"]
+        for week in range(len(blog_generator._THUMBNAIL_STYLES))
+    ]
+
+    assert len(set(styles)) == len(blog_generator._THUMBNAIL_STYLES)
+    assert all(left != right for left, right in zip(styles, styles[1:]))
 
 
 def test_sanitize_thumbnail_prompt_removes_writing_surfaces_and_cjk():
@@ -42,10 +61,11 @@ async def test_thumbnail_retries_once_when_glyph_guard_rejects(monkeypatch):
     monkeypatch.setattr(blog_generator, "_thumbnail_has_glyphs", fake_guard)
     monkeypatch.setattr(blog_generator, "_discard_local_image", lambda url: None)
 
-    result = await blog_generator._generate_thumbnail("buzz", "holding a blank orb")
+    result = await blog_generator._generate_thumbnail("buzz", "holding a blank orb", force_style="vintage")
 
     assert result.endswith("thumb-2.png")
     assert len(calls) == 2
+    assert all("vintage action comic illustration" in prompt for prompt in calls)
 
 
 @pytest.mark.asyncio
