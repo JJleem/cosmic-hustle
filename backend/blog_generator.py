@@ -1376,14 +1376,18 @@ async def _generate_thumbnail(agent_id: str, scene_prompt: str, force_style: str
         if verdict is None:
             logger.warning("썸네일 문자 판정 불가 — 재생성 비용 없이 생성된 이미지 사용")
             return url
-        _discard_local_image(url)
         logger.warning("썸네일 문자 흔적 감지 — 안전 스타일로 1회 재생성")
         retry_prompt = (
             f"{style['prefix']} "
             f"{scene_prompt}, simplified composition, fewer props, plain seamless background, "
             f"{style['suffix']}"
         )
-        retry_url = await _run_thumbnail_generation(char_url, retry_prompt, sink)
+        try:
+            retry_url = await _run_thumbnail_generation(char_url, retry_prompt, sink)
+        except Exception as retry_error:
+            logger.warning(f"썸네일 재생성 실패 — 최초 이미지 유지: {retry_error}")
+            return url
+        _discard_local_image(url)
         if await _thumbnail_has_glyphs(retry_url, sink) is False:
             return retry_url
         logger.warning("재생성 썸네일 문자 검사 미통과 — 누락 방지를 위해 재생성 이미지 사용")
