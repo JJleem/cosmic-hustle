@@ -110,7 +110,7 @@ async def _rewrite_section(data: dict, audit: dict, costs: list) -> bool:
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = await _logged_create(
         client, costs, "quality_rewrite",
-        model="claude-sonnet-4-6", max_tokens=1200,
+        model="claude-sonnet-5", max_tokens=1200,
         messages=[{"role": "user", "content": (
             "아래 블로그의 문제 섹션만 수정하라. 새 수치나 사실을 발명하지 말고, 제공된 글 안에서 "
             "확인되는 근거만 사용하라. 제목과 ## 소제목은 유지하고 수정된 섹션만 출력하라.\n\n"

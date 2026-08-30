@@ -93,7 +93,7 @@ cosmic-hustle.ai.kr 의 11명 에이전트가 매일 쓰는 글을 **공정하�
 
 ### 5.2 LLM 판사 모델
 - 추천: **Claude Haiku로 대량 1차 채점 + 애매한 케이스만 Sonnet 재판정**(2단계). 비용/품질 균형.
-- (모델 ID 참고: Haiku `claude-haiku-4-5-20251001`, Sonnet `claude-sonnet-4-6`. 착수 시점에 최신 모델 재확인할 것.)
+- (모델 ID 참고: Haiku `claude-haiku-4-5-20251001`, Sonnet `claude-sonnet-5`. 착수 시점에 최신 모델 재확인할 것.)
 
 ### 5.3 대시보드 위치
 - 추천: cosmic-hustle 서브도메인 또는 `/awards` 류 라우트. 기존 Next 앱에 붙이는 게 자연스러움.

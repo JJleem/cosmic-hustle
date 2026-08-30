@@ -23,7 +23,7 @@ _DIM_KR = {
     "originality": "독창성", "structure": "구조",
 }
 HAIKU = "claude-haiku-4-5-20251001"
-SONNET = "claude-sonnet-4-6"
+SONNET = "claude-sonnet-5"
 _MAX_CHARS = 1800
 
 

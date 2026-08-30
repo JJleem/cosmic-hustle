@@ -24,6 +24,7 @@ _GSC_SITE_URL = f"https://{_SITE_HOST}"
 # 단가는 착수 시점(2026-06) 공개가 기준 — 변경 시 갱신하거나 env로 오버라이드할 것.
 # Anthropic: (input, output, cache_read, cache_write) USD per 1M tokens
 _ANTHROPIC_PRICE = {
+    "claude-sonnet-5":           (2.0, 10.0, 0.20, 2.50),
     "claude-sonnet-4-6":         (3.0, 15.0, 0.30, 3.75),
     "claude-haiku-4-5-20251001": (1.0,  5.0, 0.10, 1.25),
 }
@@ -1921,7 +1922,7 @@ async def generate_blog_post(
 
     message = await _logged_create(
         client, costs, "content",
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=12000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
@@ -2051,7 +2052,7 @@ seo_title에는 이 리포트가 다루는 대상(AI 블로그 운영·비용·�
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = await _logged_create(
         client, costs, "content",
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=12000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
@@ -2362,7 +2363,7 @@ async def generate_discovery_post(
 
     message = await _logged_create(
         client, costs, "content",
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=6000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
@@ -2585,7 +2586,7 @@ async def generate_intro_post() -> dict:
 
     message = await _logged_create(
         client, costs, "content",
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=8000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": project_context}],
@@ -2774,7 +2775,7 @@ async def generate_debate_post(
 
     message = await _logged_create(
         client, costs, "content",
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=7000,
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
