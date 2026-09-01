@@ -18,6 +18,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 from db.connection import SessionLocal
 from db.models import BlogPost
+from anthropic_text import text_of
 
 
 async def generate_tags(title: str, content: str) -> list[str]:
@@ -36,7 +37,7 @@ async def generate_tags(title: str, content: str) -> list[str]:
             ),
         }],
     )
-    raw = message.content[0].text.strip()
+    raw = text_of(message)
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 

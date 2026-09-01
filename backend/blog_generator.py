@@ -13,6 +13,7 @@ KST = timezone(timedelta(hours=9))
 
 import anthropic
 import httpx
+from anthropic_text import text_of
 logger = logging.getLogger(__name__)
 
 _SITE_HOST = "cosmic-hustle.ai.kr"
@@ -1438,7 +1439,7 @@ async def generate_scene_prompt_from_content(agent_id: str, title: str, content:
             ),
         }],
     )
-    raw = message.content[0].text.strip()
+    raw = text_of(message)
     # Haiku가 가끔 마크다운 헤더/메타 설명을 덧붙임 — 그대로 Flux에 넘기면 글자로 렌더링될 수 있어 제거
     lines = [
         ln for ln in raw.splitlines()
@@ -1555,7 +1556,7 @@ async def update_agent_memory(
         messages=[{"role": "user", "content": prompt}],
     )
 
-    memory = message.content[0].text.strip()
+    memory = text_of(message)
     return memory[:1000]
 
 
@@ -2248,7 +2249,7 @@ async def _classify_discovery_topic(topic: str) -> tuple[str, str]:
             "- history: 역사, 인물, 유적, 고대"
         )}],
     )
-    category = msg.content[0].text.strip().lower()
+    category = text_of(msg).lower()
     if category not in DISCOVERY_AGENT_MAP:
         category = "animal"
     return category, DISCOVERY_AGENT_MAP[category]
@@ -2320,7 +2321,7 @@ async def generate_discovery_post(
                 "자연/동물/과학/장소/역사 중 블로그 포스트로 흥미로운 주제 하나를 한국어로 짧게 출력 (예: '바다거북의 귀소 본능'). 주제만."
             )}],
         )
-        topic = pick.content[0].text.strip()
+        topic = text_of(pick)
 
     # 2. 토픽 분류 → 에이전트
     category, agent_id = await _classify_discovery_topic(topic)
@@ -2368,7 +2369,7 @@ async def generate_discovery_post(
         system=[{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_content}],
     )
-    raw = message.content[0].text.strip()
+    raw = text_of(message)
 
     # 4B-1 SEO 마커 추출 (본문에서 제거) — 활성화된 경우에만, 가장 먼저
     seo = parse_seo_metadata(raw) if seo_markers else None
@@ -2592,7 +2593,7 @@ async def generate_intro_post() -> dict:
         messages=[{"role": "user", "content": project_context}],
     )
 
-    raw     = message.content[0].text.strip()
+    raw     = text_of(message)
     thumb_m = _THUMBNAIL_RE.search(raw)
     scene   = thumb_m.group(1).strip() if thumb_m else (
         "wearing orange blazer and star-pattern hoodie, standing on a giant glowing blog card "
@@ -2781,7 +2782,7 @@ async def generate_debate_post(
         messages=[{"role": "user", "content": user_content}],
     )
 
-    raw     = message.content[0].text.strip()
+    raw     = text_of(message)
     thumb_m = _THUMBNAIL_RE.search(raw)
     scene   = thumb_m.group(1).strip() if thumb_m else (
         f"{pa['name']} and {pb['name']} facing off in a dramatic debate arena"
@@ -2925,7 +2926,7 @@ async def generate_user_reply(agent_id: str, post_title: str, user_comment: str)
         max_tokens=200,
         messages=[{"role": "user", "content": prompt}],
     )
-    return message.content[0].text.strip()
+    return text_of(message)
 
 
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────
@@ -3042,7 +3043,7 @@ async def generate_quiz_post(quiz_title: str) -> dict:
     )
 
     return {
-        "content":        message.content[0].text.strip(),
+        "content":        text_of(message),
         "tags":           '["성격 테스트", "퀴즈", "quiz", "Cosmic Hustle", "에이전트", "AI"]',
         "trending_topic": "AI 테스트",
         "costs":          costs,

@@ -11,6 +11,7 @@ from email.mime.text import MIMEText
 from zoneinfo import ZoneInfo
 
 import anthropic
+from anthropic_text import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -482,7 +483,7 @@ async def _update_agent_memories(
                 max_tokens=700,
                 messages=[{"role": "user", "content": prompt}],
             )
-            new_memory = _trim_complete_lines(msg.content[0].text.strip(), limit=1200, max_lines=40)
+            new_memory = _trim_complete_lines(text_of(msg), limit=1200, max_lines=40)
             if agent_id == "buzz":
                 new_memory = _restore_growth_memory(new_memory, growth_memory)
 

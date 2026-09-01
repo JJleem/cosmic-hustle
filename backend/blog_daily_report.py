@@ -14,6 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db.models import AgentMemory, BlogComment, BlogDailyVisit, BlogPost, BlogPostLike, BlogViewLog
+from anthropic_text import text_of
 
 logger = logging.getLogger(__name__)
 
@@ -693,7 +694,7 @@ async def generate_buzz_judgement(snapshot: dict, ga: dict, access_logs: dict, b
             max_tokens=350,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = _guard_buzz_judgement(msg.content[0].text.strip(), snapshot, bot_signals)
+        text = _guard_buzz_judgement(text_of(msg), snapshot, bot_signals)
         usage_obj = getattr(msg, "usage", None)
         input_tokens = int(getattr(usage_obj, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage_obj, "output_tokens", 0) or 0)
