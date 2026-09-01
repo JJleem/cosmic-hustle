@@ -418,6 +418,36 @@ async def run_ga_monthly_now(
     return result
 
 
+async def _catch_up_daily_blog():
+    """서버가 09:00 이후에 기동되면 그날 글이 영영 생성되지 않는 문제를 메운다.
+
+    AsyncIOScheduler는 잡을 메모리에만 두므로 프로세스가 죽어 있던 동안의 실행을
+    만회하지 않는다. 재기동 시 next_run_time이 '내일 09:00'으로 잡혀 그날은 건너뛴다.
+    _daily_blog_job은 slug 중복을 검사하므로 중복 실행돼도 안전하다.
+    """
+    from blog_generator import KST
+
+    now = datetime.now(KST)
+    # 09:05 전이면 정규 잡이 곧 돈다. 굳이 앞질러 실행하지 않는다.
+    if (now.hour, now.minute) < (9, 5):
+        return
+
+    today = now.date().isoformat()
+    db = SessionLocal()
+    try:
+        # 슬러그에 날짜가 들어간다(buzz-2026-09-01, ai-debate-...-2026-09-01).
+        if db.query(BlogPost.id).filter(BlogPost.slug.like(f"%{today}%")).first():
+            return
+    finally:
+        db.close()
+
+    logger.warning("오늘(%s) 글이 없다 — 09:00 정규 실행 누락으로 보고 기동 시 즉시 생성", today)
+    try:
+        await _daily_blog_job()
+    except Exception as e:
+        logger.error("기동 시 보정 생성 실패: %s", e)
+
+
 @app.on_event("startup")
 async def startup():
     scheduler.add_job(
@@ -425,6 +455,8 @@ async def startup():
         CronTrigger(hour=9, minute=0, timezone="Asia/Seoul"),
         id="daily_blog",
         replace_existing=True,
+        # 이벤트 루프가 막혀 정시를 놓쳐도 1시간 안이면 실행한다(기본값은 즉시 포기).
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         _memory_update_job,
@@ -470,6 +502,9 @@ async def startup():
     )
     scheduler.start()
     logger.info("APScheduler 시작 — 매일 06:30 사원상 지표 수집, 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 09:25 사원상 품질 판정, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석")
+
+    # 기동을 막지 않도록 백그라운드로 돌린다. 글 생성은 수 분이 걸린다.
+    asyncio.create_task(_catch_up_daily_blog())
 
 
 @app.on_event("shutdown")
