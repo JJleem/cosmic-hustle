@@ -172,6 +172,20 @@ writer attempt 1 → 팩트(피드백만, 항상 통과) → writer attempt 2 �
 | wiki, fact, ping, root, plan, pocke | Haiku |
 | ka, over, pixel, buzz, run | Sonnet |
 
+### 모델 교체 시 확인할 것
+
+모델 ID만 바꾸면 조용히 깨진다. 2026-08-30 Sonnet 4.6 → 5 교체 때 응답 파싱이
+전부 터져 9/1 자동 생성이 3회 재시도 모두 실패했다
+(`'ThinkingBlock' object has no attribute 'text'`).
+
+- **응답 파싱** — `content[0].text`를 쓰지 말 것. 모델에 따라 첫 블록이 ThinkingBlock일
+  수 있다. 항상 `anthropic_text.text_of(message)`로 text 블록만 이어 붙인다.
+- **thinking 기본값** — Sonnet 5는 `thinking` 미지정에도 adaptive thinking이 켜진다.
+  Sonnet 4.6은 명시해야 켜졌다.
+- **거부되는 파라미터** — 최신 모델은 `temperature`·`top_p`·`budget_tokens`와
+  assistant prefill을 400으로 거부한다. 교체 전 grep으로 확인한다.
+- **max_tokens** — 응답이 JSON이면 잘림에 주의. 한국어는 토큰을 많이 먹는다.
+
 ### 태스크 타입 (9개)
 
 | id | 이름 | writer | outputFormat |

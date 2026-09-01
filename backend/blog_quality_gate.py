@@ -4,12 +4,15 @@
 전체 글/이미지는 재생성하지 않으며, 통과하지 못한 글은 호출부가 비공개 초안으로 저장한다.
 """
 import json
+import logging
 import os
 import re
 
 import anthropic
 
 from blog_generator import _logged_create
+
+logger = logging.getLogger(__name__)
 
 QUALITY_GATE_BUDGET_USD = float(os.environ.get("BLOG_QUALITY_GATE_BUDGET_USD", "0.03"))
 _HEADING_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
@@ -70,7 +73,9 @@ async def _audit(data: dict, checks: dict, costs: list) -> dict:
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = await _logged_create(
         client, costs, "quality_gate",
-        model="claude-haiku-4-5-20251001", max_tokens=220,
+        # 220은 한국어 fatal_issues/warnings가 들어차면 JSON이 닫히기 전에 끊긴다.
+        # 판정 1건당 비용이라 넉넉히 준다.
+        model="claude-haiku-4-5-20251001", max_tokens=1000,
         messages=[{"role": "user", "content": (
             "자동 발행 직전의 블로그 글을 편집 검수하라. 인기나 SEO가 아니라 아래 세 가지만 본다:\n"
             "1) 출처 표본으로 뒷받침되지 않은 구체적 수치/날짜/역사 단정 같은 치명적 사실 위험,\n"
@@ -84,7 +89,16 @@ async def _audit(data: dict, checks: dict, costs: list) -> dict:
         )}],
     )
     raw = "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
-    return _parse_json(raw) or {
+    parsed = _parse_json(raw)
+    if parsed:
+        return parsed
+    # 파싱 실패 시 원문을 남긴다. 이게 없어서 8/26~9/1 7일 연속 실패의 원인을 좁히지 못했다.
+    # stop_reason == "max_tokens" 면 잘린 것이고, 그 외면 형식이 어긋난 것이다.
+    logger.error(
+        "품질 판정 응답 파싱 실패 — stop_reason=%s raw=%r",
+        getattr(message, "stop_reason", None), raw[:600],
+    )
+    return {
         "publishable": False, "fatal_issues": ["품질 판정 응답 파싱 실패"],
         "warnings": [], "weakest_axis": "answer", "rewrite_target": None,
     }
