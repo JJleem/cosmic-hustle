@@ -2937,8 +2937,12 @@ async def generate_user_reply(agent_id: str, post_title: str, user_comment: str)
 # ── 댓글 생성 ──────────────────────────────────────────────────────────────────
 
 async def generate_comments(post_id: str, author_id: str, post_title: str, post_summary: str) -> list[dict]:
+    # 조합 글("buzz+ping")은 참여자가 둘이다. 둘 다 댓글 작성자 후보에서 빼고,
+    # 작성자 답글은 앞의 에이전트 이름으로 단다 — 댓글에 조합 id를 쓰면 렌더링이 어색해진다.
+    authors = author_id.split("+")
+    author_id = authors[0]
     all_agents = list(AGENT_PERSONAS.keys())
-    commenters = random.sample([a for a in all_agents if a != author_id and a not in ("over", "fact")], 3)
+    commenters = random.sample([a for a in all_agents if a not in authors and a not in ("over", "fact")], 3)
     include_author_reply = random.random() < 0.5
 
     personas_desc = "\n".join(
