@@ -1189,6 +1189,8 @@ def _fal_available() -> bool:
 
 
 async def _upload_character(agent_id: str) -> str | None:
+    # 조합 글("buzz+ping")은 characters/ 밑에 폴더가 없다. 앞의 에이전트 것을 쓴다.
+    agent_id = agent_id.split("+")[0]
     cached = _CHAR_URL_CACHE.get(agent_id)
     if cached:
         return cached
@@ -2114,14 +2116,17 @@ async def generate_draft_post(
     {{THUMBNAIL}}·{{TAGS}}·{{IMAGE}} 마커 파싱 → 본문 이미지/썸네일 생성 → 조립한다.
     4A: SEO 마커({{SEO_TITLE}}·{{SUMMARY}}·{{SEO_DESCRIPTION}})도 파싱한다.
     content_type은 LLM이 아니라 호출부가 지정(허용값 검증 후 저장, 잘못되면 None)."""
-    if agent_id not in AGENT_PERSONAS:
+    # 조합 글(콜라보·토론)은 agent_id가 "buzz+ping" 처럼 온다. 페르소나는 개별 id로만
+    # 등록돼 있으므로 앞의 에이전트 것을 쓴다 — 썸네일 캐릭터와 기본 테마에만 쓰인다.
+    base_id = agent_id.split("+")[0]
+    if base_id not in AGENT_PERSONAS:
         raise ValueError(f"알 수 없는 agent_id: {agent_id}")
     today   = datetime.now(KST).date()
     costs: list = []
-    persona = AGENT_PERSONAS[agent_id]
+    persona = AGENT_PERSONAS[base_id]
     if theme is None:
         theme = {v["agent_id"]: v["theme"] for v in DAY_SCHEDULE.values()}.get(
-            agent_id, "자유 주제 (게스트 칼럼)"
+            base_id, "자유 주제 (게스트 칼럼)"
         )
 
     raw      = draft_content.strip()
