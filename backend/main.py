@@ -2,6 +2,7 @@ import sys
 import uuid
 import asyncio
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -450,38 +451,44 @@ async def _catch_up_daily_blog():
 
 @app.on_event("startup")
 async def startup():
-    scheduler.add_job(
-        _daily_blog_job,
-        CronTrigger(hour=9, minute=0, timezone="Asia/Seoul"),
-        id="daily_blog",
-        replace_existing=True,
-        # 이벤트 루프가 막혀 정시를 놓쳐도 1시간 안이면 실행한다(기본값은 즉시 포기).
-        misfire_grace_time=3600,
-    )
-    scheduler.add_job(
-        _memory_update_job,
-        CronTrigger(hour=9, minute=5, timezone="Asia/Seoul"),
-        id="memory_update",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _user_reply_job,
-        CronTrigger(hour=9, minute=10, timezone="Asia/Seoul"),
-        id="user_reply",
-        replace_existing=True,
-    )
+    # 매일 글 자동 생성 파이프라인 — 글 발행·대댓글·메모리 갱신·Slack 리포트.
+    # 서버 .env 의 BLOG_AUTOGEN=0 으로 통째로 끈다. 사원상·GA 잡은 영향 없다.
+    autogen = os.getenv("BLOG_AUTOGEN", "1") == "1"
+
+    if autogen:
+        scheduler.add_job(
+            _daily_blog_job,
+            CronTrigger(hour=9, minute=0, timezone="Asia/Seoul"),
+            id="daily_blog",
+            replace_existing=True,
+            # 이벤트 루프가 막혀 정시를 놓쳐도 1시간 안이면 실행한다(기본값은 즉시 포기).
+            misfire_grace_time=3600,
+        )
+        scheduler.add_job(
+            _memory_update_job,
+            CronTrigger(hour=9, minute=5, timezone="Asia/Seoul"),
+            id="memory_update",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _user_reply_job,
+            CronTrigger(hour=9, minute=10, timezone="Asia/Seoul"),
+            id="user_reply",
+            replace_existing=True,
+        )
     scheduler.add_job(
         _ga_monthly_job,
         CronTrigger(day=1, hour=6, minute=0, timezone="Asia/Seoul"),
         id="ga_monthly",
         replace_existing=True,
     )
-    scheduler.add_job(
-        _daily_blog_report_job,
-        CronTrigger(hour=9, minute=20, timezone="Asia/Seoul"),
-        id="daily_blog_report",
-        replace_existing=True,
-    )
+    if autogen:
+        scheduler.add_job(
+            _daily_blog_report_job,
+            CronTrigger(hour=9, minute=20, timezone="Asia/Seoul"),
+            id="daily_blog_report",
+            replace_existing=True,
+        )
     scheduler.add_job(
         _weekly_prompt_memory_report_job,
         CronTrigger(day_of_week="mon", hour=9, minute=30, timezone="Asia/Seoul"),
@@ -501,10 +508,14 @@ async def startup():
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("APScheduler 시작 — 매일 06:30 사원상 지표 수집, 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 09:25 사원상 품질 판정, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석")
+    if autogen:
+        logger.info("APScheduler 시작 — 매일 06:30 사원상 지표 수집, 09:00 블로그 자동 생성, 09:05 메모리 업데이트, 09:10 유저 댓글 대댓글, 09:20 버즈 리포트, 09:25 사원상 품질 판정, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석")
+    else:
+        logger.info("APScheduler 시작 — BLOG_AUTOGEN=0 이라 블로그 자동 생성·대댓글·메모리·버즈 리포트는 등록하지 않았다. 06:30/09:25 사원상, 매주 월 09:30 메모리 리포트, 매월 1일 06:00 GA 분석만 돈다")
 
-    # 기동을 막지 않도록 백그라운드로 돌린다. 글 생성은 수 분이 걸린다.
-    asyncio.create_task(_catch_up_daily_blog())
+    if autogen:
+        # 기동을 막지 않도록 백그라운드로 돌린다. 글 생성은 수 분이 걸린다.
+        asyncio.create_task(_catch_up_daily_blog())
 
 
 @app.on_event("shutdown")
