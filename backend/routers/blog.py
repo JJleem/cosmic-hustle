@@ -1100,23 +1100,6 @@ def get_related_posts(slug: str, limit: int = 6, db: Session = Depends(get_db)):
     return {"posts": [_with_comment_count(p, counts.get(p.id), p.id in agent_replied, include_content=False, activity=activities.get(p.id)) for p in rows]}
 
 
-@router.post("/_backfill-embeddings")
-def backfill_embeddings(request: Request, db: Session = Depends(get_db), _=Depends(_require_admin)):
-    """embedding이 비어있는 발행글을 일괄 임베딩(Option A 도입 시 기존글 백필용, 1회성)."""
-    from db.embedder import embed
-    posts = db.query(BlogPost).filter(BlogPost.embedding.is_(None)).all()
-    done = 0
-    for p in posts:
-        text = "\n".join(str(t) for t in (p.title, p.trending_topic, p.content) if t)
-        if not text:
-            continue
-        p.embedding = embed(text)
-        done += 1
-    db.commit()
-    remaining = db.query(BlogPost).filter(BlogPost.embedding.is_(None)).count()
-    return {"backfilled": done, "remaining_null": remaining}
-
-
 @router.post("/posts/{slug}/like")
 @limiter.limit("30/minute", key_func=_client_ip)
 def like_post(slug: str, request: Request, db: Session = Depends(get_db)):

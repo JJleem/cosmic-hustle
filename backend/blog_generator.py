@@ -1567,76 +1567,21 @@ _PIXEL_EVERYDAY_QUERY = "브랜드 리디자인 패키지 인테리어 카페 �
 
 
 def attach_embedding(data: dict) -> dict:
-    """발행 직전 포스트 data에 의미 임베딩(관련글 추천용)을 주입. 실패해도 발행은 진행(embedding=None).
-    또한 신규 글의 updated_at을 published_at으로 맞춘다(최초 발행은 생성=수정 시점).
+    """발행 직전 포스트 data의 updated_at을 published_at으로 맞춘다(최초 발행은 생성=수정 시점).
     onupdate는 UPDATE에만 발화하고 INSERT에는 안 걸리므로 여기서 명시. 모든 insert 경로가
-    이 함수를 거치므로 공통 적용이 안전하고, 값이 이미 있으면 덮어쓰지 않는다."""
+    이 함수를 거치므로 공통 적용이 안전하고, 값이 이미 있으면 덮어쓰지 않는다.
+
+    이름에 남은 'embedding'은 이력이다 — 의미 임베딩(관련글 추천용)은 제거됐고
+    blog_posts.embedding 은 신규 글에서 NULL로 남는다."""
     if data.get("updated_at") is None and data.get("published_at") is not None:
         data["updated_at"] = data["published_at"]
-    if data.get("embedding") is None:
-        try:
-            from db.embedder import embed
-            text = "\n".join(
-                str(p) for p in (data.get("title"), data.get("trending_topic"), data.get("content")) if p
-            )
-            data["embedding"] = embed(text) if text else None
-        except Exception:
-            logging.getLogger(__name__).warning("포스트 임베딩 실패", exc_info=True)
-            data["embedding"] = None
     return data
 
 
 def _rank_posts_by_relevance(query_text: str, posts: list[dict], top_k: int) -> list[dict]:
-    """query_text와 의미적으로 가까운 순으로 posts(title/topic/slug)를 정렬해 상위 top_k 반환.
-    임베딩 실패·후보 부족 시 입력 순서(=최신순)를 그대로 폴백."""
-    if not posts or len(posts) <= top_k:
-        return posts
-    if not (query_text and query_text.strip()):
-        return posts[:top_k]
-    try:
-        from db.embedder import get_model
-        model = get_model()
-        cand_texts = [f'{p["title"]} {p.get("topic", "")}'.strip() for p in posts]
-        embs = model.encode([query_text] + cand_texts, convert_to_numpy=True, normalize_embeddings=True)
-        sims = embs[1:] @ embs[0]  # 정규화돼 있으므로 내적 = 코사인 유사도
-        order = sorted(range(len(posts)), key=lambda i: float(sims[i]), reverse=True)
-        return [posts[i] for i in order[:top_k]]
-    except Exception:
-        return posts[:top_k]
-
-
-# ── 주제 중복 가드 ─────────────────────────────────────────────────────────────
-# 발행 직전 본문 임베딩(attach_embedding이 넣는 그 값)으로 같은 에이전트의 과거 글과 코사인
-# 유사도를 비교한다. 임계값은 실측 보정(2026-07-29, 발행글 74편 전수 페어와이즈):
-#   실제 중복 재발 사례(over 06-03 vs 07-29) 0.81 / 위키 주간 키워드처럼 제목만 정형인 쌍 최대 0.66
-# → 0.75면 '사실상 같은 글'만 걸리고 인접·유사 주제는 통과한다.
-_DUP_SIM_THRESHOLD = float(os.getenv("BLOG_DUP_SIM_THRESHOLD", "0.75"))
-
-
-def find_duplicate_posts(db, embedding, agent_id: str, limit: int = 3) -> list[tuple[str, float]]:
-    """같은 에이전트의 과거 발행글 중 주제가 사실상 동일한 글을 (제목, 유사도) 목록으로 반환.
-    기간 제한 없음 — '다시는 같은 주제로 쓰지 않는다'가 목표라 전체 이력을 본다."""
-    if embedding is None:
-        return []
-    try:
-        from db.models import BlogPost
-        dist = BlogPost.embedding.cosine_distance(embedding)
-        rows = (
-            db.query(BlogPost.title, dist)
-            .filter(
-                BlogPost.agent_id == agent_id,
-                BlogPost.published == True,
-                BlogPost.embedding.isnot(None),
-                dist <= 1 - _DUP_SIM_THRESHOLD,
-            )
-            .order_by(dist)
-            .limit(limit)
-            .all()
-        )
-        return [(title, 1 - float(d)) for title, d in rows]
-    except Exception:
-        logging.getLogger(__name__).warning("주제 중복 검사 실패 — 발행은 계속", exc_info=True)
-        return []
+    """posts(title/topic/slug) 상위 top_k를 입력 순서(=최신순) 그대로 반환.
+    의미기반 정렬은 임베딩 스택 제거와 함께 폐지됐다 — query_text는 호출부 호환을 위해 남긴다."""
+    return posts[:top_k]
 
 
 # 4B-2: 일반 게시글 에이전트 → content_type (LLM이 아니라 코드가 지정). pocke는 discovery 경로라 제외.
