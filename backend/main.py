@@ -22,7 +22,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from db.connection import engine, Base, SessionLocal
 from db.models import BlogPost, AgentMemory
-from routers import health, wiki, blog, blog_report, awards, dm
+from routers import health, wiki, blog, blog_report, awards
 
 Base.metadata.create_all(bind=engine)
 
@@ -57,11 +57,10 @@ app.include_router(wiki.router)
 app.include_router(blog.router)
 app.include_router(blog_report.router)
 app.include_router(awards.router)
-app.include_router(dm.router)
 
 
 async def _daily_blog_job():
-    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled, find_duplicate_posts, is_lab_day, KST
+    from blog_generator import generate_blog_post, generate_discovery_post, generate_comments, attach_embedding, record_post_costs, general_seo_enabled, is_lab_day, KST
     from db.models import BlogComment
 
     today_kst = datetime.now(KST).date()
@@ -104,39 +103,20 @@ async def _daily_blog_job():
                 # 포케는 discovery 전용 — 실사진 박힌 단일주제 과학글(카테고리 날짜 로테이션)
                 data = await generate_discovery_post(recent_titles=recent_titles, seo_markers=True)
             else:
-                # 주제 중복 가드: 과거 글과 사실상 같은 주제면 로테이션을 밀어 다시 쓴다(최대 2회 재작성).
-                # 재작성은 이미지 생성까지 다시 타므로 비용이 붙지만, 임계값이 '사실상 동일'만 잡아
-                # 실제 발화는 드물다. 버려진 시도의 비용도 합산해 사원상 비용 축을 정확히 유지한다.
-                avoid: list[str] = []
-                dropped_costs: list = []
-                for offset in range(3):
-                    data = await generate_blog_post(
-                        recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory,
-                        last_agent_title=last_agent_title, recent_posts=recent_posts,
-                        agent_recent_tags=agent_recent_tags,
-                        seo_markers=general_seo_enabled(today_agent_id),
-                        agent_past_titles=past_titles, avoid_topics=avoid, rotation_offset=offset,
-                    )
-                    attach_embedding(data)
-                    dups = find_duplicate_posts(db, data.get("embedding"), today_agent_id)
-                    if not dups:
-                        break
-                    avoid += [t for t, _ in dups if t not in avoid]
-                    dropped_costs += data.pop("costs", [])   # pop이라 마지막 시도가 else로 빠져도 중복 합산 없음
-                    logger.warning(
-                        "주제 중복 감지(시도 %d/3): '%s' ≈ %s",
-                        offset + 1, data["title"],
-                        ", ".join(f"'{t}'({s:.2f})" for t, s in dups),
-                    )
-                else:
-                    logger.error("재작성 2회 후에도 주제 중복 — 그대로 발행: %s", data["title"])
-                data["costs"] = dropped_costs + data.get("costs", [])
+                # 주제 중복 가드(코사인 유사도)는 임베딩 스택 제거와 함께 폐지됐다.
+                # 재작성 루프는 그 가드에만 쓰이던 장치라 1회 생성으로 단순화한다.
+                data = await generate_blog_post(
+                    recent_titles=recent_titles, frequent_tags=frequent_tags, memory=agent_memory,
+                    last_agent_title=last_agent_title, recent_posts=recent_posts,
+                    agent_recent_tags=agent_recent_tags,
+                    seo_markers=general_seo_enabled(today_agent_id),
+                    agent_past_titles=past_titles,
+                )
 
             # 무료 구조 검사 -> Haiku 1회 -> 필요 섹션만 1회 수정.
             # 품질 검수는 조언 역할이며 매일 발행을 막지 않는다.
             from blog_quality_gate import run_quality_gate
             gate = await run_quality_gate(data)
-            data.pop("embedding", None)  # 부분 수정됐다면 최종 본문 기준으로 재생성
             if not gate.get("publishable"):
                 logger.warning("품질 게이트 미통과 — 원문 발행 계속: %s | %s", data["title"], gate)
             else:
